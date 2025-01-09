@@ -1,4 +1,3 @@
-from functools import partial
 import torch
 
 from hotpp.data import PaddedBatch

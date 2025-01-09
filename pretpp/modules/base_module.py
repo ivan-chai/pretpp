@@ -52,8 +52,8 @@ class BaseModule(pl.LightningModule):
 
     def encode(self, x):
         """Apply sequential model."""
-        hiddens, _ = self._seq_encoder(x)  # (B, L, D).
-        return hiddens
+        hiddens, states = self._seq_encoder(x)  # (B, L, D).
+        return hiddens, states
 
     def apply_head(self, hiddens):
         """Project hidden states to model outputs."""
@@ -61,12 +61,13 @@ class BaseModule(pl.LightningModule):
 
     def forward(self, x):
         """Return embeddings with shape (B, L, D)."""
-        return self.encode(x)
+        hiddens, _ = self.encode(x)
+        return hiddens
 
     def training_step(self, batch, batch_idx):
         x, _ = batch
         inputs, targets = self._loss.prepare_batch(x)
-        hiddens = self.encode(inputs)
+        hiddens, _ = self.encode(inputs)
         outputs = self.apply_head(hiddens)  # (B, L, D).
         losses, metrics = self._loss(outputs, targets)
         loss = sum(losses.values())
@@ -87,7 +88,7 @@ class BaseModule(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         x, _ = batch
         inputs, targets = self._loss.prepare_batch(x)
-        hiddens = self.encode(inputs)
+        hiddens, _ = self.encode(inputs)
         outputs = self.apply_head(hiddens)  # (B, L, D).
         losses, metrics = self._loss(outputs, targets)
         loss = sum(losses.values())
@@ -107,7 +108,7 @@ class BaseModule(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         x, _ = batch
         inputs, targets = self._loss.prepare_batch(x)
-        hiddens = self.encode(inputs)
+        hiddens, _ = self.encode(inputs)
         outputs = self.apply_head(hiddens)  # (B, L, D).
         losses, metrics = self._loss(outputs, targets)
         loss = sum(losses.values())

@@ -83,5 +83,5 @@ trainer:
   gradient_clip_val: 1  # Increases training stability.
   check_val_every_n_epoch: 3
   model_selection:
-    metric: val/T-mAP
+    metric: val/loss
     mode: max
