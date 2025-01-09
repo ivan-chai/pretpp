@@ -6,6 +6,7 @@ seed_everything: 42
 num_evaluation_seeds: 5
 
 num_classes: 205
+num_classes_plus1: 206
 max_time_delta: 8
 max_duration: 8
 
@@ -78,7 +79,6 @@ trainer:
   devices: 1
   max_epochs: 30
   enable_checkpointing: true
-  deterministic: true
   precision: 16-mixed
   gradient_clip_val: 1  # Increases training stability.
   check_val_every_n_epoch: 3
