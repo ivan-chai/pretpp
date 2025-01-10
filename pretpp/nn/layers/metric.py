@@ -23,4 +23,5 @@ class MetricLayer(torch.nn.Linear):
     def forward(self, input):
         weight = torch.nn.functional.normalize(self.weight, dim=1)
         payload = torch.nn.functional.linear(self.encode(input).payload, weight)
+        payload = self.activation(payload)
         return PaddedBatch(payload, input.seq_lens)
