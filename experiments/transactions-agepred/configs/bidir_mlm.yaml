@@ -4,6 +4,8 @@ defaults:
 
 name: bidir_mlm
 
+reducer: middle
+
 module:
   _target_: pretpp.modules.BaseModule
   seq_encoder:
