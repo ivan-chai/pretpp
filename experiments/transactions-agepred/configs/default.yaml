@@ -11,6 +11,7 @@ max_time_delta: 8
 max_duration: 8
 
 rnn_hidden_size: 512
+rnn_half_hidden_size: 256
 rnn_inference_context: 1200
 rnn_inference_context_step: 200
 
