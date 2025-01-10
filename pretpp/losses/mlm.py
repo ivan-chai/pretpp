@@ -53,6 +53,12 @@ class MLMLoss(torch.nn.Module):
         mask = inputs.seq_len_mask
         eval_mask = torch.rand(b, l, device=inputs.device) < self._eval_fraction  # (B, L).
         eval_mask = torch.logical_and(eval_mask, mask)
+        truncated_lengths = (inputs.seq_lens - 2).clip(min=0)
+        # Need at least one element for loss computation after applying offsets before and during loss computation.
+        if (eval_mask[:, 1:-1].sum() == 0) and (truncated_lengths.sum() > 0):
+            i = torch.distributions.Categorical(truncated_lengths / truncated_lengths.sum()).sample([1]).argmax()
+            j = torch.randint(1, inputs.seq_lens[i] - 1, [])
+            eval_mask[i, j] = True
         augment_type_distribution = torch.distributions.Multinomial(probs=self._augment_type_probs)
         augment_type = augment_type_distribution.sample([b, l]).argmax(-1)  # (B, L) tensor of integer values 0, 1, and 2.
         augment_type.masked_fill_(~eval_mask, 0)
