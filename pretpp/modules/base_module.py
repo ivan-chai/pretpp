@@ -61,7 +61,8 @@ class BaseModule(pl.LightningModule):
     def encode(self, x):
         """Extract embeddings."""
         hiddens, states = self._seq_encoder(x)  # (B, L, D).
-        hiddens = self._encoder_head.encode(hiddens)
+        if not isinstance(self._encoder_head, torch.nn.Identity):
+            hiddens = self._encoder_head.encode(hiddens)
         return hiddens, states
 
     def apply_head(self, hiddens):
