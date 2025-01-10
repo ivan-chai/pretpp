@@ -1,0 +1,29 @@
+defaults:
+  - default
+  - _self_
+
+name: next_item_metric
+
+module:
+  _target_: pretpp.modules.BaseModule
+  seq_encoder:
+    rnn_partial:
+      _target_: hotpp.nn.GRU
+      _partial_: true
+      hidden_size: ${rnn_hidden_size}
+    max_inference_context: ${rnn_inference_context}
+    inference_context_step: ${rnn_inference_context_step}
+  encoder_head_partial:
+    _target_: pretpp.nn.layers.MetricLayer
+    _partial_: true
+    out_features: 512
+  head_partial: ${head}
+  loss:
+    _target_: pretpp.losses.NextItemLoss
+    losses:
+      timestamps:
+        _target_: hotpp.losses.TimeMAELoss
+        max_delta: ${max_time_delta}
+      labels:
+        _target_: hotpp.losses.CrossEntropyLoss
+        num_classes: ${num_classes}
