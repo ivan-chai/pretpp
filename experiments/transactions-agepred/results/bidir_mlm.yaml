@@ -1,0 +1,11 @@
+date: '2025-01-10 20:49:08'
+test/downstream: 0.566
+test/downstream-std: 0.004
+test/loss: 2.525338649749756
+test/loss_labels: 1.9999655485153198
+test/loss_timestamps: 0.5253733992576599
+val/downstream: 0.572
+val/downstream-std: 0.006
+val/loss: 2.5034284591674805
+val/loss_labels: 1.979122519493103
+val/loss_timestamps: 0.5243066549301147
