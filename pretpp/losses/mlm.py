@@ -15,12 +15,17 @@ class MLMLoss(torch.nn.Module):
         eval_fraction: The fraction of elements selected for loss evaluation.
         mask_prob: The probability of token masking.
         random_prob: The probability of token replacement with random token from the same batch.
+        timedeltas_field: The field to put time deltas in after masking.
     """
-    def __init__(self, losses, mask_token, eval_fraction=0.15, mask_prob=0.8, random_prob=0.1):
+    def __init__(self, losses, mask_token,
+                 timestamps_field="timestamps", timedeltas_field=None,
+                 eval_fraction=0.15, mask_prob=0.8, random_prob=0.1):
         super().__init__()
         self._losses = torch.nn.ModuleDict(losses)
         self._order = list(sorted(losses))
         self._mask_token = mask_token
+        self._timestamps_field = timestamps_field
+        self._timedeltas_field = timedeltas_field
         self._eval_fraction = eval_fraction
 
         if mask_prob + random_prob > 1:
@@ -49,6 +54,17 @@ class MLMLoss(torch.nn.Module):
         Returns:
             Model inputs with shape (B, L', *) and targets with shape (B, L', *).
         """
+        # Add deltas if necessary.
+        # TODO: max_delta and smoothing.
+        if self._timedeltas_field:
+            timestamps = inputs.payload[self._timestamps_field]  # (B, L).
+            deltas = timestamps.clone()
+            deltas[:, 0].fill_(0)
+            deltas[:, 1:] -= timestamps[:, :-1]
+            inputs = PaddedBatch(inputs.payload | {self._timedeltas_field: deltas}, inputs.seq_lens,
+                                 seq_names=set(inputs.seq_names) | {self._timedeltas_field})
+
+        # Add augmentations.
         b, l = inputs.shape
         mask = inputs.seq_len_mask
         eval_mask = torch.rand(b, l, device=inputs.device) < self._eval_fraction  # (B, L).
