@@ -85,4 +85,4 @@ trainer:
   check_val_every_n_epoch: 3
   model_selection:
     metric: val/loss
-    mode: max
+    mode: min

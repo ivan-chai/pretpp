@@ -1,11 +1,11 @@
-date: '2025-01-10 10:05:30'
-test/downstream: 0.586
-test/downstream-std: 0.005
-test/loss: 2.7209224700927734
-test/loss_labels: 2.1630237102508545
-test/loss_timestamps: 0.5578991174697876
-val/downstream: 0.589
-val/downstream-std: 0.011
-val/loss: 2.699115037918091
-val/loss_labels: 2.1422321796417236
-val/loss_timestamps: 0.5568828582763672
+date: '2025-01-14 12:12:18'
+test/downstream: 0.599
+test/downstream-std: 0.002
+test/loss: 2.674427032470703
+test/loss_labels: 2.1187479496002197
+test/loss_timedeltas: 0.5556783676147461
+val/downstream: 0.599
+val/downstream-std: 0.01
+val/loss: 2.6570820808410645
+val/loss_labels: 2.100935935974121
+val/loss_timedeltas: 0.5561460852622986
