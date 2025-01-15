@@ -4,14 +4,13 @@ defaults:
 
 name: bidir_mlm
 
-reducer: middle
-
 module:
   _target_: pretpp.modules.BaseModule
   seq_encoder:
-    embeddings:
-      labels:
-        in: ${num_classes_plus1}
+    embedder:
+      embeddings:
+        labels:
+          in: ${num_classes_plus1}
     rnn_partial:
       _target_: pretpp.nn.BidirGRU
       _partial_: true
