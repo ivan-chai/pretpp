@@ -27,6 +27,8 @@ module:
       labels:
         _target_: hotpp.losses.CrossEntropyLoss
         num_classes: ${num_classes}
+      log_amount:
+        _target_: hotpp.losses.MAELoss
     mask_token:
       timestamps: -1
       timedeltas: -1
