@@ -2,11 +2,15 @@ defaults:
   - default
   - _self_
 
-name: next_item
+name: mlm
 
 module:
   _target_: pretpp.modules.BaseModule
   seq_encoder:
+    embedder:
+      embeddings:
+        labels:
+          in: ${num_classes_plus1}
     rnn_partial:
       _target_: hotpp.nn.GRU
       _partial_: true
@@ -15,11 +19,18 @@ module:
     inference_context_step: ${rnn_inference_context_step}
   head_partial: ${head}
   loss:
-    _target_: pretpp.losses.NextItemLoss
+    _target_: pretpp.losses.MLMLoss
+    timedeltas_field: timedeltas
     losses:
-      timestamps:
-        _target_: hotpp.losses.TimeMAELoss
-        max_delta: ${max_time_delta}
+      timedeltas:
+        _target_: hotpp.losses.MAELoss
       labels:
         _target_: hotpp.losses.CrossEntropyLoss
         num_classes: ${num_classes}
+      log_amount:
+        _target_: hotpp.losses.MAELoss
+    mask_token:
+      timestamps: -1
+      timedeltas: -1
+      labels: ${num_classes}
+      log_amount: 0

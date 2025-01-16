@@ -1,0 +1,13 @@
+date: '2025-01-16 15:37:41'
+test/downstream: 0.625
+test/downstream-std: 0.002
+test/loss: 3.4290902614593506
+test/loss_labels: 2.1126387119293213
+test/loss_log_amount: 0.7618135809898376
+test/loss_timedeltas: 0.5546386241912842
+val/downstream: 0.627
+val/downstream-std: 0.003
+val/loss: 3.403599977493286
+val/loss_labels: 2.091991424560547
+val/loss_log_amount: 0.7573368549346924
+val/loss_timedeltas: 0.5542713403701782

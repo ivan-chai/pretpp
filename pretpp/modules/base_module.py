@@ -21,7 +21,8 @@ class BaseModule(pl.LightningModule):
         seq_encoder: Backbone model, which includes input encoder and sequential encoder.
         loss: Training loss.
         timestamps_field: The name of the timestamps field.
-        head_partial: FC head model class which accepts input and output dimensions.
+        encoder_head_partial: Head model class which is a part of encoder model.
+        head_partial: Head model class which accepts encoder output and makes prediction.
         optimizer_partial:
             optimizer init partial. Network parameters are missed.
         lr_scheduler_partial:
@@ -31,6 +32,7 @@ class BaseModule(pl.LightningModule):
     """
     def __init__(self, seq_encoder, loss,
                  timestamps_field="timestamps",
+                 encoder_head_partial=None,
                  head_partial=None,
                  optimizer_partial=None,
                  lr_scheduler_partial=None,
@@ -48,11 +50,19 @@ class BaseModule(pl.LightningModule):
         self._optimizer_partial = optimizer_partial
         self._lr_scheduler_partial = lr_scheduler_partial
 
-        self._head = head_partial(seq_encoder.hidden_size, loss.input_size) if head_partial is not None else torch.nn.Identity()
+        hidden_size = seq_encoder.hidden_size
+        if encoder_head_partial is not None:
+            self._encoder_head = encoder_head_partial(hidden_size)
+            hidden_size = self._encoder_head.output_size
+        else:
+            self._encoder_head = torch.nn.Identity()
+        self._head = head_partial(hidden_size, loss.input_size) if head_partial is not None else torch.nn.Identity()
 
     def encode(self, x):
-        """Apply sequential model."""
+        """Extract embeddings."""
         hiddens, states = self._seq_encoder(x)  # (B, L, D).
+        if not isinstance(self._encoder_head, torch.nn.Identity):
+            hiddens = self._encoder_head.encode(hiddens)
         return hiddens, states
 
     def apply_head(self, hiddens):
@@ -60,14 +70,15 @@ class BaseModule(pl.LightningModule):
         return self._head(hiddens)
 
     def forward(self, x):
-        """Return embeddings with shape (B, L, D)."""
-        hiddens, _ = self.encode(x)
+        """Return encoder outputs with shape (B, L, D)."""
+        hiddens, _ = self._seq_encoder(x)  # (B, L, D).
+        hiddens = self._encoder_head(hiddens)
         return hiddens
 
     def training_step(self, batch, batch_idx):
         x, _ = batch
         inputs, targets = self._loss.prepare_batch(x)
-        hiddens, _ = self.encode(inputs)
+        hiddens = self.forward(inputs)
         outputs = self.apply_head(hiddens)  # (B, L, D).
         losses, metrics = self._loss(outputs, targets)
         loss = sum(losses.values())
@@ -88,7 +99,7 @@ class BaseModule(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         x, _ = batch
         inputs, targets = self._loss.prepare_batch(x)
-        hiddens, _ = self.encode(inputs)
+        hiddens = self.forward(inputs)
         outputs = self.apply_head(hiddens)  # (B, L, D).
         losses, metrics = self._loss(outputs, targets)
         loss = sum(losses.values())
@@ -108,7 +119,7 @@ class BaseModule(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         x, _ = batch
         inputs, targets = self._loss.prepare_batch(x)
-        hiddens, _ = self.encode(inputs)
+        hiddens = self.forward(inputs)
         outputs = self.apply_head(hiddens)  # (B, L, D).
         losses, metrics = self._loss(outputs, targets)
         loss = sum(losses.values())

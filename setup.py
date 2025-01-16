@@ -20,6 +20,6 @@ setuptools.setup(
     ],
     python_requires=">=3.9",
     install_requires=[
-        "hotpp-benchmark>=0.1.0"
+        "hotpp-benchmark>=0.2.0"
     ]
 )
