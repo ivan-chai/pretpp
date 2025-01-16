@@ -35,10 +35,10 @@ class MetricLayer(torch.nn.Linear):
         if self.scoring == "dot":
             payload = torch.nn.functional.linear(payload, weight)
         elif self.scoring == "l2":
-            payload = torch.nn.functional.linear(payload, weight)  # (B, L, D').
-            pnorms2 = torch.linalg.norm(payload, dim=-1, keepdim=True).square()  # (B, L, 1).
+            znorms2 = torch.linalg.norm(payload, dim=-1, keepdim=True).square()  # (B, L, 1).
             wnorms2 = torch.linalg.norm(weight, dim=-1).square()  # (D').
-            payload = (- 2 * payload + wnorms2 + pnorms2).sqrt()  # (B, L, D').
+            payload = torch.nn.functional.linear(payload, weight)  # (B, L, D').
+            payload = (- 2 * payload + wnorms2 + znorms2).sqrt()  # (B, L, D').
         else:
             raise ValueError(f"Unknown scoring: f{self.scoring}")
         payload = self.activation(payload)
