@@ -2,19 +2,18 @@ defaults:
   - default
   - _self_
 
-name: bidir_mlm
+name: mlm
 
 module:
   _target_: pretpp.modules.BaseModule
   seq_encoder:
-    embedder:
-      embeddings:
-        labels:
-          in: ${num_classes_plus1}
+    embeddings:
+      labels:
+        in: ${num_classes_plus1}
     rnn_partial:
-      _target_: pretpp.nn.BidirGRU
+      _target_: hotpp.nn.GRU
       _partial_: true
-      hidden_size: ${rnn_half_hidden_size}
+      hidden_size: ${rnn_hidden_size}
     max_inference_context: ${rnn_inference_context}
     inference_context_step: ${rnn_inference_context_step}
   head_partial: ${head}
@@ -28,7 +27,7 @@ module:
         _target_: hotpp.losses.CrossEntropyLoss
         num_classes: ${num_classes}
     mask_token:
-      event_time: -1
-      timedeltas: -1
       timestamps: -1
+      timedeltas: -1
       labels: ${num_classes}
+      log_amount: 0
