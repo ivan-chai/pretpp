@@ -24,7 +24,7 @@ class BidirGRU(torch.nn.GRU):
     @property
     def init_state(self):
         p = next(iter(self.parameters()))
-        return torch.zeros(2, self.hidden_size, dtype=p.dtype, device=p.device)  # (1, D).
+        return torch.zeros(2, self.hidden_size, dtype=p.dtype, device=p.device)  # (2, D).
 
     def forward(self, x: PaddedBatch, time_deltas: PaddedBatch,
                 states: Optional[Tensor]=None, return_full_states=False) -> Tuple[PaddedBatch, Tensor]:
@@ -71,9 +71,15 @@ class BidirGRU(torch.nn.GRU):
             Outputs with shape (B, L, S, D).
         """
         # GRU output is constant between events.
+        # Forward network predicts last seen event.
+        # Backward network predicts the next event.
         s = time_deltas.payload.shape[2]
         _, b, l, d = states.shape
         outputs = states.reshape(2, self.num_layers, b, l, d)[:, -1]  # (2, B, L, D).
-        outputs = outputs.permute(1, 2, 0, 3).flatten(2, 3)  # (B, L, 2 * D).
+        forward_states = outputs[0]  # (B, L, D).
+        backward_states = outputs[1]  # (B, L, D).
+        backward_init_states = self.init_state[1][None, None].repeat(b, 1, 1)  # (B, 1, D).
+        backward_states = torch.cat([backward_states[:, 1:], backward_init_states], 1)  # (B, L, D).
+        outputs = torch.cat([forward_states, backward_states], -1)  # (B, L, 2 * D).
         outputs = outputs.unsqueeze(2).repeat(1, 1, s, 1)  # (B, L, S, 2 * D).
         return PaddedBatch(outputs, time_deltas.seq_lens)
