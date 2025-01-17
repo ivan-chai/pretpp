@@ -13,7 +13,7 @@ module:
       hidden_size: ${rnn_hidden_size}
     max_inference_context: ${rnn_inference_context}
     inference_context_step: ${rnn_inference_context_step}
-  head_partial: ${head}
+  loss_head_partial: ${head}
   loss:
     _target_: pretpp.losses.NextItemLoss
     losses:

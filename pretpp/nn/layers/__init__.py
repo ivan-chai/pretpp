@@ -1,2 +1,3 @@
+from .aggregator import MeanAggregator, LastAggregator
 from .bidir_rnn import BidirGRU
-from .metric import MetricLayer
+from .head import IdentityHead, NormalizationHead, MetricHead

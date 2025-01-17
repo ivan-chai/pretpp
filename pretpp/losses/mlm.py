@@ -1,13 +1,14 @@
 import torch
 
 from hotpp.data import PaddedBatch
+from .base import BaseLoss
 
 
 EVAL_MASK_FIELD = "_evaluation_mask"
 
 
-class MLMLoss(torch.nn.Module):
-    """Hybrid loss for next item prediction.
+class MLMLoss(BaseLoss):
+    """Masked token prediction.
 
     Args:
         losses: Mapping from the feature name to the loss function.
@@ -23,6 +24,7 @@ class MLMLoss(torch.nn.Module):
         super().__init__()
         self._losses = torch.nn.ModuleDict(losses)
         self._order = list(sorted(losses))
+
         self._mask_token = mask_token
         self._timestamps_field = timestamps_field
         self._timedeltas_field = timedeltas_field
@@ -34,22 +36,15 @@ class MLMLoss(torch.nn.Module):
         self.register_buffer("_augment_type_probs", torch.tensor([unchanged_prob, mask_prob, random_prob], dtype=torch.float))
 
     @property
-    def fields(self):
-        return self._order
-
-    @property
     def input_size(self):
         return sum([loss.input_size for loss in self._losses.values()])
 
-    def get_delta_type(self, field):
-        """Get time delta type."""
-        return self._losses[field].delta
-
-    def prepare_batch(self, inputs):
+    def prepare_batch(self, inputs, targets=None):
         """Extract model inputs and targets.
 
         Args:
             inputs: Input events with shape (B, L, *).
+            targets (unused): Targets with shape (B, L) for local recognition or (B) for global recognition.
 
         Returns:
             Model inputs with shape (B, L', *) and targets with shape (B, L', *).
@@ -146,8 +141,3 @@ class MLMLoss(torch.nn.Module):
         if offset != outputs.shape[-1]:
             raise ValueError("Predictions tensor has inconsistent size.")
         return result
-
-    def _join_outputs(self, outputs_dict):
-        """Inverse of _split_outputs."""
-        outputs = [outputs_dict[name] for name in self._order]
-        return torch.cat(outputs, -1)

@@ -21,21 +21,23 @@ class BaseModule(pl.LightningModule):
         seq_encoder: Backbone model, which includes input encoder and sequential encoder.
         loss: Training loss.
         timestamps_field: The name of the timestamps field.
-        encoder_head_partial: Head model class which is a part of encoder model.
         head_partial: Head model class which accepts encoder output and makes prediction.
+        loss_head_partial: Loss preprocessing head.
         optimizer_partial:
             optimizer init partial. Network parameters are missed.
         lr_scheduler_partial:
             scheduler init partial. Optimizer are missed.
+        init_state_dict: Checkpoint to initialize all parameters except loss.
         val_metric: Validation set metric.
         test_metric: Test set metric.
     """
     def __init__(self, seq_encoder, loss,
                  timestamps_field="timestamps",
-                 encoder_head_partial=None,
                  head_partial=None,
+                 loss_head_partial=None,
                  optimizer_partial=None,
                  lr_scheduler_partial=None,
+                 init_state_dict=None,
                  val_metric=None,
                  test_metric=None):
 
@@ -45,41 +47,41 @@ class BaseModule(pl.LightningModule):
         self._loss = loss
         self._seq_encoder = seq_encoder
         self._seq_encoder.is_reduce_sequence = False
+
         self._val_metric = val_metric
         self._test_metric = test_metric
         self._optimizer_partial = optimizer_partial
         self._lr_scheduler_partial = lr_scheduler_partial
 
         hidden_size = seq_encoder.hidden_size
-        if encoder_head_partial is not None:
-            self._encoder_head = encoder_head_partial(hidden_size)
-            hidden_size = self._encoder_head.output_size
+        if head_partial is not None:
+            self._head = head_partial(hidden_size)
+            hidden_size = self._head.output_size
         else:
-            self._encoder_head = torch.nn.Identity()
-        self._head = head_partial(hidden_size, loss.input_size) if head_partial is not None else torch.nn.Identity()
+            self._head = torch.nn.Identity()
+        self._loss_head = loss_head_partial(hidden_size, loss.input_size) if loss_head_partial is not None else torch.nn.Identity()
+
+        if init_state_dict is not None:
+            state_dict = {k: v for k, v in init_state_dict.items()
+                          if not k.startswith("_loss.") and not k.startswith("_loss_head.")}
+            for k, v in self._loss.named_parameters():
+                state_dict["_loss." + k] = v
+            self.load_state_dict(init_state_dict)
 
     def encode(self, x):
-        """Extract embeddings."""
-        hiddens, states = self._seq_encoder(x)  # (B, L, D).
-        if not isinstance(self._encoder_head, torch.nn.Identity):
-            hiddens = self._encoder_head.encode(hiddens)
-        return hiddens, states
-
-    def apply_head(self, hiddens):
-        """Project hidden states to model outputs."""
-        return self._head(hiddens)
+        """Compatibility with HoTPP."""
+        return self(x), None
 
     def forward(self, x):
-        """Return encoder outputs with shape (B, L, D)."""
+        """Extract embeddings."""
         hiddens, _ = self._seq_encoder(x)  # (B, L, D).
-        hiddens = self._encoder_head(hiddens)
+        hiddens = self._head(hiddens)
         return hiddens
 
     def training_step(self, batch, batch_idx):
-        x, _ = batch
-        inputs, targets = self._loss.prepare_batch(x)
-        hiddens = self.forward(inputs)
-        outputs = self.apply_head(hiddens)  # (B, L, D).
+        x, y = batch
+        inputs, targets = self._loss.prepare_batch(x, y)
+        outputs = self._loss_head(self.forward(inputs))  # (B, L, D).
         losses, metrics = self._loss(outputs, targets)
         loss = sum(losses.values())
 
@@ -97,10 +99,9 @@ class BaseModule(pl.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        x, _ = batch
-        inputs, targets = self._loss.prepare_batch(x)
-        hiddens = self.forward(inputs)
-        outputs = self.apply_head(hiddens)  # (B, L, D).
+        x, y = batch
+        inputs, targets = self._loss.prepare_batch(x, y)
+        outputs = self._loss_head(self.forward(inputs))  # (B, L, D).
         losses, metrics = self._loss(outputs, targets)
         loss = sum(losses.values())
 
@@ -117,10 +118,9 @@ class BaseModule(pl.LightningModule):
                 self.log(f"val/{k}", v, batch_size=len(x))
 
     def test_step(self, batch, batch_idx):
-        x, _ = batch
-        inputs, targets = self._loss.prepare_batch(x)
-        hiddens = self.forward(inputs)
-        outputs = self.apply_head(hiddens)  # (B, L, D).
+        x, y = batch
+        inputs, targets = self._loss.prepare_batch(x, y)
+        outputs = self._loss_head(self.forward(inputs))  # (B, L, D).
         losses, metrics = self._loss(outputs, targets)
         loss = sum(losses.values())
 
@@ -173,10 +173,7 @@ class BaseModule(pl.LightningModule):
     @torch.autocast("cuda", enabled=False)
     def _compute_single_batch_metrics(self, x, inputs, outputs, targets):
         """Slow debug metrics."""
-        metrics = {}
-        if hasattr(self._loss, "compute_metrics"):
-            metrics.update(self._loss.compute_metrics(inputs, outputs, targets))
-        return metrics
+        return self._loss.compute_metrics(inputs, outputs, targets)
 
     @torch.no_grad()
     def _get_grad_norm(self):

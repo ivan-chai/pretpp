@@ -13,11 +13,7 @@ module:
       hidden_size: ${rnn_hidden_size}
     max_inference_context: ${rnn_inference_context}
     inference_context_step: ${rnn_inference_context_step}
-  encoder_head_partial:
-    _target_: pretpp.nn.layers.MetricLayer
-    _partial_: true
-    out_features: 512
-  head_partial: ${head}
+  loss_head_partial: ${metric_head}
   loss:
     _target_: pretpp.losses.NextItemLoss
     losses:
