@@ -26,27 +26,18 @@ class IdentityHead(torch.nn.Module):
     def forward(self, x):
         if x.payload.shape[-1] != self._output_size:
             raise ValueError(f"Incorrect input size: {x.payload.shape[-1]} != {self._output_size}")
-        return PaddedBatch(x.payload, x.seq_lens)
+        return x
 
 
-class NormalizationHead(torch.nn.Module):
+class NormalizationHead(IdentityHead):
     """L2 normalization head.
 
     Args:
         input_size: Embedding size.
         output_size: Output dimension.
     """
-    def __init__(self, input_size, output_size):
-        super().__init__()
-        if input_size != output_size:
-            raise ValueError("Input and output size must be equal for identity.")
-        self._output_size = output_size
-
-    @property
-    def output_size(self):
-        return self._output_size
-
     def forward(self, x):
+        x = super().forward(x)
         return PaddedBatch(torch.nn.functional.normalize(x.payload, dim=-1), x.seq_lens)
 
 
