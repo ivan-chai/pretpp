@@ -16,6 +16,10 @@ class NextItemLoss(BaseLoss):
         self._order = list(sorted(losses))
 
     @property
+    def aggregate(self):
+        return False
+
+    @property
     def input_size(self):
         return sum([loss.input_size for loss in self._losses.values()])
 

@@ -1,8 +1,8 @@
 defaults:
-  - default
+  - default_ft
   - _self_
 
-name: next_item
+name: next_item_ft
 
 module:
   _target_: pretpp.modules.BaseModule
@@ -15,13 +15,11 @@ module:
     inference_context_step: ${rnn_inference_context_step}
   loss_projection_partial: ${head}
   loss:
-    _target_: pretpp.losses.NextItemLoss
-    losses:
-      timestamps:
-        _target_: hotpp.losses.TimeMAELoss
-        max_delta: ${max_time_delta}
-      labels:
-        _target_: hotpp.losses.CrossEntropyLoss
-        num_classes: ${num_classes}
-      log_amount:
-        _target_: hotpp.losses.MAELoss
+    _target_: pretpp.losses.ClassificationLoss
+    targets:
+      target:
+        num_classes: 4
+        cast: true
+  init_state_dict:
+    _target_: torch.load
+    f: checkpoints/next_item.ckpt

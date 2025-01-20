@@ -4,7 +4,7 @@ import torch
 class MeanAggregator(torch.nn.Module):
     def forward(self, embeddings):
         embeddings, mask, lengths = embeddings.payload, embeddings.seq_len_mask.bool(), embeddings.seq_lens
-        embeddings = embeddings.masked_fill(~mask, 0)  # (B, L, D).
+        embeddings = embeddings.masked_fill(~mask.unsqueeze(2), 0)  # (B, L, D).
         sums = embeddings.sum(1)  # (B, D).
         means = sums / lengths.unsqueeze(1).clip(min=1)
         return means  # (B, D).

@@ -36,6 +36,10 @@ class MLMLoss(BaseLoss):
         self.register_buffer("_augment_type_probs", torch.tensor([unchanged_prob, mask_prob, random_prob], dtype=torch.float))
 
     @property
+    def aggregate(self):
+        return False
+
+    @property
     def input_size(self):
         return sum([loss.input_size for loss in self._losses.values()])
 

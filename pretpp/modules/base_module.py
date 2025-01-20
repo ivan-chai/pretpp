@@ -4,25 +4,31 @@ import pytorch_lightning as pl
 import torch
 
 from hotpp.data import PaddedBatch
+from pretpp.nn import IdentityHead
 
 
 class BaseModule(pl.LightningModule):
     """Base module class.
 
     The model is composed of the following modules:
-    1. input encoder, responsible for input-to-vector conversion,
+    1. input embedder, responsible for input-to-vector conversion,
     2. sequential encoder, which captures time dependencies,
-    3. fc head for embeddings projection (optional),
-    4. loss, which estimates likelihood and predictions.
+    3. encoder head for embeddings projection (optional),
+    4. loss projection head (optional), for transforming embeddnigs into loss input,
+    5. loss, which estimates likelihood and predictions.
 
-    Input encoder and sequential encoder are combined within SeqEncoder from Pytorch Lifestream.
+    - Input encoder and sequential encoder are combined within SeqEncoder from Pytorch Lifestream.
+    - Embeddings are generated from the output of the encoder head.
 
     Parameters
         seq_encoder: Backbone model, which includes input encoder and sequential encoder.
         loss: Training loss.
         timestamps_field: The name of the timestamps field.
         head_partial: Head model class which accepts encoder output and makes prediction.
-        loss_head_partial: Loss preprocessing head.
+          Input size is provided as positional argument.
+        loss_projection_partial: Loss preprocessing head.
+          Input and output sizes are provided as positional arguments.
+        aggregator: Embeddings aggregator.
         optimizer_partial:
             optimizer init partial. Network parameters are missed.
         lr_scheduler_partial:
@@ -34,7 +40,8 @@ class BaseModule(pl.LightningModule):
     def __init__(self, seq_encoder, loss,
                  timestamps_field="timestamps",
                  head_partial=None,
-                 loss_head_partial=None,
+                 loss_projection_partial=None,
+                 aggregator=None,
                  optimizer_partial=None,
                  lr_scheduler_partial=None,
                  init_state_dict=None,
@@ -53,20 +60,24 @@ class BaseModule(pl.LightningModule):
         self._optimizer_partial = optimizer_partial
         self._lr_scheduler_partial = lr_scheduler_partial
 
-        hidden_size = seq_encoder.hidden_size
-        if head_partial is not None:
-            self._head = head_partial(hidden_size)
-            hidden_size = self._head.output_size
-        else:
-            self._head = torch.nn.Identity()
-        self._loss_head = loss_head_partial(hidden_size, loss.input_size) if loss_head_partial is not None else torch.nn.Identity()
+        if head_partial is None:
+            head_partial = IdentityHead
+        self._head = head_partial(seq_encoder.hidden_size)
+        if loss_projection_partial is None:
+            loss_projection_partial = IdentityHead
+        self._loss_projection = loss_projection_partial(self._head.output_size, loss.input_size)
+        if self._loss.aggregate and (aggregator is None):
+            raise ValueError("Loss requires aggregator")
+        self._aggregator = aggregator
 
         if init_state_dict is not None:
             state_dict = {k: v for k, v in init_state_dict.items()
-                          if not k.startswith("_loss.") and not k.startswith("_loss_head.")}
-            for k, v in self._loss.named_parameters():
+                          if not k.startswith("_loss.") and not k.startswith("_loss_projection.")}
+            for k, v in self._loss.state_dict().items():
                 state_dict["_loss." + k] = v
-            self.load_state_dict(init_state_dict)
+            for k, v in self._loss_projection.state_dict().items():
+                state_dict["_loss_projection." + k] = v
+            self.load_state_dict(state_dict)
 
     def encode(self, x):
         """Compatibility with HoTPP."""
@@ -78,11 +89,19 @@ class BaseModule(pl.LightningModule):
         hiddens = self._head(hiddens)
         return hiddens
 
+    def _compute_loss(self, outputs, targets):
+        if self._loss.aggregate:
+            outputs = PaddedBatch(self._aggregator(outputs).unsqueeze(1),
+                                  torch.ones_like(outputs.seq_lens))  # (B, 1, D).
+        outputs = self._loss_projection(outputs)  # (B, L, D).
+        losses, metrics = self._loss(outputs, targets)
+        return losses, metrics
+
     def training_step(self, batch, batch_idx):
         x, y = batch
         inputs, targets = self._loss.prepare_batch(x, y)
-        outputs = self._loss_head(self.forward(inputs))  # (B, L, D).
-        losses, metrics = self._loss(outputs, targets)
+        outputs = self.forward(inputs)
+        losses, metrics = self._compute_loss(outputs, targets)
         loss = sum(losses.values())
 
         # Log statistics.
@@ -101,8 +120,8 @@ class BaseModule(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         x, y = batch
         inputs, targets = self._loss.prepare_batch(x, y)
-        outputs = self._loss_head(self.forward(inputs))  # (B, L, D).
-        losses, metrics = self._loss(outputs, targets)
+        outputs = self.forward(inputs)  # (B, L, D).
+        losses, metrics = self._compute_loss(outputs, targets)
         loss = sum(losses.values())
 
         # Log statistics.
@@ -120,8 +139,8 @@ class BaseModule(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         x, y = batch
         inputs, targets = self._loss.prepare_batch(x, y)
-        outputs = self._loss_head(self.forward(inputs))  # (B, L, D).
-        losses, metrics = self._loss(outputs, targets)
+        outputs = self.forward(inputs)  # (B, L, D).
+        losses, metrics = self._compute_loss(outputs, targets)
         loss = sum(losses.values())
 
         # Log statistics.

@@ -1,6 +1,7 @@
 import torch
 
 from hotpp.data import PaddedBatch
+from hotpp.losses.common import ScaleGradient
 from .base import BaseLoss
 
 
@@ -8,18 +9,26 @@ class ClassificationLoss(BaseLoss):
     """Global target prediction loss.
 
     Args:
-        targets: A mapping from a target name to dictionary with "num_classes" and optional "weight" fields.
-        aggregator: Embeddings aggregator for global classification.
+        targets: A mapping from a target name to dictionary with "num_classes" and optional "weight" and "cast" fields.
     """
-    def __init__(self, hidden_size, head_partial, aggregator, targets):
+    def __init__(self, targets):
         super().__init__()
         for name, spec in targets.items():
             if "num_classes" not in spec:
                 raise ValueError("Need 'num_classes' for each target.")
-        self._order = list(sorted(targets))
-        self._head = head_partial(hidden_size, sum([loss.input_size for loss in losses.values()]))
+            unknown_fields = set(spec) - {"num_classes", "weight", "cast"}
+            if unknown_fields:
+                raise ValueError(f"Unknown fields in loss specification: {unknown_fields}")
         self._targets = targets
-        self._aggregator = aggregator
+        self._order = list(sorted(targets))
+
+    @property
+    def input_size(self):
+        return sum([spec["num_classes"] for spec in self._targets.values()])
+
+    @property
+    def aggregate(self):
+        return True
 
     def prepare_batch(self, inputs, targets):
         """Extract model inputs and targets.
@@ -46,17 +55,26 @@ class ClassificationLoss(BaseLoss):
         Returns:
             Losses dict and metrics dict.
         """
-        outputs = self._split_outputs(self._head(outputs).payload)  # (B, L, D).
+        # Input is an aggregated embedding.
+        if not isinstance(outputs, dict):
+            outputs = self._split_outputs(outputs.payload)  # (B, 1, D).
         losses = {}
         metrics = {}
-        for name, spec in self._targets.items():
-            if outputs[name].ndim != 3:
-                raise NotImplementedError("Expected output with shape (B, L, C).")
+        for name in set(targets.payload) & set(outputs):
+            spec = self._targets[name]
+            if (outputs[name].ndim != 3) or (outputs[name].shape[1] != 1):
+                raise NotImplementedError("Expected aggregated embedding with shape (B, 1, C).")
             if targets.payload[name].ndim != 1:
                 raise NotImplementedError("Only global targets are supported.")
-            global_embeddings = self._aggregator(outputs[name])  # (B, D).
-            losses[name] = torch.nn.functional.cross_entropy(global_embeddings, targets.payload[name])
-        return losses, {}
+            logits = outputs[name].squeeze(1)
+            target = targets.payload[name]
+            if spec.get("cast", False):
+                target = target.long()
+            losses[name] = torch.nn.functional.cross_entropy(logits, target)
+            if spec.get("weight", 1) != 1:
+                losses[name] = ScaleGradient.apply(losses[name], spec["weight"])
+            metrics[f"acc-{name}"] = (logits.detach().argmax(1) == target).float().mean()
+        return losses, metrics
 
     def _split_outputs(self, outputs):
         """Convert parameters tensor to the dictionary with parameters for each loss."""

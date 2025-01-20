@@ -17,6 +17,11 @@ class BaseLoss(torch.nn.Module):
         pass
 
     @abstractproperty
+    def aggregate(self):
+        """The booling flag indicating input is an embedding rather than a sequence."""
+        pass
+
+    @abstractproperty
     def input_size(self):
         pass
 
