@@ -1,8 +1,8 @@
 defaults:
-  - default
+  - default_ft
   - _self_
 
-name: next_item_metric
+base_name: next_item_metric
 
 module:
   _target_: pretpp.modules.BaseModule
@@ -17,14 +17,3 @@ module:
     _target_: pretpp.nn.NormalizationHead
     _partial_: true
   loss_projection_partial: ${metric_head}
-  loss:
-    _target_: pretpp.losses.NextItemLoss
-    losses:
-      timestamps:
-        _target_: hotpp.losses.TimeMAELoss
-        max_delta: ${max_time_delta}
-      labels:
-        _target_: hotpp.losses.CrossEntropyLoss
-        num_classes: ${num_classes}
-      log_amount:
-        _target_: hotpp.losses.MAELoss
