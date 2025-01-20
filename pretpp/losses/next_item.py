@@ -1,9 +1,10 @@
 import torch
 
 from hotpp.data import PaddedBatch
+from .base import BaseLoss
 
 
-class NextItemLoss(torch.nn.Module):
+class NextItemLoss(BaseLoss):
     """Hybrid loss for next item prediction.
 
     Args:
@@ -15,22 +16,19 @@ class NextItemLoss(torch.nn.Module):
         self._order = list(sorted(losses))
 
     @property
-    def fields(self):
-        return self._order
+    def aggregate(self):
+        return False
 
     @property
     def input_size(self):
         return sum([loss.input_size for loss in self._losses.values()])
 
-    def get_delta_type(self, field):
-        """Get time delta type."""
-        return self._losses[field].delta
-
-    def prepare_batch(self, inputs):
+    def prepare_batch(self, inputs, targets=None):
         """Extract model inputs and targets.
 
         Args:
             inputs: Input events with shape (B, L, *).
+            targets (unused): Targets with shape (B, L) for local recognition or (B) for global recognition.
 
         Returns:
             Model inputs with shape (B, L', *) and targets with shape (B, L', *).
@@ -75,8 +73,3 @@ class NextItemLoss(torch.nn.Module):
         if offset != outputs.shape[-1]:
             raise ValueError("Predictions tensor has inconsistent size.")
         return result
-
-    def _join_outputs(self, outputs_dict):
-        """Inverse of _split_outputs."""
-        outputs = [outputs_dict[name] for name in self._order]
-        return torch.cat(outputs, -1)

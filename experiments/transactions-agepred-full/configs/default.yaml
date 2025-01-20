@@ -28,6 +28,7 @@ model_path: checkpoints/${name}.ckpt
 report: results/${name}.yaml
 multiseed_report: results/multiseed_${name}.yaml
 downstream_report: results/downstream_${name}.yaml
+test_downstream: true
 
 data_module:
   _target_: hotpp.data.HotppDataModule
@@ -43,11 +44,22 @@ data_module:
 
 metric: null
 
+nohead:
+  _target_: pretpp.nn.IdentityHead
+  _partial_: true
+
 head:
   _target_: hotpp.nn.Head
   _partial_: true
   hidden_dims: [512, 256]
   use_batch_norm: true
+
+metric_head:
+  _target_: pretpp.nn.MetricHead
+  _partial_: true
+  hidden_dims: [512, 512, 256]
+  head_params:
+    use_batch_norm: true
 
 conditional_head:
   _target_: hotpp.nn.ConditionalHead
@@ -68,6 +80,9 @@ module:
         timestamps: identity
         log_amount: identity
     max_time_delta: ${max_time_delta}
+  aggregator:
+    _target_:
+      hotpp.nn.MeanAggregator
   optimizer_partial:
     _partial_: true
     _target_: torch.optim.Adam
