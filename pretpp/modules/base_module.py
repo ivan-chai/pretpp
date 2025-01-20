@@ -79,15 +79,17 @@ class BaseModule(pl.LightningModule):
                 state_dict["_loss_projection." + k] = v
             self.load_state_dict(state_dict)
 
-    def encode(self, x):
-        """Compatibility with HoTPP."""
-        return self(x), None
-
     def forward(self, x):
         """Extract embeddings."""
         hiddens, _ = self._seq_encoder(x)  # (B, L, D).
         hiddens = self._head(hiddens)
         return hiddens
+
+    def embed(self, x):
+        """Compatibility with HoTPP."""
+        hiddens = self(x)
+        embeddings = self._aggregator(hiddens)
+        return embeddings
 
     def _compute_loss(self, outputs, targets):
         if self._loss.aggregate:
