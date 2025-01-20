@@ -73,8 +73,19 @@ class ClassificationLoss(BaseLoss):
             losses[name] = torch.nn.functional.cross_entropy(logits, target)
             if spec.get("weight", 1) != 1:
                 losses[name] = ScaleGradient.apply(losses[name], spec["weight"])
-            metrics[f"acc-{name}"] = (logits.detach().argmax(1) == target).float().mean()
+            metrics[f"batch-accuracy-{name}"] = (logits.detach().argmax(1) == target).float().mean()
         return losses, metrics
+
+    def predict(self, outputs):
+        lengths = outputs.seq_lens
+        if not isinstance(outputs, dict):
+            outputs = self._split_outputs(outputs.payload)  # (B, 1, D).
+        result = {}
+        for name in set(self._targets) & set(outputs):
+            if (outputs[name].ndim != 3) or (outputs[name].shape[1] != 1):
+                raise NotImplementedError("Expected aggregated embedding with shape (B, 1, C).")
+            result[name] = outputs[name].squeeze(1).argmax(-1)  # (B).
+        return PaddedBatch(result, lengths, seq_names={})
 
     def _split_outputs(self, outputs):
         """Convert parameters tensor to the dictionary with parameters for each loss."""

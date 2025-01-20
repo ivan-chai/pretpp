@@ -95,13 +95,13 @@ class BaseModule(pl.LightningModule):
                                   torch.ones_like(outputs.seq_lens))  # (B, 1, D).
         outputs = self._loss_projection(outputs)  # (B, L, D).
         losses, metrics = self._loss(outputs, targets)
-        return losses, metrics
+        return outputs, losses, metrics
 
     def training_step(self, batch, batch_idx):
         x, y = batch
         inputs, targets = self._loss.prepare_batch(x, y)
         outputs = self.forward(inputs)
-        losses, metrics = self._compute_loss(outputs, targets)
+        outputs, losses, metrics = self._compute_loss(outputs, targets)
         loss = sum(losses.values())
 
         # Log statistics.
@@ -121,7 +121,7 @@ class BaseModule(pl.LightningModule):
         x, y = batch
         inputs, targets = self._loss.prepare_batch(x, y)
         outputs = self.forward(inputs)  # (B, L, D).
-        losses, metrics = self._compute_loss(outputs, targets)
+        outputs, losses, metrics = self._compute_loss(outputs, targets)
         loss = sum(losses.values())
 
         # Log statistics.
@@ -140,7 +140,7 @@ class BaseModule(pl.LightningModule):
         x, y = batch
         inputs, targets = self._loss.prepare_batch(x, y)
         outputs = self.forward(inputs)  # (B, L, D).
-        losses, metrics = self._compute_loss(outputs, targets)
+        outputs, losses, metrics = self._compute_loss(outputs, targets)
         loss = sum(losses.values())
 
         # Log statistics.
@@ -187,7 +187,8 @@ class BaseModule(pl.LightningModule):
 
     @torch.autocast("cuda", enabled=False)
     def _update_metric(self, metric, x, inputs, outputs, targets):
-        pass
+        predictions = self._loss.predict(outputs)
+        metric.update(predictions, targets)
 
     @torch.autocast("cuda", enabled=False)
     def _compute_single_batch_metrics(self, x, inputs, outputs, targets):
