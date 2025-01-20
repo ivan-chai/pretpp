@@ -28,6 +28,7 @@ model_path: checkpoints/${name}.ckpt
 report: results/${name}.yaml
 multiseed_report: results/multiseed_${name}.yaml
 downstream_report: results/downstream_${name}.yaml
+test_downstream: true
 
 data_module:
   _target_: hotpp.data.HotppDataModule

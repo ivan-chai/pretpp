@@ -2,6 +2,8 @@ defaults:
   - default
   - _self_
 
+name: ${base_name}_ft
+
 data_module:
   train_params:
     drop_nans: target
@@ -19,6 +21,15 @@ module:
   optimizer_partial:
     lr: 0.0001
     weight_decay: 0.0
+  init_state_dict:
+    _target_: torch.load
+    f: checkpoints/${base_name}.ckpt
+  loss:
+    _target_: pretpp.losses.ClassificationLoss
+    targets:
+      target:
+        num_classes: 4
+        cast: true
 
 trainer:
   accelerator: cuda

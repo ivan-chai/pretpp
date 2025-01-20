@@ -2,15 +2,19 @@ defaults:
   - default_ft
   - _self_
 
-base_name: next_item
+base_name: bidir_mlm
 
 module:
   _target_: pretpp.modules.BaseModule
   seq_encoder:
+    embedder:
+      embeddings:
+        labels:
+          in: ${num_classes_plus1}
     rnn_partial:
-      _target_: hotpp.nn.GRU
+      _target_: pretpp.nn.BidirGRU
       _partial_: true
-      hidden_size: ${rnn_hidden_size}
+      hidden_size: ${rnn_half_hidden_size}
     max_inference_context: ${rnn_inference_context}
     inference_context_step: ${rnn_inference_context_step}
   loss_projection_partial: ${head}
