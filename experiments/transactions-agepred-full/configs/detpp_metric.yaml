@@ -12,6 +12,10 @@ detection_k: 32
 conditional_head:
   k: ${detection_k}
 
+metric_conditional_head:
+  head_params:
+    k: ${detection_k}
+
 module:
   _target_: pretpp.modules.BaseModule
   seq_encoder:
