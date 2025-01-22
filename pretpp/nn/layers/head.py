@@ -1,6 +1,6 @@
 import torch
 from hotpp.data import PaddedBatch
-from hotpp.nn import Head
+from hotpp.nn import Head, ConditionalHead
 from .metric import MetricLayer
 
 
@@ -50,6 +50,23 @@ class MetricHead(torch.nn.Sequential):
         else:
             layers.append(MetricLayer(input_size, hidden_dims[0], **(metric_params or {})))
             layers.append(Head(hidden_dims[0], output_size, hidden_dims=hidden_dims[1:], **(head_params or {})))
+        self._output_size = output_size
+        super().__init__(*layers)
+
+    @property
+    def output_size(self):
+        return self._output_size
+
+
+class MetricConditionalHead(torch.nn.Sequential):
+    def __init__(self, input_size, output_size, hidden_dims=None,
+                 metric_params=None, head_params=None):
+        layers = []
+        if not hidden_dims:
+            layers.append(MetricLayer(input_size, output_size, **(metric_params or {})))
+        else:
+            layers.append(MetricLayer(input_size, hidden_dims[0], **(metric_params or {})))
+            layers.append(ConditionalHead(hidden_dims[0], output_size, hidden_dims=hidden_dims[1:], **(head_params or {})))
         self._output_size = output_size
         super().__init__(*layers)
 
