@@ -1,5 +1,5 @@
 defaults:
-  - detpp_plus
+  - detpp_metric
   - _self_
 
 name: detpp_plus_metric
