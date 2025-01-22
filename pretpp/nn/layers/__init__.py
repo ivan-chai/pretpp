@@ -1,2 +1,2 @@
 from .bidir_rnn import BidirGRU
-from .head import IdentityHead, NormalizationHead, MetricHead
+from .head import IdentityHead, NormalizationHead, MetricHead, MetricConditionalHead

@@ -67,6 +67,13 @@ conditional_head:
   hidden_dims: [512, 256]
   use_batch_norm: true
 
+metric_conditional_head:
+  _target_: pretpp.nn.MetricConditionalHead
+  _partial_: true
+  hidden_dims: [512, 256]
+  head_params:
+    use_batch_norm: true
+
 module:
   seq_encoder:
     _target_: hotpp.nn.RnnEncoder
