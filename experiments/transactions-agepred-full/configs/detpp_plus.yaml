@@ -1,0 +1,13 @@
+defaults:
+  - detpp
+  - _self_
+
+name: detpp_plus
+
+module:
+  loss:
+    next_item_adapter: head
+    next_item_loss_weight: 4
+
+trainer:
+  deterministic: false
