@@ -87,13 +87,50 @@ class TestMLMLoss(TestCase):
 
             masking_mask = model_input.isclose(torch.tensor([mask_token[key]], dtype=model_input.dtype))
             masking_fraction = masking_mask[inputs_mask].float().mean().item()
-            self.assertAlmostEqual(masking_fraction, 0.6 * 0.4, delta=0.01)
+            self.assertAlmostEqual(masking_fraction, 0.6 * 0.4, delta=atol)
 
             orig_values = set(inputs.payload[key][mask].unique().tolist())
             new_values = set(model_input[inputs_mask].unique().tolist())
             self.assertEqual(new_values - orig_values, {mask_token[key]})
 
             self.assertTrue(targets.payload[key].allclose(inputs.payload[key][:, :-1]))
+
+    def test_per_field_mlm(self):
+        b = 500
+        l = 1000
+        max_dt = 10
+        nc = 1000000
+        inputs = PaddedBatch({"timestamps": (torch.rand(b, l) * max_dt).cumsum(1),
+                              "labels": torch.randint(0, nc, [b, l])},
+                             torch.randint(0, 100, [b]))
+        mask_token = {"timestamps": -1,
+                      "labels": nc}
+        field_mask_probs = {"timestamps": 0.3,
+                            "labels": 0.6}
+        loss = MLMLoss(losses={"timestamps": TimeMAELoss(),
+                               "labels": CrossEntropyLoss(num_classes=nc)},
+                       mask_token=mask_token,
+                       eval_fraction=0.4,
+                       mask_prob=0.6,
+                       random_prob=0.3,
+                       field_mask_probs=field_mask_probs)
+        model_inputs, targets = loss.prepare_batch(inputs)
+        self.assertEqual(set(model_inputs.payload), {"timestamps", "labels"})
+        self.assertEqual(set(targets.payload), {"timestamps", "labels", EVAL_MASK_FIELD})
+        self.assertEqual(model_inputs.seq_lens.tolist(), (inputs.seq_lens - 1).clip(min=0).tolist())
+        self.assertEqual(targets.seq_lens.tolist(), (inputs.seq_lens - 1).clip(min=0).tolist())
+        mask = inputs.seq_len_mask
+        inputs_mask = mask[:, 1:]
+        atol = 0.01
+        for key in model_inputs.seq_names:
+            model_input = model_inputs.payload[key]
+            equal_fraction = model_input.isclose(inputs.payload[key][:, 1:])[inputs_mask].float().mean().item()
+            equal_prob = 1 - (0.6 + 0.3) * 0.4 * field_mask_probs[key]
+            self.assertAlmostEqual(equal_fraction, equal_prob, delta=atol)
+
+            masking_mask = model_input.isclose(torch.tensor([mask_token[key]], dtype=model_input.dtype))
+            masking_fraction = masking_mask[inputs_mask].float().mean().item()
+            self.assertAlmostEqual(masking_fraction, 0.6 * 0.4 * field_mask_probs[key], delta=atol)
 
     def test_convergence(self):
         lengths = [
