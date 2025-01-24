@@ -18,6 +18,12 @@ class BidirGRU(torch.nn.GRU):
         self._hidden_size = hidden_size
 
     @property
+    def delta_time(self):
+        """Whether to take delta time or raw timestamps at input."""
+        # Need time_deltas.
+        return True
+
+    @property
     def output_size(self):
         return 2 * self._hidden_size
 
