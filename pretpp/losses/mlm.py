@@ -17,10 +17,12 @@ class MLMLoss(BaseLoss):
         mask_prob: The probability of token masking.
         random_prob: The probability of token replacement with random token from the same batch.
         timedeltas_field: The field to put time deltas in after masking.
+        field_mask_probs: Mapping from a field name to the masking probability. By default all fields are masked.
     """
     def __init__(self, losses, mask_token,
                  timestamps_field="timestamps", timedeltas_field=None,
-                 eval_fraction=0.15, mask_prob=0.8, random_prob=0.1):
+                 eval_fraction=0.15, mask_prob=0.8, random_prob=0.1,
+                 field_mask_probs=None):
         super().__init__()
         self._losses = torch.nn.ModuleDict(losses)
         self._order = list(sorted(losses))
@@ -29,6 +31,7 @@ class MLMLoss(BaseLoss):
         self._timestamps_field = timestamps_field
         self._timedeltas_field = timedeltas_field
         self._eval_fraction = eval_fraction
+        self._field_mask_probs = field_mask_probs
 
         if mask_prob + random_prob > 1:
             raise ValueError("Probabilities sum can't exceed 1")
@@ -104,6 +107,13 @@ class MLMLoss(BaseLoss):
                 targets[k] = v[:, :-1]
             else:
                 model_inputs[k] = v
+        if self._field_mask_probs is not None:
+            for field in inputs.seq_names:
+                if field not in self._field_mask_probs:
+                    raise ValueError(f"No masking probability for the field {field}")
+                prob = self._field_mask_probs[field]
+                mask = torch.rand(b, max(l, 1) - 1, device=inputs.device) < prob  # (B, L).
+                model_inputs[field] = torch.where(mask, model_inputs[field], inputs.payload[field][:, 1:])
         targets[EVAL_MASK_FIELD] = eval_mask[:, :-1]
         lengths = (inputs.seq_lens - 1).clip(min=0)
         model_inputs = PaddedBatch(model_inputs, lengths, seq_names=inputs.seq_names)
