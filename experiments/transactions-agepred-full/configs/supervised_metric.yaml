@@ -1,0 +1,43 @@
+defaults:
+  - default
+  - _self_
+
+name: supervised_metric
+
+data_module:
+  train_params:
+    drop_nans: target
+  val_params:
+    drop_nans: target
+
+metric:
+  _target_: pretpp.metrics.DownstreamMetric
+  classification_fields:
+    - target
+
+module:
+  _target_: pretpp.modules.BaseModule
+  seq_encoder:
+    rnn_partial:
+      _target_: hotpp.nn.GRU
+      _partial_: true
+      hidden_size: ${rnn_hidden_size}
+    max_inference_context: ${rnn_inference_context}
+    inference_context_step: ${rnn_inference_context_step}
+  head_partial:
+    _target_: pretpp.nn.NormalizationHead
+    _partial_: true
+  loss_projection_partial: ${metric_head}
+  loss:
+    _target_: pretpp.losses.ClassificationLoss
+    targets:
+      target:
+        num_classes: 4
+        cast: true
+  val_metric: ${metric}
+  test_metric: ${metric}
+
+trainer:
+  model_selection:
+    metric: val/accuracy-target
+    mode: max
