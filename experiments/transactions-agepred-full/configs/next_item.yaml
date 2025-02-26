@@ -18,6 +18,8 @@ module:
     _partial_: true
     hidden_dims: [256]
     use_batch_norm: true
+  optimizer_partial:
+    _target_: torch.optim.AdamW
   loss:
     _target_: pretpp.losses.NextItemLoss
     losses:
