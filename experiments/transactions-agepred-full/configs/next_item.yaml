@@ -20,6 +20,7 @@ module:
     use_batch_norm: true
   optimizer_partial:
     _target_: torch.optim.AdamW
+    lr: 0.0001
   loss:
     _target_: pretpp.losses.NextItemLoss
     losses:
