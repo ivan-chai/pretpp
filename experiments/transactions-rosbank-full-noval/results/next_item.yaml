@@ -1,5 +1,5 @@
-date: '2025-02-27 17:04:47'
-test/downstream: 0.814
+date: '2025-02-28 13:31:07'
+test/downstream: 0.815
 test/downstream-std: 0.003
 test/loss: 5.01207160949707
 test/loss_channel_type: 6.619884516112506e-05
@@ -8,7 +8,7 @@ test/loss_labels: 2.5692758560180664
 test/loss_log_amount: 1.2349547147750854
 test/loss_timestamps: 0.6107584238052368
 test/loss_trx_category: 0.5216876864433289
-val/downstream: 0.823
+val/downstream: 0.822
 val/downstream-std: 0.014
 val/loss: 5.010955810546875
 val/loss_channel_type: 6.619884516112506e-05
