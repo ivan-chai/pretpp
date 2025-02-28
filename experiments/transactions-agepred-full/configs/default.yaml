@@ -51,26 +51,26 @@ nohead:
 head:
   _target_: hotpp.nn.Head
   _partial_: true
-  hidden_dims: [512, 256]
+  hidden_dims: [256]
   use_batch_norm: true
 
 metric_head:
   _target_: pretpp.nn.MetricHead
   _partial_: true
-  hidden_dims: [512, 512, 256]
+  hidden_dims: [256]
   head_params:
     use_batch_norm: true
 
 conditional_head:
   _target_: hotpp.nn.ConditionalHead
   _partial_: true
-  hidden_dims: [512, 256]
+  hidden_dims: [512]
   use_batch_norm: true
 
 metric_conditional_head:
   _target_: pretpp.nn.MetricConditionalHead
   _partial_: true
-  hidden_dims: [512, 256]
+  hidden_dims: [512]
   head_params:
     use_batch_norm: true
 
