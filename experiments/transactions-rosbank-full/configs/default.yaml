@@ -115,6 +115,7 @@ module:
     gamma: 0.8
   val_metric: ${metric}
   test_metric: ${metric}
+  downstream_validation_config: configs/downstream.yaml
 
 trainer:
   accelerator: cuda
