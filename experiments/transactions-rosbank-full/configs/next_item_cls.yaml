@@ -2,7 +2,18 @@ defaults:
   - default
   - _self_
 
-name: next_item
+name: next_item_cls
+
+data_module:
+  train_params:
+    drop_nans: target_flag
+  val_params:
+    drop_nans: target_flag
+
+metric:
+  _target_: pretpp.metrics.DownstreamMetric
+  classification_fields:
+    - target_flag
 
 module:
   _target_: pretpp.modules.BaseModule
@@ -14,6 +25,7 @@ module:
     max_inference_context: ${rnn_inference_context}
     inference_context_step: ${rnn_inference_context_step}
   optimizer_partial:
+    _target_: torch.optim.AdamW
     lr: 0.0005
     weight_decay: 0.00001
   lr_scheduler_partial:
@@ -21,7 +33,7 @@ module:
     step_size: 10
   loss_projection_partial: ${head}
   loss:
-    _target_: pretpp.losses.NextItemLoss
+    _target_: pretpp.losses.HybridNextClsLoss
     losses:
       timestamps:
         _target_: hotpp.losses.TimeMAELoss
@@ -46,5 +58,10 @@ module:
       log_amount:
         _target_: hotpp.losses.MAELoss
         grad_scale: 1
+    targets:
+      target_flag:
+        num_classes: 2
+        cast: true
+    aggregator: ${module.aggregator}
 trainer:
   max_epochs: 110
