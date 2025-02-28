@@ -10,11 +10,6 @@ data_module:
   val_params:
     drop_nans: target_flag
 
-metric:
-  _target_: pretpp.metrics.DownstreamMetric
-  classification_fields:
-    - target_flag
-
 module:
   _target_: pretpp.modules.BaseModule
   seq_encoder:
