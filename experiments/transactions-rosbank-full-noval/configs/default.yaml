@@ -28,7 +28,6 @@ model_path: checkpoints/${name}.ckpt
 report: results/${name}.yaml
 multiseed_report: results/multiseed_${name}.yaml
 downstream_report: results/downstream_${name}.yaml
-drop_downstream_splits: [val]
 test_downstream: true
 
 data_module:
@@ -116,6 +115,7 @@ module:
     gamma: 0.8
   val_metric: ${metric}
   test_metric: ${metric}
+  downstream_validation_config: configs/downstream.yaml
 
 trainer:
   accelerator: cuda
