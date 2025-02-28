@@ -1,0 +1,55 @@
+defaults:
+  - default
+  - _self_
+
+name: next_item_transformer
+
+data_module:
+  batch_size: 48
+
+module:
+  _target_: pretpp.modules.BaseModule
+  seq_encoder:
+    _target_: hotpp.nn.Encoder
+    model_partial:
+      _target_: hotpp.nn.HuggingFaceTransformer
+      _partial_: true
+      model:
+        _target_: transformers.GPT2Model
+        config:
+          _target_: transformers.GPT2Config
+          n_positions: 800
+          n_embd: 512
+          n_layer: 2
+          n_head: 4
+          output_hidden_states: True  #Necessary argument
+    max_context: 256
+  loss_projection_partial: ${head}
+  loss:
+    _target_: pretpp.losses.NextItemLoss
+    losses:
+      timestamps:
+        _target_: hotpp.losses.TimeMAELoss
+        max_delta: ${max_time_delta}
+        smoothing: 1
+        grad_scale: 0.6
+      labels:
+        _target_: hotpp.losses.CrossEntropyLoss
+        num_classes: ${num_classes}
+      currency:
+        _target_: hotpp.losses.CrossEntropyLoss
+        num_classes: 68
+        grad_scale: 0.5
+      channel_type:
+        _target_: hotpp.losses.CrossEntropyLoss
+        num_classes: 7
+        grad_scale: 0.4
+      trx_category:
+        _target_: hotpp.losses.CrossEntropyLoss
+        num_classes: 11
+        grad_scale: 0.8
+      log_amount:
+        _target_: hotpp.losses.MAELoss
+        grad_scale: 1
+trainer:
+  max_epochs: 110
