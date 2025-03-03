@@ -2,9 +2,23 @@ import warnings
 from abc import ABC, abstractmethod
 import pytorch_lightning as pl
 import torch
+import yaml
+from omegaconf import OmegaConf
 
 from hotpp.data import PaddedBatch
 from pretpp.nn import IdentityHead
+
+
+class PredictTrainer:
+    def predict(self, model, datamodule):
+        device = next(iter(model.parameters())).device
+        results = []
+        for x, y in datamodule.predict_dataloader():
+            x = x.to(device)
+            if y is not None:
+                y = y.to(device)
+            results.append(model((x, y)))
+        return results
 
 
 class BaseModule(pl.LightningModule):
@@ -36,6 +50,7 @@ class BaseModule(pl.LightningModule):
         init_state_dict: Checkpoint to initialize all parameters except loss.
         val_metric: Validation set metric.
         test_metric: Test set metric.
+        downstream_validation_config: If provided, evaluate downstream metrics on each validation step.
     """
     def __init__(self, seq_encoder, loss,
                  timestamps_field="timestamps",
@@ -46,8 +61,8 @@ class BaseModule(pl.LightningModule):
                  lr_scheduler_partial=None,
                  init_state_dict=None,
                  val_metric=None,
-                 test_metric=None):
-
+                 test_metric=None,
+                 downstream_validation_config=None):
         super().__init__()
         self._timestamps_field = timestamps_field
 
@@ -57,6 +72,11 @@ class BaseModule(pl.LightningModule):
 
         self._val_metric = val_metric
         self._test_metric = test_metric
+        if downstream_validation_config is not None:
+            with open(downstream_validation_config, "r") as fp:
+                self._downstream_validation_config = OmegaConf.create(yaml.safe_load(fp))
+        else:
+            self._downstream_validation_config = None
         self._optimizer_partial = optimizer_partial
         self._lr_scheduler_partial = lr_scheduler_partial
 
@@ -163,6 +183,20 @@ class BaseModule(pl.LightningModule):
             for k, v in metrics.items():
                 self.log(f"val/{k}", v, prog_bar=True)
             self._val_metric.reset()
+
+        if self._downstream_validation_config:
+            from hotpp.eval_downstream import eval_downstream
+            # Lightning workaround to enable logging after trainer.predict.
+            trainer = PredictTrainer()
+            current_fx_name = self._current_fx_name
+            # Eval.
+            scores = eval_downstream(self._downstream_validation_config, trainer, self.trainer.datamodule, self)
+            # Revert workaround.
+            self._current_fx_name = current_fx_name
+            # Workaround end.
+
+            for split, (mean, std) in scores.items():
+                self.log(f"{split}/downstream", mean, prog_bar=True)
 
     def on_test_epoch_end(self):
         if self._test_metric is not None:

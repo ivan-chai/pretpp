@@ -10,12 +10,16 @@ module:
     rnn_partial:
       _target_: hotpp.nn.GRU
       _partial_: true
-      hidden_size: 1536
+      hidden_size: 1280
     max_inference_context: ${rnn_inference_context}
     inference_context_step: ${rnn_inference_context_step}
-  loss_projection_partial: ${head}
+  optimizer_partial:
+    lr: 0.0005
+    weight_decay: 0.00001
   lr_scheduler_partial:
-    gamma: 0.75
+    gamma: 0.4
+    step_size: 10
+  loss_projection_partial: ${head}
   loss:
     _target_: pretpp.losses.NextItemLoss
     losses:
@@ -23,12 +27,24 @@ module:
         _target_: hotpp.losses.TimeMAELoss
         max_delta: ${max_time_delta}
         smoothing: 1
-        grad_scale: 0.45
+        grad_scale: 0.6
       labels:
         _target_: hotpp.losses.CrossEntropyLoss
         num_classes: ${num_classes}
+      currency:
+        _target_: hotpp.losses.CrossEntropyLoss
+        num_classes: 68
+        grad_scale: 0.5
+      channel_type:
+        _target_: hotpp.losses.CrossEntropyLoss
+        num_classes: 7
+        grad_scale: 0.4
+      trx_category:
+        _target_: hotpp.losses.CrossEntropyLoss
+        num_classes: 11
+        grad_scale: 0.8
       log_amount:
         _target_: hotpp.losses.MAELoss
-        grad_scale: 0.45
+        grad_scale: 1
 trainer:
-  max_epochs: 50
+  max_epochs: 110
