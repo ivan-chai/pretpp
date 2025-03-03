@@ -2,7 +2,7 @@ defaults:
   - default
   - _self_
 
-name: detection
+name: bidir_mlm_detection
 
 detection_k: 32
 
@@ -13,19 +13,41 @@ data_module:
   batch_size: 24
 
 module:
-  _target_: hotpp.modules.NextKModule
+  _target_: pretpp.modules.BaseModule
   seq_encoder:
+    embedder:
+      embeddings:
+        labels:
+          in: 386  # plus 1.
+        channel_type:
+          in: 8  # plus 1.
+        currency:
+          in: 69  # plus 1.
+        trx_category:
+          in: 12  # plus 1.
     rnn_partial:
-      _target_: hotpp.nn.GRU
+      _target_: pretpp.nn.BidirGRU
       _partial_: true
-      hidden_size: ${rnn_hidden_size}
+      hidden_size: ${rnn_half_hidden_size}
     max_inference_context: ${rnn_inference_context}
     inference_context_step: ${rnn_inference_context_step}
-  head_partial: ${conditional_head}
+  loss_projection_partial: ${conditional_head}
   loss:
-    _target_: hotpp.losses.DetectionLoss
+    _target_: pretpp.losses.MLMDeTPPLoss
+    # MLM params.
+    #timedeltas_field: timedeltas
+    mask_token:
+      timestamps: -1
+      #timedeltas: -1
+      labels: 385
+      channel_type: 7
+      currency: 68
+      trx_category: 11
+      log_amount: 0
+    # Detection params.
     k: ${detection_k}
-    horizon: ${metric.horizon}
+    horizon: 7  # week.
+    prefetch_factor: 1
     categorical_fields:
       - labels
       - currency
@@ -38,6 +60,14 @@ module:
       channel_type: mean
       trx_category: mean
       log_amount: mean
+    match_weights:
+      _presence: 3
+      timestamps: 0.35
+      labels: 1.0
+      channel_type: 0.2
+      currency: 0.2
+      trx_category: 0.43
+      log_amount: 0.4
     next_item_loss:
       _target_: hotpp.losses.NextItemLoss
       losses:
@@ -48,7 +78,7 @@ module:
           _target_: hotpp.losses.TimeMAELoss
           delta: start
           max_delta: ${max_duration}
-          smoothing: ${time_smoothing}
+          smoothing: 1
           grad_scale: null
         labels:
           _target_: hotpp.losses.CrossEntropyLoss
