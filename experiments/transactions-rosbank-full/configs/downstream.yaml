@@ -47,15 +47,15 @@ models:
       - _target_: sklearn.preprocessing.MaxAbsScaler
 
 metrics:
-  auroc: 
+  auroc:
     enabled: true
     score_func: sklearn.metrics.roc_auc_score
-    scorer_params: 
+    scorer_params:
       needs_proba: true
-  accuracy: 
+  accuracy:
     enabled: true
     score_func: sklearn.metrics.accuracy_score
-    scorer_params: 
+    scorer_params:
       needs_proba: false
 report_file: _
 features:
@@ -70,6 +70,6 @@ report:
   error_handling: fail
   print_all_metrics: false
   metrics:
-    auroc: 
+    auroc:
       float_format: "{:.3f}"
       split_columns: true

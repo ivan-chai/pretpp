@@ -11,12 +11,10 @@ EVAL_FIELD = "_eval_mask"
 class MLMDeTPPLoss(DetectionLoss, BaseLoss):
     """Wrapper around HoTPP Detection Loss."""
     def __init__(self, mask_token,
-                 timedeltas_field=None,
-                 eval_fraction=0.05, mask_prob=0.8,
+                 eval_fraction=0.1, mask_prob=0.8,
                  **detpp_kwargs):
         super().__init__(**detpp_kwargs)
         self._mask_token = mask_token
-        self._timedeltas_field = timedeltas_field
         self._eval_fraction = eval_fraction
         self._mask_prob = mask_prob
 
@@ -37,18 +35,16 @@ class MLMDeTPPLoss(DetectionLoss, BaseLoss):
         b, l = inputs.shape
         times = inputs.payload[self._timestamps_field]  # (B, L).
 
-        if self._timedeltas_field:
-            deltas = times.clone()
-            deltas[:, 0].fill_(0)
-            deltas[:, 1:] -= times[:, :-1]
-            inputs = PaddedBatch(inputs.payload | {self._timedeltas_field: deltas}, inputs.seq_lens,
-                                 seq_names=set(inputs.seq_names) | {self._timedeltas_field})
-
         # Select loss evaluation indices, add them to inputs as boolean flags.
         assert l > 0
         k = max(1, int(l * self._eval_fraction))
-        eval_rand = torch.rand(b, l, device=inputs.device) < self._eval_fraction  # (B, L).
+        eval_rand = torch.rand(b, l - k, device=inputs.device) < self._eval_fraction  # (B, L).
         _, eval_indices = eval_rand.long().topk(k, dim=1)  # (B, K).
+        eval_indices, _ = eval_indices.sort(dim=1)  # (B, K).
+        eval_timestamps = inputs.payload["timestamps"].take_along_dim(eval_indices, 1)  # (B, K).
+        enable = eval_indices < inputs.seq_lens[:, None]
+        enable[:, 1:] = (eval_timestamps[:, 1:] - eval_timestamps[:, :-1]) > self._horizon
+        eval_indices = torch.where(enable, eval_indices, torch.arange(l - k, l, device=inputs.device)[None].expand(b, k))
         eval_indices, _ = eval_indices.sort(dim=1)  # (B, K).
         eval_mask = torch.zeros(b, l, device=inputs.device, dtype=torch.bool).scatter_(1, eval_indices, torch.ones_like(eval_indices, dtype=torch.bool))
 
@@ -60,7 +56,7 @@ class MLMDeTPPLoss(DetectionLoss, BaseLoss):
         end_times = start_times + self._horizon  # (B, K).
         out_horizon = end_times[:, :, None] <= times[:, None, :]  # (B, K, L).
         end_values, end_indices = out_horizon.max(2)  # (B, K).
-        end_indices = torch.where(end_values, end_indices, start_indices)  # (B, K).
+        end_indices = torch.where(end_values, end_indices, inputs.seq_lens[:, None].expand(b, k))  # (B, K).
         rng = torch.arange(l, device=inputs.device)[None, None]  # (1, 1, L).
         mask = torch.logical_and(rng >= start_indices.unsqueeze(2), rng < end_indices.unsqueeze(2))  # (B, K, L).
         mask = mask.logical_and_(torch.rand(b, k, 1, device=inputs.device) < self._mask_prob)

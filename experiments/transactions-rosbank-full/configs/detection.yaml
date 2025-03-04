@@ -10,7 +10,7 @@ conditional_head:
   k: ${detection_k}
 
 data_module:
-  batch_size: 24
+  batch_size: 32
 
 module:
   _target_: pretpp.modules.BaseModule
