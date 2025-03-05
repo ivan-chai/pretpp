@@ -14,7 +14,7 @@ metric_conditional_head:
     k: ${detection_k}
 
 data_module:
-  batch_size: 48
+  batch_size: 32
 
 module:
   _target_: pretpp.modules.BaseModule
@@ -38,6 +38,8 @@ module:
   loss_projection_partial: ${conditional_head}
   loss:
     _target_: pretpp.losses.MLMDeTPPLoss
+    eval_fraction: 0.25
+    mask_prob: 0.2
     # MLM params.
     #timedeltas_field: timedeltas
     mask_token:
@@ -102,3 +104,5 @@ module:
         log_amount:
           _target_: hotpp.losses.MAELoss
           grad_scale: null
+trainer:
+  check_val_every_n_epoch: 5

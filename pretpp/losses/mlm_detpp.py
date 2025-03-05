@@ -8,10 +8,20 @@ from .base import BaseLoss
 EVAL_FIELD = "_eval_mask"
 
 
+def batch_searchsorted(sorted_sequences, values):
+    # sorted_sequences: (B, L).
+    # values: (B, K).
+    # returns: (B, K).
+    le = values[:, :, None] <= sorted_sequences[:, None, :]  # (B, K, L).
+    values, indices = le.max(2)  # (B, K).
+    indices = torch.where(values, indices, sorted_sequences.shape[1])  # (B, K).
+    return indices
+
+
 class MLMDeTPPLoss(DetectionLoss, BaseLoss):
     """Wrapper around HoTPP Detection Loss."""
     def __init__(self, mask_token,
-                 eval_fraction=0.1, mask_prob=0.8,
+                 eval_fraction=0.15, mask_prob=0.8,
                  **detpp_kwargs):
         super().__init__(**detpp_kwargs)
         self._mask_token = mask_token
@@ -38,25 +48,39 @@ class MLMDeTPPLoss(DetectionLoss, BaseLoss):
         # Select loss evaluation indices, add them to inputs as boolean flags.
         assert l > 0
         k = max(1, int(l * self._eval_fraction))
-        eval_rand = torch.rand(b, l - k, device=inputs.device) < self._eval_fraction  # (B, L).
-        _, eval_indices = eval_rand.long().topk(k, dim=1)  # (B, K).
-        eval_indices, _ = eval_indices.sort(dim=1)  # (B, K).
-        eval_timestamps = inputs.payload["timestamps"].take_along_dim(eval_indices, 1)  # (B, K).
-        enable = eval_indices < inputs.seq_lens[:, None]
-        enable[:, 1:] = (eval_timestamps[:, 1:] - eval_timestamps[:, :-1]) > self._horizon
-        eval_indices = torch.where(enable, eval_indices, torch.arange(l - k, l, device=inputs.device)[None].expand(b, k))
-        eval_indices, _ = eval_indices.sort(dim=1)  # (B, K).
-        eval_mask = torch.zeros(b, l, device=inputs.device, dtype=torch.bool).scatter_(1, eval_indices, torch.ones_like(eval_indices, dtype=torch.bool))
+
+        times = inputs.payload["timestamps"]  # (B, L).
+        final_times = times.take_along_dim((inputs.seq_lens - 1).clip(min=0).unsqueeze(1), 1).squeeze(1)  # (B).
+
+        durations = (final_times - times[:, 0]).float()  # (B).
+        expected_steps = durations / k  # (B).
+        start_times = torch.zeros(b, k, device=durations.device, dtype=durations.dtype)  # (B, K).
+        start_times[:, 0] = times[:, 0] + expected_steps * torch.rand_like(durations)
+        for i in range(1, k):
+            start_times[:, i] = start_times[:, i - 1] + self._horizon + expected_steps * torch.rand_like(durations)
+        eval_indices = batch_searchsorted(times, start_times).clip(max=l - 1)  # (B, K).
+
+        # Exclude indices with small intervals.
+        exclude = torch.zeros(b, k, dtype=torch.bool, device=eval_indices.device)
+        eval_times = times.take_along_dim(eval_indices, 1)  # (B, K).
+        exclude[:, 1:] = eval_times[:, 1:] <= eval_times[:, :-1] + self._horizon
+        eval_indices.masked_fill_(exclude, l - 1)
+
+        # Enforce exact K different indices.
+        eval_mask = torch.zeros(b, l, device=inputs.device, dtype=torch.bool).scatter_(1, eval_indices, torch.ones_like(eval_indices, dtype=torch.bool))  # (B, L).
+        eval_mask[:, l - k:] = True
+        counts = eval_mask.long().cumsum(1)  # (B, L).
+        eval_mask = torch.logical_and(eval_mask, counts <= k)  # (B, L).
+        eval_indices = eval_mask.nonzero()
+        eval_indices = torch.nonzero(eval_mask)[:, 1].reshape(b, k)
 
         # Mask horizons for selected evaluation indices.
-        final_times = times.take_along_dim((inputs.seq_lens - 1).clip(min=0).unsqueeze(1), 1).squeeze(1)  # (B).
-        start_indices = (eval_indices + 1).clip(max=l - 1)  # (B, K).
-        start_times = times.take_along_dim(start_indices, dim=1)  # (B, K).
-        start_times = torch.where(start_indices == l - 1, final_times.unsqueeze(1).expand(b, k), start_times)
+        start_times = times.take_along_dim(eval_indices, dim=1)  # (B, K).
+        start_times = torch.where(eval_indices >= inputs.seq_lens[:, None], final_times.unsqueeze(1).expand(b, k), start_times)
         end_times = start_times + self._horizon  # (B, K).
-        out_horizon = end_times[:, :, None] <= times[:, None, :]  # (B, K, L).
-        end_values, end_indices = out_horizon.max(2)  # (B, K).
-        end_indices = torch.where(end_values, end_indices, inputs.seq_lens[:, None].expand(b, k))  # (B, K).
+        start_indices = (eval_indices + 1).clip(max=l - 1)  # (B, K).
+        end_indices = batch_searchsorted(times, end_times)  # (B, K).
+        end_indices = torch.where(end_indices == l, inputs.seq_lens[:, None].expand(b, k), end_indices)
         rng = torch.arange(l, device=inputs.device)[None, None]  # (1, 1, L).
         mask = torch.logical_and(rng >= start_indices.unsqueeze(2), rng < end_indices.unsqueeze(2))  # (B, K, L).
         mask = mask.logical_and_(torch.rand(b, k, 1, device=inputs.device) < self._mask_prob)
