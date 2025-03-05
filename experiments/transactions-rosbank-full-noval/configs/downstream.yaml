@@ -43,7 +43,7 @@ models:
       reg_lambda: null
       colsample_bytree: null
       min_child_samples: null
-    cpu_count: 4
+    cpu_count: 5
     preprocessing:
       - _target_: sklearn.preprocessing.MaxAbsScaler
 
