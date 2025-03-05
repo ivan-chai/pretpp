@@ -33,5 +33,5 @@ module:
         _target_: ptls.frames.coles.sampling_strategies.HardNegativePairSelector
         neg_count: 5
 trainer:
-  max_epochs: 110
+  max_epochs: 60
   check_val_every_n_epoch: 10

@@ -1,0 +1,9 @@
+date: '2025-03-05 13:39:38'
+test/downstream: 0.825
+test/downstream-std: 0.007
+test/loss: 23.77994155883789
+test/loss_coles: 23.77994155883789
+val/downstream: 0.829
+val/downstream-std: 0.012
+val/loss: 22.33810043334961
+val/loss_coles: 22.33810043334961
