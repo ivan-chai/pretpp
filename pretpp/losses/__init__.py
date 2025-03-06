@@ -1,3 +1,4 @@
+from .coles import ColesLoss
 from .classification import ClassificationLoss
 from .detpp import DeTPPLoss
 from .mlm_detpp import MLMDeTPPLoss

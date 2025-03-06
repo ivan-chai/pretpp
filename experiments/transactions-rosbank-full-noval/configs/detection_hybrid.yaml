@@ -1,13 +1,1 @@
-defaults:
-  - detection
-  - _self_
-
-name: detection_hybrid
-
-module:
-  loss:
-    next_item_adapter: head
-    next_item_loss_weight: 4
-
-trainer:
-  deterministic: false
+../../transactions-rosbank-full/configs/detection_hybrid.yaml
