@@ -1,4 +1,4 @@
-num_workers: 4
+workers: 5
 environment:
   work_dir: _
 target:
