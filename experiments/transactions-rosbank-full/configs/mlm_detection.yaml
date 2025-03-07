@@ -14,7 +14,7 @@ metric_conditional_head:
     k: ${detection_k}
 
 data_module:
-  batch_size: 32
+  batch_size: 24
 
 module:
   _target_: pretpp.modules.BaseModule
@@ -32,7 +32,7 @@ module:
     rnn_partial:
       _target_: pretpp.nn.BidirGRU
       _partial_: true
-      hidden_size: ${rnn_half_hidden_size}
+      hidden_size: 128
     max_inference_context: ${rnn_inference_context}
     inference_context_step: ${rnn_inference_context_step}
   loss_projection_partial: ${conditional_head}
@@ -41,10 +41,8 @@ module:
     eval_fraction: 0.25
     mask_prob: 0.2
     # MLM params.
-    #timedeltas_field: timedeltas
     mask_token:
       timestamps: -1
-      #timedeltas: -1
       labels: 385
       channel_type: 7
       currency: 68
@@ -52,7 +50,7 @@ module:
       log_amount: 0
     # Detection params.
     k: ${detection_k}
-    horizon: 7  # week.
+    horizon: 14  # days.
     prefetch_factor: 1
     categorical_fields:
       - labels
