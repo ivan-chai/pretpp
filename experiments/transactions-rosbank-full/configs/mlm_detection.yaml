@@ -32,14 +32,14 @@ module:
     rnn_partial:
       _target_: pretpp.nn.BidirGRU
       _partial_: true
-      hidden_size: 128
+      hidden_size: 1080
     max_inference_context: ${rnn_inference_context}
     inference_context_step: ${rnn_inference_context_step}
   loss_projection_partial: ${conditional_head}
   loss:
     _target_: pretpp.losses.MLMDeTPPLoss
-    eval_fraction: 0.25
-    mask_prob: 0.2
+    eval_fraction: 0.8
+    mask_prob: 0.15
     # MLM params.
     mask_token:
       timestamps: -1
@@ -65,13 +65,13 @@ module:
       trx_category: mean
       log_amount: mean
     match_weights:
-      _presence: 3
-      timestamps: 0.35
+      _presence: 4
+      timestamps: 0.5
       labels: 1.0
       channel_type: 0.2
-      currency: 0.2
-      trx_category: 0.43
-      log_amount: 0.4
+      currency: 0.3
+      trx_category: 1.0
+      log_amount: 0.5
     next_item_loss:
       _target_: hotpp.losses.NextItemLoss
       losses:
@@ -83,24 +83,28 @@ module:
           delta: start
           max_delta: ${max_duration}
           smoothing: 1
-          grad_scale: null
+          grad_scale: 0.4
         labels:
           _target_: hotpp.losses.CrossEntropyLoss
           num_classes: ${num_classes}
         currency:
           _target_: hotpp.losses.CrossEntropyLoss
           num_classes: 68
-          grad_scale: null
+          grad_scale: 0.6
         channel_type:
           _target_: hotpp.losses.CrossEntropyLoss
           num_classes: 7
-          grad_scale: null
+          grad_scale: 0.55
         trx_category:
           _target_: hotpp.losses.CrossEntropyLoss
           num_classes: 11
-          grad_scale: null
+          grad_scale: 0.9
         log_amount:
           _target_: hotpp.losses.MAELoss
-          grad_scale: null
+          grad_scale: 0.4
+  optimizer_partial:
+    lr: 0.002
+  lr_scheduler_partial:
+    gamma: 0.7
 trainer:
   check_val_every_n_epoch: 5
