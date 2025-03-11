@@ -15,6 +15,7 @@ command:
   - ~report
   - ~downstream_report
   - ~trainer.model_selection
+  - test_downstream=false
   - ${args_no_hyphens}
 method: bayes
 metric:
