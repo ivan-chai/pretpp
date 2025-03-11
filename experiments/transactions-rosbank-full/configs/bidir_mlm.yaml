@@ -21,6 +21,9 @@ module:
   loss:
     _target_: pretpp.losses.MLMLoss
     timedeltas_field: timedeltas
+    eval_fraction: 0.15
+    mask_prob: 0.8
+    random_prob: 0.1
     losses:
       timedeltas:
         _target_: hotpp.losses.MAELoss
