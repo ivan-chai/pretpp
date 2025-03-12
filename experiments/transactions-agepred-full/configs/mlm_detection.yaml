@@ -14,7 +14,7 @@ metric_conditional_head:
     k: ${detection_k}
 
 data_module:
-  batch_size: 32
+  batch_size: 16
 
 module:
   _target_: pretpp.modules.BaseModule
