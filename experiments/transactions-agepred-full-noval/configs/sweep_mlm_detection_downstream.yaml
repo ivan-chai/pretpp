@@ -14,6 +14,8 @@ command:
   - ~model_path
   - ~report
   - ~downstream_report
+  - ~trainer.model_selection
+  - ~module.downstream_validation_config
   - ${args_no_hyphens}
 method: bayes
 metric:
@@ -23,9 +25,9 @@ parameters:
   trainer.max_epochs:
     min: 10
     max: 120
-  rnn_hidden_size:
+  rnn_half_hidden_size:
     min: 128
-    max: 2048
+    max: 1024
   module.optimizer_partial.lr:
     distribution: log_uniform_values
     min: 0.00001
@@ -40,16 +42,15 @@ parameters:
     min: 0.0
     max: 1.0
   module.loss.k:
-    values: [16, 32, 64, 96]
+    values: [16, 32, 64]
+  module.loss.horizon:
+    values: [2, 3, 7, 14]
   module.loss.eval_fraction:
     min: 0.05
     max: 1.0
   module.loss.mask_prob:
     min: 0.05
     max: 0.5
-  module.loss.prefetch_factor:
-    min: 0.5
-    max: 1.0
   module.loss.match_weights._presence:
     min: 0.1
     max: 5.0

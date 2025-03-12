@@ -102,6 +102,7 @@ module:
     gamma: 0.8
   val_metric: ${metric}
   test_metric: ${metric}
+  downstream_validation_config: configs/downstream.yaml
 
 trainer:
   accelerator: cuda
@@ -110,4 +111,7 @@ trainer:
   enable_checkpointing: true
   precision: 16-mixed
   gradient_clip_val: 1  # Increases training stability.
-  check_val_every_n_epoch: 3
+  check_val_every_n_epoch: 5
+  model_selection:
+    metric: val/downstream
+    mode: max

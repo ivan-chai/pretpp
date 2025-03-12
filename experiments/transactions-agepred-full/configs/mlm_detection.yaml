@@ -14,7 +14,7 @@ metric_conditional_head:
     k: ${detection_k}
 
 data_module:
-  batch_size: 24
+  batch_size: 32
 
 module:
   _target_: pretpp.modules.BaseModule
@@ -26,14 +26,14 @@ module:
     rnn_partial:
       _target_: pretpp.nn.BidirGRU
       _partial_: true
-      hidden_size: 1080
+      hidden_size: ${rnn_half_hidden_size}
     max_inference_context: ${rnn_inference_context}
     inference_context_step: ${rnn_inference_context_step}
   loss_projection_partial: ${conditional_head}
   loss:
     _target_: pretpp.losses.MLMDeTPPLoss
-    eval_fraction: 0.2
-    mask_prob: 0.15
+    eval_fraction: 0.25
+    mask_prob: 0.2
     # MLM params.
     mask_token:
       timestamps: -1
@@ -53,10 +53,10 @@ module:
       trx_category: mean
       log_amount: mean
     match_weights:
-      _presence: 4
-      timestamps: 0.5
-      labels: 1.0
-      log_amount: 0.5
+      _presence: 3
+      timestamps: 0.4
+      labels: 0.4
+      log_amount: 0.4
     next_item_loss:
       _target_: hotpp.losses.NextItemLoss
       losses:
@@ -68,16 +68,15 @@ module:
           delta: start
           max_delta: ${max_duration}
           smoothing: 1
-          grad_scale: 0.4
+          grad_scale: null
         labels:
           _target_: hotpp.losses.CrossEntropyLoss
           num_classes: ${num_classes}
+          grad_scale: null
         log_amount:
           _target_: hotpp.losses.MAELoss
-          grad_scale: 0.4
+          grad_scale: null
   optimizer_partial:
-    lr: 0.002
+    lr: 0.001
   lr_scheduler_partial:
-    gamma: 0.7
-trainer:
-  check_val_every_n_epoch: 5
+    gamma: 0.8
