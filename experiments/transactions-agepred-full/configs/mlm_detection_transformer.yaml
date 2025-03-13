@@ -1,0 +1,92 @@
+defaults:
+  - default
+  - _self_
+
+name: mlm_detection_transformer
+
+detection_k: 32
+
+conditional_head:
+  k: ${detection_k}
+
+metric_conditional_head:
+  head_params:
+    k: ${detection_k}
+
+data_module:
+  batch_size: 16
+
+module:
+  _target_: pretpp.modules.BaseModule
+  seq_encoder:
+    _target_: hotpp.nn.Encoder
+    embedder:
+      embeddings:
+        labels:
+          in: 206  # plus 1.
+    model_partial:
+      _target_: hotpp.nn.HuggingFaceTransformer
+      _partial_: true
+      model:
+        _target_: transformers.RobertaModel
+        config:
+          _target_: transformers.RobertaConfig
+          #vocab_size: 1
+          n_embd: ${transformer_hidden_size}
+          max_position_embeddings: ${transformer_positions}
+          hidden_size: ${transformer_hidden_size}
+          num_hidden_layers: ${transformer_layers}
+          num_attention_heads: ${transformer_heads}
+          output_hidden_states: True  #Necessary argument
+    max_context: ${transformer_context}
+  loss_projection_partial: ${conditional_head}
+  loss:
+    _target_: pretpp.losses.MLMDeTPPLoss
+    eval_fraction: 0.5
+    mask_prob: 0.4
+    # MLM params.
+    mask_token:
+      timestamps: -1
+      labels: 205
+      log_amount: -1
+    # Detection params.
+    k: ${detection_k}
+    horizon: 3  # days.
+    prefetch_factor: 1
+    categorical_fields:
+      - labels
+    next_item_adapter:
+      timestamps: mode
+      labels: mean
+      currency: mean
+      channel_type: mean
+      trx_category: mean
+      log_amount: mean
+    match_weights:
+      _presence: 2
+      timestamps: 0.6
+      labels: 0.4
+      log_amount: 0.7
+    next_item_loss:
+      _target_: hotpp.losses.NextItemLoss
+      losses:
+        _presence:
+          _target_: hotpp.losses.BinaryCrossEntropyLoss
+          grad_scale: null
+        timestamps:
+          _target_: hotpp.losses.TimeMAELoss
+          delta: start
+          max_delta: ${max_duration}
+          smoothing: 1
+          grad_scale: 0.5
+        labels:
+          _target_: hotpp.losses.CrossEntropyLoss
+          num_classes: ${num_classes}
+          grad_scale: null
+        log_amount:
+          _target_: hotpp.losses.MAELoss
+          grad_scale: 0.5
+  optimizer_partial:
+    lr: 0.001
+  lr_scheduler_partial:
+    gamma: 0.8
