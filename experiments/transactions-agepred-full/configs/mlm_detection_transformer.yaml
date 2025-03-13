@@ -90,3 +90,5 @@ module:
     lr: 0.001
   lr_scheduler_partial:
     gamma: 0.8
+trainer:
+  max_epochs: 60

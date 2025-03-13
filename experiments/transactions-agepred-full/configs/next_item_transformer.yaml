@@ -1,0 +1,44 @@
+defaults:
+  - default
+  - _self_
+
+name: next_item_transformer
+
+module:
+  _target_: pretpp.modules.BaseModule
+  seq_encoder:
+    _target_: hotpp.nn.Encoder
+    model_partial:
+      _target_: hotpp.nn.HuggingFaceTransformer
+      _partial_: true
+      model:
+        _target_: transformers.RobertaModel
+        config:
+          _target_: transformers.RobertaConfig
+          #vocab_size: 1
+          n_embd: ${transformer_hidden_size}
+          max_position_embeddings: ${transformer_positions}
+          hidden_size: ${transformer_hidden_size}
+          num_hidden_layers: ${transformer_layers}
+          num_attention_heads: ${transformer_heads}
+          output_hidden_states: True  #Necessary argument
+    max_context: ${transformer_context}
+  loss_projection_partial: ${head}
+  lr_scheduler_partial:
+    gamma: 0.75
+  loss:
+    _target_: pretpp.losses.NextItemLoss
+    losses:
+      timestamps:
+        _target_: hotpp.losses.TimeMAELoss
+        max_delta: ${max_time_delta}
+        smoothing: 1
+        grad_scale: 0.45
+      labels:
+        _target_: hotpp.losses.CrossEntropyLoss
+        num_classes: ${num_classes}
+      log_amount:
+        _target_: hotpp.losses.MAELoss
+        grad_scale: 0.45
+trainer:
+  max_epochs: 60
