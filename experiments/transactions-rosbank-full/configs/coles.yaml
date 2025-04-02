@@ -31,7 +31,7 @@ module:
   loss:
     _target_: pretpp.losses.ColesLoss
     embedding_dim: ${module.seq_encoder.rnn_partial.hidden_size}
-    n_splits: 2
+    n_splits: 5
     coles_loss:
       _target_: ptls.frames.coles.losses.ContrastiveLoss
       margin: 0.5
