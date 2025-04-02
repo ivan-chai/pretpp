@@ -66,7 +66,7 @@ head:
 metric_head:
   _target_: pretpp.nn.MetricHead
   _partial_: true
-  hidden_dims: [128]
+  hidden_dims: [128, 128]
   head_params:
     use_batch_norm: true
 
