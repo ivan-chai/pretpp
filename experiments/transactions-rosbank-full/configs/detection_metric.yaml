@@ -7,7 +7,8 @@ name: detection_metric
 detection_k: 32
 
 metric_conditional_head:
-  k: ${detection_k}
+  head_params:
+    k: ${detection_k}
 
 data_module:
   batch_size: 32
