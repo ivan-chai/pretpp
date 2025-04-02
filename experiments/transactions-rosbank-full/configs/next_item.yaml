@@ -20,15 +20,9 @@ module:
     rnn_partial:
       _target_: hotpp.nn.GRU
       _partial_: true
-      hidden_size: 256
+      hidden_size: ${rnn_hidden_size}
     max_inference_context: ${rnn_inference_context}
     inference_context_step: ${rnn_inference_context_step}
-#  optimizer_partial:
-#    lr: 0.0005
-#    weight_decay: 0.00001
-#  lr_scheduler_partial:
-#    gamma: 0.4
-#    step_size: 10
   loss_projection_partial: ${head}
   loss:
     _target_: pretpp.losses.NextItemLoss
@@ -56,5 +50,3 @@ module:
       log_amount:
         _target_: hotpp.losses.MAELoss
         grad_scale: 1
-#trainer:
-#  max_epochs: 110

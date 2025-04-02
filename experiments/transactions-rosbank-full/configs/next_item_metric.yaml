@@ -4,6 +4,16 @@ defaults:
 
 name: next_item_metric
 
+data_module:
+  _target_: hotpp.data.HotppDataModule
+  fields:
+    - labels
+    - channel_type
+    - currency
+    - trx_category
+    - log_amount
+  batch_size: 512
+
 module:
   _target_: pretpp.modules.BaseModule
   seq_encoder:
@@ -23,22 +33,23 @@ module:
       timestamps:
         _target_: hotpp.losses.TimeMAELoss
         max_delta: ${max_time_delta}
-        grad_scale: null
+        smoothing: 1
+        grad_scale: 0.05
       labels:
         _target_: hotpp.losses.CrossEntropyLoss
         num_classes: ${num_classes}
       currency:
         _target_: hotpp.losses.CrossEntropyLoss
         num_classes: 68
-        grad_scale: null
+        grad_scale: 0.5
       channel_type:
         _target_: hotpp.losses.CrossEntropyLoss
         num_classes: 7
-        grad_scale: null
+        grad_scale: 0.5
       trx_category:
         _target_: hotpp.losses.CrossEntropyLoss
         num_classes: 11
-        grad_scale: null
+        grad_scale: 1
       log_amount:
         _target_: hotpp.losses.MAELoss
-        grad_scale: null
+        grad_scale: 1
