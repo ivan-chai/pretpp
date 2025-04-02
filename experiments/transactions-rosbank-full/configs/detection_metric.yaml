@@ -6,7 +6,7 @@ name: detection_metric
 
 detection_k: 32
 
-conditional_head:
+metric_conditional_head:
   k: ${detection_k}
 
 data_module:
