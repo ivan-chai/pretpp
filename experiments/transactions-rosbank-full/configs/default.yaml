@@ -79,7 +79,7 @@ conditional_head:
 metric_conditional_head:
   _target_: pretpp.nn.MetricConditionalHead
   _partial_: true
-  hidden_dims: [128]
+  hidden_dims: [256, 128]
   head_params:
     use_batch_norm: true
 
