@@ -88,6 +88,12 @@ module:
       numeric_values:
         timestamps: identity
         log_amount: identity
+      projection_partial:
+        _target_: hotpp.nn.Head
+        _partial_: true
+        hidden_dims: [128]
+        output_size: 128
+        use_batch_norm: true
     max_time_delta: ${max_time_delta}
   aggregator:
     _target_:
