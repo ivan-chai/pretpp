@@ -48,6 +48,8 @@ class BaseModule(pl.LightningModule):
         lr_scheduler_partial:
             scheduler init partial. Optimizer are missed.
         init_state_dict: Checkpoint to initialize all parameters except loss.
+        init_prefixes: A list of prefixes to initialize from checkpoint. By default, initialize all parameters.
+        freeze_prefixes: A list of prefixes to exclude from training.
         val_metric: Validation set metric.
         test_metric: Test set metric.
         downstream_validation_config: If provided, evaluate downstream metrics on each validation step.
@@ -60,6 +62,8 @@ class BaseModule(pl.LightningModule):
                  optimizer_partial=None,
                  lr_scheduler_partial=None,
                  init_state_dict=None,
+                 init_prefixes=None,
+                 freeze_prefixes=None,
                  val_metric=None,
                  test_metric=None,
                  downstream_validation_config=None):
@@ -91,13 +95,33 @@ class BaseModule(pl.LightningModule):
         self._aggregator = aggregator
 
         if init_state_dict is not None:
-            state_dict = {k: v for k, v in init_state_dict.items()
-                          if not k.startswith("_loss.") and not k.startswith("_loss_projection.")}
-            for k, v in self._loss.state_dict().items():
-                state_dict["_loss." + k] = v
-            for k, v in self._loss_projection.state_dict().items():
-                state_dict["_loss_projection." + k] = v
+            if isinstance(init_state_dict, str):
+                init_state_dict = torch.load(init_state_dict)
+            if "state_dict" in init_state_dict:
+                init_state_dict = init_state_dict["state_dict"]
+            my_state_dict = self.state_dict()
+            init_names = set(my_state_dict)
+            if init_prefixes is None:
+                init_names = {name for name in init_names
+                              if not name.startswith("_loss.") and not name.startswith("_loss_projection.")}
+            else:
+                names = set()
+                for prefix in init_prefixes:
+                    names |= {name for name in init_names if name.startswith(prefix)}
+                init_names = names
+            print("Initialize", init_names)
+            state_dict = {k: (init_state_dict[k] if k in init_names else my_state_dict[k])
+                          for k in my_state_dict}
             self.load_state_dict(state_dict)
+
+        if freeze_prefixes is not None:
+            all_names = set(self.state_dict())
+            self.freeze_parameters = set()
+            for prefix in freeze_prefixes:
+                self.freeze_parameters |= {name for name in all_names if name.startswith(prefix)}
+            print("Freeze", self.freeze_parameters)
+        else:
+            self.freeze_parameters = set()
 
     def forward(self, x):
         """Extract embeddings."""
@@ -206,7 +230,7 @@ class BaseModule(pl.LightningModule):
             self._test_metric.reset()
 
     def configure_optimizers(self):
-        optimizer = self._optimizer_partial(self.parameters())
+        optimizer = self._optimizer_partial([v for k, v in self.named_parameters() if k not in self.freeze_parameters])
         if self._lr_scheduler_partial is None:
             return optimizer
         else:
