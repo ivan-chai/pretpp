@@ -1,5 +1,6 @@
 data_splits: [train, test]  # Val is equal to test.
-workers: 5
+workers: 6
+total_cpu_count: 1
 environment:
   work_dir: _
 target:
@@ -21,6 +22,21 @@ split:
   is_stratify: true
   random_state: 42
 models:
+#  catboost:
+#    enabled: true
+#    model:
+#      _target_: catboost.CatBoostClassifier
+#      loss_function: Logloss
+#      iterations: 500
+#      depth: 4
+#      learning_rate: 0.05
+#      min_data_in_leaf: 100
+#      random_state: 42
+#      task_type: GPU
+#      verbose: 100
+#    cpu_count: 12
+#    preprocessing:
+#      - _target_: sklearn.preprocessing.MaxAbsScaler
   lgbm:
     enabled: true
     model:
@@ -38,25 +54,25 @@ models:
       lambda_l2: 1
       min_data_in_leaf: 50
       random_state: 42
-      n_jobs: 4
+      n_jobs: 1
       reg_alpha: null
       reg_lambda: null
       colsample_bytree: null
       min_child_samples: null
-    cpu_count: 5
+    cpu_count: 0.2
     preprocessing:
       - _target_: sklearn.preprocessing.MaxAbsScaler
 
 metrics:
-  auroc: 
+  auroc:
     enabled: true
     score_func: sklearn.metrics.roc_auc_score
-    scorer_params: 
+    scorer_params:
       needs_proba: true
-  accuracy: 
+  accuracy:
     enabled: true
     score_func: sklearn.metrics.accuracy_score
-    scorer_params: 
+    scorer_params:
       needs_proba: false
 report_file: _
 features:
@@ -71,6 +87,6 @@ report:
   error_handling: fail
   print_all_metrics: false
   metrics:
-    auroc: 
+    auroc:
       float_format: "{:.3f}"
       split_columns: true
