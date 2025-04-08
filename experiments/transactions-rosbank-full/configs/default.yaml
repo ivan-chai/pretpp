@@ -41,11 +41,17 @@ data_module:
     - trx_category
     - log_amount
   batch_size: 128
-  max_length: 512
   num_workers: 4
   train_params:
     min_required_length: 2
+    min_length: 256
     max_length: 1200
+  val_params:
+    max_length: 512
+    position: last
+  test_params:
+    max_length: 512
+    position: last
   global_target_fields: target_flag
   train_path: data/train.parquet
   val_path: data/val.parquet
@@ -85,7 +91,6 @@ metric_conditional_head:
 
 module:
   seq_encoder:
-    _target_: hotpp.nn.RnnEncoder
     embedder:
       _target_: hotpp.nn.Embedder
       embeddings:
@@ -109,7 +114,7 @@ module:
     _target_: hotpp.nn.MeanAggregator
   optimizer_partial:
     _partial_: true
-    _target_: torch.optim.AdamW
+    _target_: torch.optim.Adam
     lr: 0.001
     weight_decay: 0.0
   lr_scheduler_partial:

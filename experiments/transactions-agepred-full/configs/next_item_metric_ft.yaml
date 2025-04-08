@@ -1,4 +1,6 @@
 defaults:
+  - default
+  - default_rnn
   - default_ft
   - _self_
 
@@ -6,13 +8,6 @@ base_name: next_item_metric
 
 module:
   _target_: pretpp.modules.BaseModule
-  seq_encoder:
-    rnn_partial:
-      _target_: hotpp.nn.GRU
-      _partial_: true
-      hidden_size: 1536
-    max_inference_context: ${rnn_inference_context}
-    inference_context_step: ${rnn_inference_context_step}
   head_partial:
     _target_: pretpp.nn.NormalizationHead
     _partial_: true

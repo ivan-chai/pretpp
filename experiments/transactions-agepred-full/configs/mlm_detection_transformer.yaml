@@ -1,5 +1,6 @@
 defaults:
   - default
+  - default_transformer
   - _self_
 
 name: mlm_detection_transformer
@@ -23,22 +24,7 @@ module:
     embedder:
       embeddings:
         labels:
-          in: 206  # plus 1.
-    model_partial:
-      _target_: hotpp.nn.HuggingFaceTransformer
-      _partial_: true
-      model:
-        _target_: transformers.RobertaModel
-        config:
-          _target_: transformers.RobertaConfig
-          #vocab_size: 1
-          n_embd: ${transformer_hidden_size}
-          max_position_embeddings: ${transformer_positions}
-          hidden_size: ${transformer_hidden_size}
-          num_hidden_layers: ${transformer_layers}
-          num_attention_heads: ${transformer_heads}
-          output_hidden_states: True  #Necessary argument
-    max_context: ${transformer_context}
+          in: ${num_classes_plus1}
   loss_projection_partial: ${conditional_head}
   loss:
     _target_: pretpp.losses.MLMDeTPPLoss
@@ -86,9 +72,3 @@ module:
         log_amount:
           _target_: hotpp.losses.MAELoss
           grad_scale: 0.5
-  optimizer_partial:
-    lr: 0.001
-  lr_scheduler_partial:
-    gamma: 0.8
-trainer:
-  max_epochs: 60

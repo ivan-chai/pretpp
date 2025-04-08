@@ -1,6 +1,6 @@
 project: hotpp-sweep-rosbank-full-noval
 run_cap: 100
-name: bidir-mlm-downstream
+name: mlm-downstream
 command:
   - ${env}
   - python3
@@ -9,7 +9,7 @@ command:
   - --config-dir
   - configs
   - --config-name
-  - bidir_mlm
+  - mlm
   - ~seed_everything
   - ~model_path
   - ~report

@@ -1,8 +1,8 @@
 defaults:
-  - bidir_mlm
+  - mlm
   - _self_
 
-name: bidir_mlm_field
+name: mlm_field
 
 module:
   loss:

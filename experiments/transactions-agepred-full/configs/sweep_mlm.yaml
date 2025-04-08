@@ -1,6 +1,6 @@
 project: pretpp-sweep-agepred-full
 run_cap: 100
-name: bidir_mlm
+name: mlm
 command:
   - ${env}
   - python3
@@ -9,7 +9,7 @@ command:
   - --config-dir
   - configs
   - --config-name
-  - bidir_mlm
+  - mlm
   - ~seed_everything
   - ~model_path
   - ~report

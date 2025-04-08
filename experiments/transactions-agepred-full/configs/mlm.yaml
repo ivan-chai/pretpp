@@ -1,8 +1,9 @@
 defaults:
   - default
+  - default_birnn
   - _self_
 
-name: bidir_mlm
+name: mlm
 
 module:
   _target_: pretpp.modules.BaseModule
@@ -11,12 +12,6 @@ module:
       embeddings:
         labels:
           in: ${num_classes_plus1}
-    rnn_partial:
-      _target_: pretpp.nn.BidirGRU
-      _partial_: true
-      hidden_size: ${rnn_half_hidden_size}
-    max_inference_context: ${rnn_inference_context}
-    inference_context_step: ${rnn_inference_context_step}
   loss_projection_partial: ${head}
   loss:
     _target_: pretpp.losses.MLMLoss

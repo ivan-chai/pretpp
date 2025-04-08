@@ -1,5 +1,4 @@
 defaults:
-  - default
   - _self_
 
 name: ${base_name}_ft

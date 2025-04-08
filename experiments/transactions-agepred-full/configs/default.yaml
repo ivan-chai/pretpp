@@ -36,8 +36,9 @@ data_module:
   _target_: hotpp.data.HotppDataModule
   fields: [timestamps, labels, log_amount]
   batch_size: 64
-  min_length: 1000
-  max_length: 1200
+  train_params:
+    min_length: 512
+    max_length: 1200
   num_workers: 4
   global_target_fields: target
   train_path: data/train.parquet
@@ -78,7 +79,6 @@ metric_conditional_head:
 
 module:
   seq_encoder:
-    _target_: hotpp.nn.RnnEncoder
     embedder:
       _target_: hotpp.nn.Embedder
       embeddings:
@@ -88,16 +88,9 @@ module:
       numeric_values:
         timestamps: identity
         log_amount: identity
-      projection_partial:
-        _target_: hotpp.nn.Head
-        _partial_: true
-        hidden_dims: [128]
-        output_size: 128
-        use_batch_norm: true
     max_time_delta: ${max_time_delta}
   aggregator:
-    _target_:
-      hotpp.nn.MeanAggregator
+    _target_: hotpp.nn.MeanAggregator
   optimizer_partial:
     _partial_: true
     _target_: torch.optim.Adam

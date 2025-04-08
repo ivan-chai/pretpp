@@ -4,8 +4,13 @@ defaults:
   - default_ft
   - _self_
 
-base_name: next_item
+base_name: mlm
 
 module:
   _target_: pretpp.modules.BaseModule
+  seq_encoder:
+    embedder:
+      embeddings:
+        labels:
+          in: ${num_classes_plus1}
   loss_projection_partial: ${head}

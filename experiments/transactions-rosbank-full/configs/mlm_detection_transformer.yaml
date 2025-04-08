@@ -1,11 +1,14 @@
 defaults:
   - default
-  - default_rnn
+  - default_transformer
   - _self_
 
-name: detection_metric
+name: mlm_detection_transformer
 
 detection_k: 32
+
+conditional_head:
+  k: ${detection_k}
 
 metric_conditional_head:
   head_params:
@@ -17,15 +20,33 @@ data_module:
 module:
   _target_: pretpp.modules.BaseModule
   seq_encoder:
-  head_partial:
-    _target_: pretpp.nn.NormalizationHead
-    _partial_: true
-  loss_projection_partial: ${metric_conditional_head}
+    _target_: hotpp.nn.Encoder
+    embedder:
+      embeddings:
+        labels:
+          in: ${num_classes_plus1}
+        channel_type:
+          in: 8  # plus 1.
+        currency:
+          in: 69  # plus 1.
+        trx_category:
+          in: 12  # plus 1.
+  loss_projection_partial: ${conditional_head}
   loss:
-    _target_: pretpp.losses.DeTPPLoss
+    _target_: pretpp.losses.MLMDeTPPLoss
+    eval_fraction: 0.25
+    mask_prob: 0.2
+    # MLM params.
+    mask_token:
+      timestamps: -1
+      labels: 385
+      channel_type: 7
+      currency: 68
+      trx_category: 11
+      log_amount: 0
+    # Detection params.
     k: ${detection_k}
-    horizon: 7  # week.
-    loss_subset: 0.25
+    horizon: 14  # days.
     prefetch_factor: 1
     categorical_fields:
       - labels
@@ -77,3 +98,5 @@ module:
         log_amount:
           _target_: hotpp.losses.MAELoss
           grad_scale: null
+trainer:
+  check_val_every_n_epoch: 5
