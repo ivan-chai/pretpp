@@ -16,7 +16,7 @@ module:
   _target_: pretpp.modules.BaseModule
   seq_encoder:
     rnn_partial:
-      _target_: pretpp.nn.BidirGRU
+      _target_: hotpp.nn.GRU
       _partial_: true
       hidden_size: ${rnn_hidden_size}
     max_inference_context: ${rnn_inference_context}
