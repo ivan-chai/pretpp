@@ -3,22 +3,13 @@ from abc import ABC, abstractmethod
 import pytorch_lightning as pl
 import torch
 import yaml
+import os
 from omegaconf import OmegaConf
+from pytorch_lightning.callbacks import ModelCheckpoint
 
 from hotpp.data import PaddedBatch
 from pretpp.nn import IdentityHead
-
-
-class PredictTrainer:
-    def predict(self, model, datamodule):
-        device = next(iter(model.parameters())).device
-        results = []
-        for x, y in datamodule.predict_dataloader():
-            x = x.to(device)
-            if y is not None:
-                y = y.to(device)
-            results.append(model((x, y)))
-        return results
+from pretpp.downstream import DownstreamCallback, DownstreamCheckpointCallback
 
 
 class BaseModule(pl.LightningModule):
@@ -76,11 +67,7 @@ class BaseModule(pl.LightningModule):
 
         self._val_metric = val_metric
         self._test_metric = test_metric
-        if downstream_validation_config is not None:
-            with open(downstream_validation_config, "r") as fp:
-                self._downstream_validation_config = OmegaConf.create(yaml.safe_load(fp))
-        else:
-            self._downstream_validation_config = None
+        self._downstream_config = downstream_validation_config
         self._optimizer_partial = optimizer_partial
         self._lr_scheduler_partial = lr_scheduler_partial
 
@@ -201,32 +188,11 @@ class BaseModule(pl.LightningModule):
             for k, v in self._compute_single_batch_metrics(x, inputs, outputs, targets).items():
                 self.log(f"test/{k}", v, batch_size=len(x))
 
-    def on_validation_epoch_end(self):
-        if self._val_metric is not None:
-            metrics = self._val_metric.compute()
-            for k, v in metrics.items():
-                self.log(f"val/{k}", v, prog_bar=True)
-            self._val_metric.reset()
-
-        if self._downstream_validation_config:
-            from hotpp.eval_downstream import eval_downstream
-            # Lightning workaround to enable logging after trainer.predict.
-            trainer = PredictTrainer()
-            current_fx_name = self._current_fx_name
-            # Eval.
-            scores = eval_downstream(self._downstream_validation_config, trainer, self.trainer.datamodule, self)
-            # Revert workaround.
-            self._current_fx_name = current_fx_name
-            # Workaround end.
-
-            for split, (mean, std) in scores.items():
-                self.log(f"{split}/downstream", mean, prog_bar=True)
-
     def on_test_epoch_end(self):
         if self._test_metric is not None:
             metrics = self._test_metric.compute()
-            for k, v in metrics.items():
-                self.log(f"test/{k}", v, prog_bar=True)
+            metrics = {f"test/{k}": v for k, v in metrics.items()}
+            self.log_dict(metrics, prog_bar=True, sync_dist=True)
             self._test_metric.reset()
 
     def configure_optimizers(self):
@@ -241,6 +207,40 @@ class BaseModule(pl.LightningModule):
                     "monitor": "val/loss",
                 }
             return [optimizer], [scheduler]
+
+    def configure_callbacks(self):
+        callbacks = []
+        if self._downstream_config is not None:
+            with open(self._downstream_config, "r") as fp:
+                downstream_config = OmegaConf.create(yaml.safe_load(fp))
+            downstream_root = os.path.join(self.logger.log_dir, "downstream")
+
+            monitor = None
+            maximize = None
+            for callback in self.trainer.callbacks:
+                if isinstance(callback, ModelCheckpoint):
+                    if (callback.monitor is None) or ("downstream" not in callback.monitor):
+                        continue
+                    monitor = callback.monitor
+                    assert callback.mode in {"min", "max"}, f"Unexpected checkpoint selection mode: {callback.mode}"
+                    maximize = callback.mode == "max"
+            if (monitor is not None) and self.trainer.training:
+                self.trainer.callbacks = [callback for callback in self.trainer.callbacks
+                                          if not isinstance(callback, ModelCheckpoint)]
+                print(f"Monitor downstream quality on {monitor}")
+                callback = DownstreamCheckpointCallback(
+                    root=downstream_root,
+                    downstream_config=downstream_config,
+                    monitor=monitor,
+                    maximize=maximize
+                )
+            else:
+                callback = DownstreamCallback(
+                    root=downstream_root,
+                    downstream_config=downstream_config
+                )
+            callbacks.append(callback)
+        return callbacks
 
     def on_before_optimizer_step(self, optimizer=None, optimizer_idx=None):
         self.log("grad_norm", self._get_grad_norm(), prog_bar=True)
