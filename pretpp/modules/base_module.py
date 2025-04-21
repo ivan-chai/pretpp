@@ -3,22 +3,12 @@ from abc import ABC, abstractmethod
 import pytorch_lightning as pl
 import torch
 import yaml
+import os
 from omegaconf import OmegaConf
+from pytorch_lightning.callbacks import ModelCheckpoint
 
 from hotpp.data import PaddedBatch
 from pretpp.nn import IdentityHead
-
-
-class PredictTrainer:
-    def predict(self, model, datamodule):
-        device = next(iter(model.parameters())).device
-        results = []
-        for x, y in datamodule.predict_dataloader():
-            x = x.to(device)
-            if y is not None:
-                y = y.to(device)
-            results.append(model((x, y)))
-        return results
 
 
 class BaseModule(pl.LightningModule):
@@ -48,6 +38,8 @@ class BaseModule(pl.LightningModule):
         lr_scheduler_partial:
             scheduler init partial. Optimizer are missed.
         init_state_dict: Checkpoint to initialize all parameters except loss.
+        init_prefixes: A list of prefixes to initialize from checkpoint. By default, initialize all parameters.
+        freeze_prefixes: A list of prefixes to exclude from training.
         val_metric: Validation set metric.
         test_metric: Test set metric.
         downstream_validation_config: If provided, evaluate downstream metrics on each validation step.
@@ -60,6 +52,8 @@ class BaseModule(pl.LightningModule):
                  optimizer_partial=None,
                  lr_scheduler_partial=None,
                  init_state_dict=None,
+                 init_prefixes=None,
+                 freeze_prefixes=None,
                  val_metric=None,
                  test_metric=None,
                  downstream_validation_config=None):
@@ -72,11 +66,7 @@ class BaseModule(pl.LightningModule):
 
         self._val_metric = val_metric
         self._test_metric = test_metric
-        if downstream_validation_config is not None:
-            with open(downstream_validation_config, "r") as fp:
-                self._downstream_validation_config = OmegaConf.create(yaml.safe_load(fp))
-        else:
-            self._downstream_validation_config = None
+        self._downstream_config = downstream_validation_config
         self._optimizer_partial = optimizer_partial
         self._lr_scheduler_partial = lr_scheduler_partial
 
@@ -91,13 +81,33 @@ class BaseModule(pl.LightningModule):
         self._aggregator = aggregator
 
         if init_state_dict is not None:
-            state_dict = {k: v for k, v in init_state_dict.items()
-                          if not k.startswith("_loss.") and not k.startswith("_loss_projection.")}
-            for k, v in self._loss.state_dict().items():
-                state_dict["_loss." + k] = v
-            for k, v in self._loss_projection.state_dict().items():
-                state_dict["_loss_projection." + k] = v
+            if isinstance(init_state_dict, str):
+                init_state_dict = torch.load(init_state_dict)
+            if "state_dict" in init_state_dict:
+                init_state_dict = init_state_dict["state_dict"]
+            my_state_dict = self.state_dict()
+            init_names = set(my_state_dict)
+            if init_prefixes is None:
+                init_names = {name for name in init_names
+                              if not name.startswith("_loss.") and not name.startswith("_loss_projection.")}
+            else:
+                names = set()
+                for prefix in init_prefixes:
+                    names |= {name for name in init_names if name.startswith(prefix)}
+                init_names = names
+            print("Initialize", init_names)
+            state_dict = {k: (init_state_dict[k] if k in init_names else my_state_dict[k])
+                          for k in my_state_dict}
             self.load_state_dict(state_dict)
+
+        if freeze_prefixes is not None:
+            all_names = set(self.state_dict())
+            self.freeze_parameters = set()
+            for prefix in freeze_prefixes:
+                self.freeze_parameters |= {name for name in all_names if name.startswith(prefix)}
+            print("Freeze", self.freeze_parameters)
+        else:
+            self.freeze_parameters = set()
 
     def forward(self, x):
         """Extract embeddings."""
@@ -127,16 +137,13 @@ class BaseModule(pl.LightningModule):
         loss = sum(losses.values())
 
         # Log statistics.
-        for k, v in losses.items():
-            self.log(f"train/loss_{k}", v)
-        for k, v in metrics.items():
-            self.log(f"train/{k}", v)
-        self.log("train/loss", loss, prog_bar=True)
-        self.log("sequence_length", x.seq_lens.float().mean(), prog_bar=True)
         if batch_idx == 0:
             with torch.no_grad():
-                for k, v in self._compute_single_batch_metrics(x, inputs, outputs, targets).items():
-                    self.log(f"train/{k}", v, batch_size=len(x))
+                single_batch_metrics = self._compute_single_batch_metrics(x, inputs, outputs, targets)
+        else:
+            single_batch_metrics = None
+        mean_seq_len = x.seq_lens.float().mean()
+        self._log_metrics("train", len(x), loss, losses, metrics, single_batch_metrics=None, mean_seq_len=mean_seq_len)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -146,17 +153,15 @@ class BaseModule(pl.LightningModule):
         outputs, losses, metrics = self._compute_loss(outputs, targets)
         loss = sum(losses.values())
 
-        # Log statistics.
-        for k, v in losses.items():
-            self.log(f"val/loss_{k}", v, batch_size=len(x))
-        for k, v in metrics.items():
-            self.log(f"val/{k}", v, batch_size=len(x))
-        self.log("val/loss", loss, batch_size=len(x), prog_bar=True)
         if self._val_metric is not None:
             self._update_metric(self._val_metric, x, inputs, outputs, targets)
+
+        # Log statistics.
         if batch_idx == 0:
-            for k, v in self._compute_single_batch_metrics(x, inputs, outputs, targets).items():
-                self.log(f"val/{k}", v, batch_size=len(x))
+            single_batch_metrics = self._compute_single_batch_metrics(x, inputs, outputs, targets)
+        else:
+            single_batch_metrics = None
+        self._log_metrics("val", len(x), loss, losses, metrics, single_batch_metrics)
 
     def test_step(self, batch, batch_idx):
         x, y = batch
@@ -165,48 +170,25 @@ class BaseModule(pl.LightningModule):
         outputs, losses, metrics = self._compute_loss(outputs, targets)
         loss = sum(losses.values())
 
-        # Log statistics.
-        for k, v in losses.items():
-            self.log(f"test/loss_{k}", v, batch_size=len(x))
-        for k, v in metrics.items():
-            self.log(f"test/{k}", v, batch_size=len(x))
-        self.log("test/loss", loss, batch_size=len(x), prog_bar=True)
         if self._test_metric is not None:
             self._update_metric(self._test_metric, x, inputs, outputs, targets)
+
+        # Log statistics.
         if batch_idx == 0:
-            for k, v in self._compute_single_batch_metrics(x, inputs, outputs, targets).items():
-                self.log(f"test/{k}", v, batch_size=len(x))
-
-    def on_validation_epoch_end(self):
-        if self._val_metric is not None:
-            metrics = self._val_metric.compute()
-            for k, v in metrics.items():
-                self.log(f"val/{k}", v, prog_bar=True)
-            self._val_metric.reset()
-
-        if self._downstream_validation_config:
-            from hotpp.eval_downstream import eval_downstream
-            # Lightning workaround to enable logging after trainer.predict.
-            trainer = PredictTrainer()
-            current_fx_name = self._current_fx_name
-            # Eval.
-            scores = eval_downstream(self._downstream_validation_config, trainer, self.trainer.datamodule, self)
-            # Revert workaround.
-            self._current_fx_name = current_fx_name
-            # Workaround end.
-
-            for split, (mean, std) in scores.items():
-                self.log(f"{split}/downstream", mean, prog_bar=True)
+            single_batch_metrics = self._compute_single_batch_metrics(x, inputs, outputs, targets)
+        else:
+            single_batch_metrics = None
+        self._log_metrics("test", len(x), loss, losses, metrics, single_batch_metrics)
 
     def on_test_epoch_end(self):
         if self._test_metric is not None:
             metrics = self._test_metric.compute()
-            for k, v in metrics.items():
-                self.log(f"test/{k}", v, prog_bar=True)
+            metrics = {f"test/{k}": v for k, v in metrics.items()}
+            self.log_dict(metrics, prog_bar=True, sync_dist=True)
             self._test_metric.reset()
 
     def configure_optimizers(self):
-        optimizer = self._optimizer_partial(self.parameters())
+        optimizer = self._optimizer_partial([v for k, v in self.named_parameters() if k not in self.freeze_parameters])
         if self._lr_scheduler_partial is None:
             return optimizer
         else:
@@ -217,6 +199,46 @@ class BaseModule(pl.LightningModule):
                     "monitor": "val/loss",
                 }
             return [optimizer], [scheduler]
+
+    def configure_callbacks(self):
+        callbacks = []
+        if self._downstream_config is not None:
+            from pretpp.downstream import DownstreamCallback, DownstreamCheckpointCallback
+            with open(self._downstream_config, "r") as fp:
+                downstream_config = OmegaConf.create(yaml.safe_load(fp))
+            root = self.logger.log_dir
+            if root is None:
+                root = "lightning_logs"  # DEBUG>
+                if not os.path.isdir(root):
+                    os.mkdir(root)
+            downstream_root = os.path.join(root, "downstream")
+
+            monitor = None
+            maximize = None
+            for callback in self.trainer.callbacks:
+                if isinstance(callback, ModelCheckpoint):
+                    if (callback.monitor is None) or ("downstream" not in callback.monitor):
+                        continue
+                    monitor = callback.monitor
+                    assert callback.mode in {"min", "max"}, f"Unexpected checkpoint selection mode: {callback.mode}"
+                    maximize = callback.mode == "max"
+            if (monitor is not None) and self.trainer.training:
+                self.trainer.callbacks = [callback for callback in self.trainer.callbacks
+                                          if not isinstance(callback, ModelCheckpoint)]
+                print(f"Monitor downstream quality on {monitor}")
+                callback = DownstreamCheckpointCallback(
+                    root=downstream_root,
+                    downstream_config=downstream_config,
+                    monitor=monitor,
+                    maximize=maximize
+                )
+            else:
+                callback = DownstreamCallback(
+                    root=downstream_root,
+                    downstream_config=downstream_config
+                )
+            callbacks.append(callback)
+        return callbacks
 
     def on_before_optimizer_step(self, optimizer=None, optimizer_idx=None):
         self.log("grad_norm", self._get_grad_norm(), prog_bar=True)
@@ -241,3 +263,23 @@ class BaseModule(pl.LightningModule):
                 continue
             norms[i] = p.grad.data.norm(2)
         return norms.square().sum().item() ** 0.5
+
+    def _log_metrics(self, split, batch_size, loss, losses, metrics, single_batch_metrics=None, mean_seq_len=None):
+        log_values = {}
+        # Sorting fixes distributed aggregation errors.
+        for k, v in sorted(losses.items()):
+            log_values[f"{split}/loss_{k}"] = v
+        for k, v in sorted(metrics.items()):
+            log_values[f"{split}/{k}"] = v
+        if single_batch_metrics is not None:
+            for k, v in sorted(single_batch_metrics.items()):
+                log_values[f"{split}/{k}"] = v
+
+        log_values_bar = {
+            f"{split}/loss": loss
+        }
+        if mean_seq_len is not None:
+            log_values_bar["sequence_length"] = mean_seq_len
+
+        self.log_dict(log_values, batch_size=batch_size, sync_dist=True)
+        self.log_dict(log_values_bar, batch_size=batch_size, sync_dist=True, prog_bar=True)

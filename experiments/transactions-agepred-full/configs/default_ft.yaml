@@ -1,5 +1,4 @@
 defaults:
-  - default
   - _self_
 
 name: ${base_name}_ft
@@ -21,9 +20,7 @@ module:
   optimizer_partial:
     lr: 0.0001
     weight_decay: 0.0
-  init_state_dict:
-    _target_: torch.load
-    f: checkpoints/${base_name}.ckpt
+  init_state_dict: checkpoints/${base_name}.ckpt
   loss:
     _target_: pretpp.losses.ClassificationLoss
     targets:

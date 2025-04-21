@@ -1,5 +1,4 @@
 defaults:
-  - downstream@downstream
   - _self_
 
 seed_everything: 42
@@ -18,6 +17,8 @@ rnn_inference_context_step: 200
 transformer_hidden_size: 256
 transformer_heads: 4
 transformer_layers: 2
+transformer_context: 256
+transformer_positions: 600
 
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
@@ -27,8 +28,6 @@ logger:
 model_path: checkpoints/${name}.ckpt
 report: results/${name}.yaml
 multiseed_report: results/multiseed_${name}.yaml
-downstream_report: results/downstream_${name}.yaml
-test_downstream: true
 
 data_module:
   _target_: hotpp.data.HotppDataModule
@@ -42,7 +41,14 @@ data_module:
   num_workers: 4
   train_params:
     min_required_length: 2
+    min_length: 256
     max_length: 1200
+  val_params:
+    max_length: 512
+    position: last
+  test_params:
+    max_length: 512
+    position: last
   global_target_fields: target_flag
   train_path: data/train.parquet
   val_path: data/val.parquet
@@ -63,7 +69,7 @@ head:
 metric_head:
   _target_: pretpp.nn.MetricHead
   _partial_: true
-  hidden_dims: []
+  hidden_dims: [128]
   head_params:
     use_batch_norm: true
 
@@ -76,13 +82,12 @@ conditional_head:
 metric_conditional_head:
   _target_: pretpp.nn.MetricConditionalHead
   _partial_: true
-  hidden_dims: [128]
+  hidden_dims: [256, 128]
   head_params:
     use_batch_norm: true
 
 module:
   seq_encoder:
-    _target_: hotpp.nn.RnnEncoder
     embedder:
       _target_: hotpp.nn.Embedder
       embeddings:
@@ -121,11 +126,11 @@ module:
 trainer:
   accelerator: cuda
   devices: 1
-  max_epochs: 60
+  max_epochs: 120
   enable_checkpointing: true
   precision: 16-mixed
   gradient_clip_val: 1  # Increases training stability.
-  check_val_every_n_epoch: 3
+  check_val_every_n_epoch: 10
   model_selection:
     metric: val/downstream
     mode: max

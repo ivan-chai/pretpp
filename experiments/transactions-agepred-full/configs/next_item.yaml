@@ -1,18 +1,12 @@
 defaults:
   - default
+  - default_rnn
   - _self_
 
 name: next_item
 
 module:
   _target_: pretpp.modules.BaseModule
-  seq_encoder:
-    rnn_partial:
-      _target_: hotpp.nn.GRU
-      _partial_: true
-      hidden_size: 1536
-    max_inference_context: ${rnn_inference_context}
-    inference_context_step: ${rnn_inference_context_step}
   loss_projection_partial: ${head}
   lr_scheduler_partial:
     gamma: 0.75

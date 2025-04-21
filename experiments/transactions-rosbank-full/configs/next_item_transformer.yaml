@@ -1,5 +1,6 @@
 defaults:
   - default
+  - default_transformer
   - _self_
 
 name: next_item_transformer
@@ -9,21 +10,6 @@ data_module:
 
 module:
   _target_: pretpp.modules.BaseModule
-  seq_encoder:
-    _target_: hotpp.nn.Encoder
-    model_partial:
-      _target_: hotpp.nn.HuggingFaceTransformer
-      _partial_: true
-      model:
-        _target_: transformers.GPT2Model
-        config:
-          _target_: transformers.GPT2Config
-          n_positions: 800
-          n_embd: 512
-          n_layer: 2
-          n_head: 4
-          output_hidden_states: True  #Necessary argument
-    max_context: 256
   loss_projection_partial: ${head}
   loss:
     _target_: pretpp.losses.NextItemLoss
