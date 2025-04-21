@@ -9,7 +9,6 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 
 from hotpp.data import PaddedBatch
 from pretpp.nn import IdentityHead
-from pretpp.downstream import DownstreamCallback, DownstreamCheckpointCallback
 
 
 class BaseModule(pl.LightningModule):
@@ -204,6 +203,7 @@ class BaseModule(pl.LightningModule):
     def configure_callbacks(self):
         callbacks = []
         if self._downstream_config is not None:
+            from pretpp.downstream import DownstreamCallback, DownstreamCheckpointCallback
             with open(self._downstream_config, "r") as fp:
                 downstream_config = OmegaConf.create(yaml.safe_load(fp))
             root = self.logger.log_dir

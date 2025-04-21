@@ -251,6 +251,7 @@ class EmbedderModule(pl.LightningModule):
     def embed(self, x):
         return self.model.embed(x)
 
+
 @contextmanager
 def copy_trainer(trainer_orig):
     # Trainer includes:
@@ -273,10 +274,10 @@ def copy_trainer(trainer_orig):
         if name == "fit":
             loop.epoch_loop = copy.copy(loop.epoch_loop)
             loop.epoch_loop.val_loop = copy.copy(loop.epoch_loop.val_loop)
-            loop.epoch_loop._results = copy.deepcopy(loop.epoch_loop._results)
-            loop.epoch_loop.val_loop._results = copy.deepcopy(loop.epoch_loop.val_loop._results)
+            loop.epoch_loop._results = copy.copy(loop.epoch_loop._results)
+            loop.epoch_loop.val_loop._results = copy.copy(loop.epoch_loop.val_loop._results)
         else:
-            loop._results = copy.deepcopy(loop._results)
+            loop._results = copy.copy(loop._results)
         assert hasattr(loop, "trainer")
         loop.trainer = trainer
         setattr(trainer, f"{name}_loop", loop)
@@ -304,8 +305,7 @@ def copy_trainer(trainer_orig):
         # Restore state.
         base_model._current_fx_name = current_fx_name
         base_model.trainer = trainer_orig
-        trainer_orig.strategy.model = model
-        trainer_orig.strategy._lightning_module = base_model
+        trainer_orig.strategy.connect(base_model)
         trainer_orig.strategy.setup(trainer_orig)
 
 
