@@ -138,16 +138,13 @@ class BaseModule(pl.LightningModule):
         loss = sum(losses.values())
 
         # Log statistics.
-        for k, v in losses.items():
-            self.log(f"train/loss_{k}", v)
-        for k, v in metrics.items():
-            self.log(f"train/{k}", v)
-        self.log("train/loss", loss, prog_bar=True)
-        self.log("sequence_length", x.seq_lens.float().mean(), prog_bar=True)
         if batch_idx == 0:
             with torch.no_grad():
-                for k, v in self._compute_single_batch_metrics(x, inputs, outputs, targets).items():
-                    self.log(f"train/{k}", v, batch_size=len(x))
+                single_batch_metrics = self._compute_single_batch_metrics(x, inputs, outputs, targets)
+        else:
+            single_batch_metrics = None
+        mean_seq_len = x.seq_lens.float().mean()
+        self._log_metrics("train", len(x), loss, losses, metrics, single_batch_metrics=None, mean_seq_len=mean_seq_len)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -157,17 +154,15 @@ class BaseModule(pl.LightningModule):
         outputs, losses, metrics = self._compute_loss(outputs, targets)
         loss = sum(losses.values())
 
-        # Log statistics.
-        for k, v in losses.items():
-            self.log(f"val/loss_{k}", v, batch_size=len(x))
-        for k, v in metrics.items():
-            self.log(f"val/{k}", v, batch_size=len(x))
-        self.log("val/loss", loss, batch_size=len(x), prog_bar=True)
         if self._val_metric is not None:
             self._update_metric(self._val_metric, x, inputs, outputs, targets)
+
+        # Log statistics.
         if batch_idx == 0:
-            for k, v in self._compute_single_batch_metrics(x, inputs, outputs, targets).items():
-                self.log(f"val/{k}", v, batch_size=len(x))
+            single_batch_metrics = self._compute_single_batch_metrics(x, inputs, outputs, targets)
+        else:
+            single_batch_metrics = None
+        self._log_metrics("val", len(x), loss, losses, metrics, single_batch_metrics)
 
     def test_step(self, batch, batch_idx):
         x, y = batch
@@ -176,17 +171,15 @@ class BaseModule(pl.LightningModule):
         outputs, losses, metrics = self._compute_loss(outputs, targets)
         loss = sum(losses.values())
 
-        # Log statistics.
-        for k, v in losses.items():
-            self.log(f"test/loss_{k}", v, batch_size=len(x))
-        for k, v in metrics.items():
-            self.log(f"test/{k}", v, batch_size=len(x))
-        self.log("test/loss", loss, batch_size=len(x), prog_bar=True)
         if self._test_metric is not None:
             self._update_metric(self._test_metric, x, inputs, outputs, targets)
+
+        # Log statistics.
         if batch_idx == 0:
-            for k, v in self._compute_single_batch_metrics(x, inputs, outputs, targets).items():
-                self.log(f"test/{k}", v, batch_size=len(x))
+            single_batch_metrics = self._compute_single_batch_metrics(x, inputs, outputs, targets)
+        else:
+            single_batch_metrics = None
+        self._log_metrics("test", len(x), loss, losses, metrics, single_batch_metrics)
 
     def on_test_epoch_end(self):
         if self._test_metric is not None:
@@ -213,7 +206,12 @@ class BaseModule(pl.LightningModule):
         if self._downstream_config is not None:
             with open(self._downstream_config, "r") as fp:
                 downstream_config = OmegaConf.create(yaml.safe_load(fp))
-            downstream_root = os.path.join(self.logger.log_dir, "downstream")
+            root = self.logger.log_dir
+            if root is None:
+                root = "lightning_logs"  # DEBUG>
+                if not os.path.isdir(root):
+                    os.mkdir(root)
+            downstream_root = os.path.join(root, "downstream")
 
             monitor = None
             maximize = None
@@ -265,3 +263,23 @@ class BaseModule(pl.LightningModule):
                 continue
             norms[i] = p.grad.data.norm(2)
         return norms.square().sum().item() ** 0.5
+
+    def _log_metrics(self, split, batch_size, loss, losses, metrics, single_batch_metrics=None, mean_seq_len=None):
+        log_values = {}
+        # Sorting fixes distributed aggregation errors.
+        for k, v in sorted(losses.items()):
+            log_values[f"{split}/loss_{k}"] = v
+        for k, v in sorted(metrics.items()):
+            log_values[f"{split}/{k}"] = v
+        if single_batch_metrics is not None:
+            for k, v in sorted(single_batch_metrics.items()):
+                log_values[f"{split}/{k}"] = v
+
+        log_values_bar = {
+            f"{split}/loss": loss
+        }
+        if mean_seq_len is not None:
+            log_values_bar["sequence_length"] = mean_seq_len
+
+        self.log_dict(log_values, batch_size=batch_size, sync_dist=True)
+        self.log_dict(log_values_bar, batch_size=batch_size, sync_dist=True, prog_bar=True)

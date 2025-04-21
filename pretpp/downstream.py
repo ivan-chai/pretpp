@@ -1,4 +1,5 @@
 import atexit
+import copy
 import logging
 import multiprocessing as mp
 import os
@@ -10,10 +11,11 @@ import tempfile
 import time
 import torch
 import warnings
+from contextlib import contextmanager
 from torchmetrics import Metric
 from torchmetrics.utilities import dim_zero_cat
-from hotpp.embed import embeddings_to_pandas, GatherMetric
-from hotpp.eval_downstream import targets_to_pandas
+from hotpp.embed import embeddings_to_pandas, extract_embeddings, InferenceDataModule
+from hotpp.eval_downstream import extract_targets, targets_to_pandas
 
 
 class FakeDataModule:
@@ -49,18 +51,6 @@ def evaluation_worker(config, tasks_queue, results_queue):
             results_queue.put((i, step, metrics))
     except Exception as e:
         results_queue.put(e)
-
-
-class PredictTrainer:
-    def predict(self, model, datamodule):
-        device = next(iter(model.parameters())).device
-        results = []
-        for x, y in datamodule.predict_dataloader():
-            x = x.to(device)
-            if y is not None:
-                y = y.to(device)
-            results.append(model((x, y)))
-        return results
 
 
 class CheckpointSelector:
@@ -117,7 +107,11 @@ class CheckpointSelector:
         return os.path.join(self.root, f"checkpoint-{step}.pth")
 
     def clean(self):
+        # Clean all checkpoints except best.
+        best_step = self.get_best_step() if self.metrics else None
         for step in list(self.metrics):
+            if step == best_step:
+                continue
             self.remove(step)
 
     def __del__(self):
@@ -136,7 +130,6 @@ class DownstreamEvaluator:
 
     def __init__(self, root, downstream_config, monitor=None, maximize=False):
         self.config = downstream_config
-        self.trainer = PredictTrainer()
         self.root = root
         self.monitor = monitor
 
@@ -246,6 +239,76 @@ class DownstreamEvaluator:
             raise RuntimeError(f"Worker has finished with error {self.worker.exitcode}")
 
 
+class EmbedderModule(pl.LightningModule):
+    """Wrapper to disable extra hooks of the base module."""
+    def __init__(self, model):
+        super().__init__()
+        self.model = model
+
+    def forward(self, x):
+        return self.model(x)
+
+    def embed(self, x):
+        return self.model.embed(x)
+
+@contextmanager
+def copy_trainer(trainer_orig):
+    # Trainer includes:
+    # - state (can be deep-copied).
+    # - connectors (need to set a copy as an attribute)
+    # - loops (including nested loops in fit_loop)
+    trainer = copy.copy(trainer_orig)
+    # Handle state.
+    trainer.state = copy.deepcopy(trainer.state)
+    # Handle connectors.
+    trainer._accelerator_connector = trainer_orig._accelerator_connector
+    for name in ["data", "logger", "callback", "checkpoint", "signal"]:
+        connector = copy.copy(getattr(trainer, f"_{name}_connector"))
+        assert hasattr(connector, "trainer")
+        connector.trainer = trainer
+        setattr(trainer, f"_{name}_connector", connector)
+    # Handle loops.
+    for name in ["fit", "validate", "test", "predict"]:
+        loop = copy.copy(getattr(trainer, f"{name}_loop"))
+        if name == "fit":
+            loop.epoch_loop = copy.copy(loop.epoch_loop)
+            loop.epoch_loop.val_loop = copy.copy(loop.epoch_loop.val_loop)
+            loop.epoch_loop._results = copy.deepcopy(loop.epoch_loop._results)
+            loop.epoch_loop.val_loop._results = copy.deepcopy(loop.epoch_loop.val_loop._results)
+        else:
+            loop._results = copy.deepcopy(loop._results)
+        assert hasattr(loop, "trainer")
+        loop.trainer = trainer
+        setattr(trainer, f"{name}_loop", loop)
+
+    loops = ["fit", "validate", "test", "predict"]
+    for name in loops:
+        loop = copy.copy(getattr(trainer, f"{name}_loop"))
+        setattr(trainer, f"{name}_loop", loop)
+        loop._data_source = copy.copy(loop._data_source)
+    trainer.fit_loop.epoch_loop.val_loop = copy.copy(trainer.fit_loop.epoch_loop.val_loop)
+    trainer.fit_loop.epoch_loop.val_loop._data_source = copy.copy(trainer.fit_loop.epoch_loop.val_loop._data_source)
+
+    # Disable callbacks.
+    trainer.callbacks = []
+
+    model = trainer.strategy.model
+    base_model = trainer.strategy._lightning_module
+    base_model.trainer = trainer
+    current_fx_name = base_model._current_fx_name
+    device = base_model.device
+
+    try:
+        yield trainer
+    finally:
+        # Restore state.
+        base_model._current_fx_name = current_fx_name
+        base_model.trainer = trainer_orig
+        trainer_orig.strategy.model = model
+        trainer_orig.strategy._lightning_module = base_model
+        trainer_orig.strategy.setup(trainer_orig)
+
+
 class DownstreamCheckpointCallback(pl.callbacks.Checkpoint):
     """Predict all dataloaders and run evaluation asynchronously.
 
@@ -266,15 +329,11 @@ class DownstreamCheckpointCallback(pl.callbacks.Checkpoint):
         self._monitor = monitor
         self._maximize = maximize
         self._evaluator = None
-        self._metric = GatherMetric(3)
         self._run_stage = None
         self.best_model_path = None
 
     def setup(self, trainer, pl_module, stage):
         self._run_stage = stage
-        if stage in ("fit", "validate"):
-            # setup the predict data even for fit/validate, as we will call it during `on_validation_epoch_end`
-            trainer.datamodule.setup("predict")
         if trainer.global_rank == 0:
             self._evaluator = DownstreamEvaluator(self._root, self._config,
                                                   monitor=self._monitor, maximize=self._maximize)
@@ -282,12 +341,18 @@ class DownstreamCheckpointCallback(pl.callbacks.Checkpoint):
     def on_validation_epoch_end(self, trainer, pl_module):
         if trainer.sanity_checking:
             return
+        if isinstance(trainer.datamodule, InferenceDataModule):
+            # Disable recursive calls, because the callback is registered in Trainer.
+            return
         metric_prefix = None if self._run_stage in ["fit"] else "val/"
         self._run_downstream_evaluation(trainer, pl_module,
                                         wait=self._run_stage not in ["fit"],
                                         metric_prefix=metric_prefix)
 
     def on_test_epoch_end(self, trainer, pl_module):
+        if isinstance(trainer.datamodule, InferenceDataModule):
+            # Disable recursive calls, because the callback is registered in Trainer.
+            return
         metric_prefix = None if self._run_stage in ["fit"] else "test/"
         self._run_downstream_evaluation(trainer, pl_module,
                                         wait=True,
@@ -310,39 +375,23 @@ class DownstreamCheckpointCallback(pl.callbacks.Checkpoint):
             # TODO: broadcast checkpoint in multi-node training.
             self.best_model_path = trainer.strategy.broadcast(checkpoint_path)
             if self.best_model_path is not None:
-                pl_module.load_state_dict(torch.load(self.best_model_path)["state_dict"])
+                pl_module.load_state_dict(torch.load(self.best_model_path, weights_only=True)["state_dict"])
 
     def _run_downstream_evaluation(self, trainer, pl_module, wait=False, metric_prefix=None):
-        id_field = trainer.datamodule.id_field
-        target_names = trainer.datamodule.train_data.global_target_fields
-        splits = self._config.get("data_splits", trainer.datamodule.splits)
+        datamodule = trainer.datamodule
+        id_field = datamodule.id_field
+        target_names = datamodule.train_data.global_target_fields
+        splits = self._config.get("data_splits", datamodule.splits)
 
         # Predict.
-        by_split = {}
-        for split in splits:
-            self._metric.reset()
-            dataloader = getattr(trainer, self.SPLIT_TO_LOOP[split])._data_source.dataloader()
-            all_ids = []
-            all_embeddings = []
-            all_targets = []
-            for batch in dataloader:
-                data, targets = pl_module._apply_batch_transfer_handler(batch)
-                ids = data.payload[id_field]  # (B).
-
-                embeddings = pl_module.embed(data)
-                all_ids.append(ids)
-                all_embeddings.append(embeddings)
-                all_targets.append(torch.stack([targets.payload[name] for name in target_names], -1))  # (B, T).
-            ids = torch.cat(all_ids)
-            embeddings = torch.cat(all_embeddings)
-            targets = torch.cat(all_targets)
-            self._metric.update(ids, embeddings, targets)
-            by_split[split] = self._metric.compute()
+        with copy_trainer(trainer) as eval_trainer:
+            embeddings = extract_embeddings(eval_trainer, datamodule, EmbedderModule(pl_module), splits)
+            _, targets = extract_targets(eval_trainer, datamodule, splits)
 
         # Run evaluation.
         if trainer.global_rank == 0:
-            embeddings = embeddings_to_pandas(id_field, {k: (v[0].cpu().tolist(), v[1]) for k, v in by_split.items()})
-            targets = targets_to_pandas(id_field, target_names, {k: (v[0].cpu().tolist(), v[2]) for k, v in by_split.items()})
+            embeddings = embeddings_to_pandas(id_field, embeddings)
+            targets = targets_to_pandas(id_field, target_names, targets)
             self._evaluator.run_async(pl_module.global_step, embeddings, targets, pl_module.state_dict())
             results = self._evaluator.get(wait=wait)[0]
             if self._run_stage in ["fit"]:
