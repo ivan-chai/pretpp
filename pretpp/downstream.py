@@ -40,6 +40,7 @@ def evaluation_worker(config, tasks_queue, results_queue):
             i, step, data_path = task
             with open(data_path, "rb") as fp:
                 data = pkl.load(fp)
+            os.remove(data_path)
             embeddings = data["embeddings"]
             targets = data["targets"]
             splits = embeddings["split"].unique()
@@ -338,6 +339,12 @@ class DownstreamCheckpointCallback(pl.callbacks.Checkpoint):
             self._evaluator = DownstreamEvaluator(self._root, self._config,
                                                   monitor=self._monitor, maximize=self._maximize)
 
+    def on_train_epoch_end(self, trainer, pl_module):
+        if isinstance(trainer.datamodule, InferenceDataModule):
+            # Disable recursive calls, because the callback is registered in Trainer.
+            return
+        self._fetch_metrics(trainer, pl_module)
+
     def on_validation_epoch_end(self, trainer, pl_module):
         if trainer.sanity_checking:
             return
@@ -345,24 +352,19 @@ class DownstreamCheckpointCallback(pl.callbacks.Checkpoint):
             # Disable recursive calls, because the callback is registered in Trainer.
             return
         metric_prefix = None if self._run_stage in ["fit"] else "val/"
-        self._run_downstream_evaluation(trainer, pl_module,
-                                        wait=self._run_stage not in ["fit"],
-                                        metric_prefix=metric_prefix)
+        self._run_downstream_evaluation(trainer, pl_module)
+        self._fetch_metrics(trainer, pl_module, wait=self._run_stage not in ["fit"], metric_prefix=metric_prefix)
 
     def on_test_epoch_end(self, trainer, pl_module):
         if isinstance(trainer.datamodule, InferenceDataModule):
             # Disable recursive calls, because the callback is registered in Trainer.
             return
         metric_prefix = None if self._run_stage in ["fit"] else "test/"
-        self._run_downstream_evaluation(trainer, pl_module,
-                                        wait=True,
-                                        metric_prefix=metric_prefix)
+        self._run_downstream_evaluation(trainer, pl_module)
+        self._fetch_metrics(trainer, pl_module, wait=True, metric_prefix=metric_prefix)
 
     def on_train_end(self, trainer, pl_module):
-        if trainer.global_rank == 0:
-            for result in self._evaluator.get(wait=True)[0]:
-                pl_module.logger.log_metrics(result["metrics"], result["step"])
-        trainer.strategy.barrier()
+        self._fetch_metrics(trainer, pl_module, wait=True)
         if self._monitor is not None:
             if trainer.global_rank == 0:
                 try:
@@ -377,7 +379,7 @@ class DownstreamCheckpointCallback(pl.callbacks.Checkpoint):
             if self.best_model_path is not None:
                 pl_module.load_state_dict(torch.load(self.best_model_path, weights_only=True)["state_dict"])
 
-    def _run_downstream_evaluation(self, trainer, pl_module, wait=False, metric_prefix=None):
+    def _run_downstream_evaluation(self, trainer, pl_module):
         datamodule = trainer.datamodule
         id_field = datamodule.id_field
         target_names = datamodule.train_data.global_target_fields
@@ -393,6 +395,9 @@ class DownstreamCheckpointCallback(pl.callbacks.Checkpoint):
             embeddings = embeddings_to_pandas(id_field, embeddings)
             targets = targets_to_pandas(id_field, target_names, targets)
             self._evaluator.run_async(pl_module.global_step, embeddings, targets, pl_module.state_dict())
+
+    def _fetch_metrics(self, trainer, pl_module, wait=False, metric_prefix=None):
+        if trainer.global_rank == 0:
             results = self._evaluator.get(wait=wait)[0]
             if self._run_stage in ["fit"]:
                 for result in results:
