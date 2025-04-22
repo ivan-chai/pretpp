@@ -206,7 +206,7 @@ class BaseModule(pl.LightningModule):
             from pretpp.downstream import DownstreamCallback, DownstreamCheckpointCallback
             with open(self._downstream_config, "r") as fp:
                 downstream_config = OmegaConf.create(yaml.safe_load(fp))
-            root = self.logger.save_dir
+            root = self.logger.root_dir or self.logger.save_dir
             if not os.path.isdir(root):
                 os.mkdir(root)
             version = self.logger.version
