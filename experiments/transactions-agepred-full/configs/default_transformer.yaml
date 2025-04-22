@@ -2,6 +2,9 @@ defaults:
   - _self_
 
 module:
+  freeze_prefixes:
+    - _seq_encoder.model.model.embeddings.word_embeddings.
+    - _seq_encoder.model.model.pooler.
   seq_encoder:
     _target_: hotpp.nn.Encoder
     model_partial:
@@ -11,8 +14,9 @@ module:
         _target_: transformers.RobertaModel
         config:
           _target_: transformers.RobertaConfig
-          vocab_size: 1
+          vocab_size: 2
           n_embd: ${transformer_hidden_size}
+          intermediate_size: ${transformer_inter_size}
           max_position_embeddings: ${transformer_positions}
           hidden_size: ${transformer_hidden_size}
           num_hidden_layers: ${transformer_layers}

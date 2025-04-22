@@ -206,11 +206,13 @@ class BaseModule(pl.LightningModule):
             from pretpp.downstream import DownstreamCallback, DownstreamCheckpointCallback
             with open(self._downstream_config, "r") as fp:
                 downstream_config = OmegaConf.create(yaml.safe_load(fp))
-            root = self.logger.log_dir
-            if root is None:
-                root = "lightning_logs"  # DEBUG>
-                if not os.path.isdir(root):
-                    os.mkdir(root)
+            root = self.logger.root_dir or self.logger.save_dir
+            if not os.path.isdir(root):
+                os.mkdir(root)
+            version = self.logger.version
+            root = os.path.join(root, version if isinstance(version, str) else f"version_{version}")
+            if not os.path.isdir(root):
+                os.mkdir(root)
             downstream_root = os.path.join(root, "downstream")
 
             monitor = None
@@ -255,7 +257,8 @@ class BaseModule(pl.LightningModule):
 
     @torch.no_grad()
     def _get_grad_norm(self):
-        names, parameters = zip(*[pair for pair in self.named_parameters() if pair[1].requires_grad])
+        names, parameters = zip(*[pair for pair in self.named_parameters()
+                                  if pair[1].requires_grad and (pair[0] not in self.freeze_parameters)])
         norms = torch.zeros(len(parameters), device=parameters[0].device)
         for i, (name, p) in enumerate(zip(names, parameters)):
             if p.grad is None:

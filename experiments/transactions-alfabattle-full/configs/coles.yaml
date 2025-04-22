@@ -1,0 +1,32 @@
+defaults:
+  - default
+  - default_rnn
+  - _self_
+
+name: coles
+
+rnn_hidden_size: 1024
+
+data_module:
+  batch_size: 256
+
+module:
+  _target_: pretpp.modules.BaseModule
+  head_partial:
+    _target_: pretpp.nn.NormalizationHead
+    _partial_: true
+  aggregator:
+    _target_: hotpp.nn.LastAggregator
+  loss_projection_partial: ${nohead}
+  loss:
+    _target_: pretpp.losses.ColesLoss
+    embedding_dim: ${rnn_hidden_size}
+    min_fraction: 0.1
+    max_fraction: 0.5
+    n_splits: 5
+    coles_loss:
+      _target_: ptls.frames.coles.losses.ContrastiveLoss
+      margin: 0.5
+      sampling_strategy:
+        _target_: ptls.frames.coles.sampling_strategies.HardNegativePairSelector
+        neg_count: 5
