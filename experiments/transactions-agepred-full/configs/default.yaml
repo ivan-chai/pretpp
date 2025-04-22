@@ -14,11 +14,12 @@ rnn_half_hidden_size: 256
 rnn_inference_context: 1200
 rnn_inference_context_step: 200
 
-transformer_positions: 1536
 transformer_hidden_size: 512
+transformer_inter_size: 1024
 transformer_heads: 2
 transformer_layers: 4
 transformer_context: 256
+transformer_positions: 1536
 
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
