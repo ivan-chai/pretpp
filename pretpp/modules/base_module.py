@@ -257,7 +257,8 @@ class BaseModule(pl.LightningModule):
 
     @torch.no_grad()
     def _get_grad_norm(self):
-        names, parameters = zip(*[pair for pair in self.named_parameters() if pair[1].requires_grad])
+        names, parameters = zip(*[pair for pair in self.named_parameters()
+                                  if pair[1].requires_grad and (pair[0] not in self.freeze_parameters)])
         norms = torch.zeros(len(parameters), device=parameters[0].device)
         for i, (name, p) in enumerate(zip(names, parameters)):
             if p.grad is None:
