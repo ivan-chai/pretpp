@@ -2,6 +2,9 @@ defaults:
   - _self_
 
 module:
+  freeze_prefixes:
+    - _seq_encoder.model.model.embeddings.word_embeddings.
+    - _seq_encoder.model.model.pooler.
   seq_encoder:
     _target_: hotpp.nn.Encoder
     model_partial:
