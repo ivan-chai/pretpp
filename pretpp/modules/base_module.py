@@ -11,6 +11,13 @@ from hotpp.data import PaddedBatch
 from pretpp.nn import IdentityHead
 
 
+def safe_mkdir(path):
+    try:
+        os.mkdir(path)
+    except FileExistsError:
+        pass
+
+
 class BaseModule(pl.LightningModule):
     """Base module class.
 
@@ -207,12 +214,10 @@ class BaseModule(pl.LightningModule):
             with open(self._downstream_config, "r") as fp:
                 downstream_config = OmegaConf.create(yaml.safe_load(fp))
             root = self.logger.root_dir or self.logger.save_dir
-            if not os.path.isdir(root):
-                os.mkdir(root)
+            safe_mkdir(root)
             version = self.logger.version
             root = os.path.join(root, version if isinstance(version, str) else f"version_{version}")
-            if not os.path.isdir(root):
-                os.mkdir(root)
+            safe_mkdir(root)
             downstream_root = os.path.join(root, "downstream")
 
             monitor = None
