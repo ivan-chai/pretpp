@@ -36,14 +36,14 @@ data_module:
     - labels
     - currency
     - operation_kind
-    - card_type
+#    - card_type
     - operation_type
     - operation_type_group
     - ecommerce_flag
     - payment_system
     - income_flag
-    - country
-    - city
+#    - country
+#    - city
     - mcc_category
     - day_of_week
     - hour
@@ -104,6 +104,7 @@ module:
   seq_encoder:
     embedder:
       _target_: hotpp.nn.Embedder
+      use_batch_norm: false
       embeddings:
         labels:  # mcc.
           in: ${num_classes}
@@ -114,9 +115,9 @@ module:
         operation_kind:
           in: 9
           out: 2
-        card_type:
-          in: 177
-          out: 4
+#        card_type:
+#          in: 177
+#          out: 4
         operation_type:
           in: 24
           out: 4
@@ -132,12 +133,12 @@ module:
         income_flag:
           in: 5
           out: 1
-        country:
-          in: 26
-          out: 4
-        city:
-          in: 170
-          out: 4
+#        country:
+#          in: 26
+#          out: 4
+#        city:
+#          in: 170
+#          out: 4
         mcc_category:
           in: 30
           out: 16
@@ -165,7 +166,7 @@ module:
   lr_scheduler_partial:
     _partial_: true
     _target_: torch.optim.lr_scheduler.StepLR
-    step_size: 5
+    step_size: 1
     gamma: 0.8
   val_metric: ${metric}
   test_metric: ${metric}

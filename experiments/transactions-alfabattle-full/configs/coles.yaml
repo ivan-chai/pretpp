@@ -21,8 +21,8 @@ module:
   loss:
     _target_: pretpp.losses.ColesLoss
     embedding_dim: ${rnn_hidden_size}
-    min_fraction: 0.1
-    max_fraction: 0.5
+    min_length: 20
+    max_length: 60
     n_splits: 5
     coles_loss:
       _target_: ptls.frames.coles.losses.ContrastiveLoss

@@ -6,7 +6,7 @@ defaults:
 name: coles
 
 data_module:
-  batch_size: 16
+  batch_size: 128
 
 module:
   _target_: pretpp.modules.BaseModule

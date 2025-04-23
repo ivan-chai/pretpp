@@ -254,7 +254,12 @@ class EmbedderModule(pl.LightningModule):
 
 
 @contextmanager
-def copy_trainer(trainer_orig):
+def copy_trainer(trainer_orig, checkpoint_path):
+    # Save states.
+    checkpoint = trainer_orig._checkpoint_connector.dump_checkpoint()
+    trainer_orig.strategy.save_checkpoint(checkpoint, checkpoint_path)
+    del checkpoint
+
     # Trainer includes:
     # - state (can be deep-copied).
     # - connectors (need to set a copy as an attribute)
@@ -308,6 +313,8 @@ def copy_trainer(trainer_orig):
         base_model.trainer = trainer_orig
         trainer_orig.strategy.connect(base_model)
         trainer_orig.strategy.setup(trainer_orig)
+        trainer_orig._checkpoint_connector.restore(checkpoint_path)
+        trainer_orig.strategy.remove_checkpoint(checkpoint_path)
 
 
 class DownstreamCheckpointCallback(pl.callbacks.Checkpoint):
@@ -391,7 +398,8 @@ class DownstreamCheckpointCallback(pl.callbacks.Checkpoint):
         splits = self._config.get("data_splits", datamodule.splits)
 
         # Predict.
-        with copy_trainer(trainer) as eval_trainer:
+        checkpoint_path = os.path.join(self._root, "restore.pth")
+        with copy_trainer(trainer, checkpoint_path) as eval_trainer:
             embeddings = extract_embeddings(eval_trainer, datamodule, EmbedderModule(pl_module), splits)
             _, targets = extract_targets(eval_trainer, datamodule, splits)
 
