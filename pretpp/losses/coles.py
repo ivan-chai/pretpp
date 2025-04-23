@@ -7,18 +7,25 @@ from .base import BaseLoss
 class ColesLoss(BaseLoss):
     """Contrastive pretrainer.
 
+    This class is a wrapper for a PytorchLifestream CoLES loss.
+    We need to reimplement subsequence extractor for the fast batch computation.
+
     Args:
         coles_loss: A contrastive loss from pytorch-lifestream.
+        min_length: The minimum number of subsequence events or minimum fraction if the value is less than 1.
+        max_length: The maximum number of subsequence events or maximum fraction if the value is less than 1.
     """
     def __init__(self, embedding_dim, coles_loss, id_field="id",
-                 n_splits=5, min_fraction=0.1, max_fraction=0.9):
+                 n_splits=5, min_length=0.1, max_length=0.9):
+        if min_length > max_length:
+            raise ValueError("Max length must be greater than min")
         super().__init__()
         self.embedding_dim = embedding_dim
         self.coles_loss = coles_loss
         self.id_field = id_field
         self.n_splits = n_splits
-        self.min_fraction = min_fraction
-        self.max_fraction = max_fraction
+        self.min_length = min_length
+        self.max_length = max_length
 
     @property
     def input_size(self):
@@ -28,12 +35,12 @@ class ColesLoss(BaseLoss):
     def aggregate(self):
         return True
 
-    def prepare_batch(self, inputs, targets):
+    def prepare_batch(self, inputs, targets=None):
         """Extract model inputs and targets.
 
         Args:
             inputs: Input events with shape (B, L, *).
-            targets: Targets with shape (B, L) for local recognition or (B) for global recognition.
+            targets (unused): Targets with shape (B, L) for local recognition or (B) for global recognition.
 
         Returns:
             Model inputs with shape (B, L', *) and targets with shape (B, L', *).
@@ -41,9 +48,20 @@ class ColesLoss(BaseLoss):
         device = inputs.device
         b, l = inputs.shape
         n = self.n_splits
-        sample_fractions = self.min_fraction + (self.max_fraction - self.min_fraction) * torch.rand(b, n, device=device)  # (B, N).
-        sample_sizes = (sample_fractions * inputs.seq_lens[:, None].expand(b, n)).round().long()  # (B, N).
-        sample_sizes = torch.minimum(sample_sizes.clip(min=1), inputs.seq_lens[:, None])  # (B, N).
+        # Sample subsequence lengths.
+        if self.min_length < 1:
+            min_lengths = (inputs.seq_lens * self.min_length).round().long()  # (B).
+        else:
+            min_lengths = torch.minimum(torch.full_like(inputs.seq_lens, self.min_length),
+                                        inputs.seq_lens)  # (B).
+        if self.max_length < 1:
+            max_lengths = (inputs.seq_lens * self.max_length).round().long()  # (B).
+        else:
+            max_lengths = torch.minimum(torch.full_like(inputs.seq_lens, self.max_length),
+                                        inputs.seq_lens)  # (B).
+        sample_sizes = min_lengths[:, None] + (max_lengths - min_lengths)[:, None] * torch.rand(b, n, device=device)  # (B, N).
+        sample_sizes = sample_sizes.round().long()  # (B, N).
+        assert (sample_sizes <= l).all()
         offsets = ((inputs.seq_lens[:, None] - sample_sizes) * torch.rand(b, n, device=device)).long()  # (B, N).
 
         new_l = sample_sizes.max().item()
