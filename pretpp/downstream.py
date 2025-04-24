@@ -256,9 +256,11 @@ class EmbedderModule(pl.LightningModule):
 @contextmanager
 def copy_trainer(trainer_orig, checkpoint_path):
     # Save states.
+    checkpoint_path = trainer_orig.strategy.broadcast(checkpoint_path)
     checkpoint = trainer_orig._checkpoint_connector.dump_checkpoint()
     trainer_orig.strategy.save_checkpoint(checkpoint, checkpoint_path)
     del checkpoint
+    trainer_orig.strategy.barrier()
 
     # Trainer includes:
     # - state (can be deep-copied).
