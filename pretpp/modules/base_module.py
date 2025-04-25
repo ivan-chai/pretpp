@@ -187,6 +187,13 @@ class BaseModule(pl.LightningModule):
             single_batch_metrics = None
         self._log_metrics("test", len(x), loss, losses, metrics, single_batch_metrics)
 
+    def on_validation_epoch_end(self):
+        if self._val_metric is not None:
+            metrics = self._val_metric.compute()
+            metrics = {f"val/{k}": v for k, v in metrics.items()}
+            self.log_dict(metrics, prog_bar=True, sync_dist=True)
+            self._val_metric.reset()
+
     def on_test_epoch_end(self):
         if self._test_metric is not None:
             metrics = self._test_metric.compute()
