@@ -16,6 +16,17 @@ class BaseLoss(torch.nn.Module):
         """
         pass
 
+    def prepare_inference_batch(self, inputs):
+        """Extract model inputs for inference.
+
+        Args:
+            inputs: Input events with shape (B, L, *).
+
+        Returns:
+            Model inputs with shape (B, L', *).
+        """
+        return inputs
+
     @abstractproperty
     def aggregate(self):
         """The booling flag indicating input is an embedding rather than a sequence."""
