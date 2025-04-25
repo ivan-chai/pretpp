@@ -51,7 +51,5 @@ module:
       target_flag:
         num_classes: 2
         cast: true
-    aggregator:
-      _target_: hotpp.nn.LastAggregator
 trainer:
   max_epochs: 110

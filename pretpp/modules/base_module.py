@@ -36,16 +36,14 @@ class BaseModule(pl.LightningModule):
         loss: Training loss.
         timestamps_field: The name of the timestamps field.
         head_partial: Head model class which accepts encoder output and makes prediction.
-          Input size is provided as positional argument.
-        loss_projection_partial: Loss preprocessing head.
-          Input and output sizes are provided as positional arguments.
+            Input size is provided as positional argument.
+        loss_projection_partial: Loss preprocessing head. Input and output sizes are provided as positional arguments.
         aggregator: Embeddings aggregator.
-        optimizer_partial:
-            optimizer init partial. Network parameters are missed.
-        lr_scheduler_partial:
-            scheduler init partial. Optimizer are missed.
+        optimizer_partial: Optimizer init partial. Network parameters are missed.
+        lr_scheduler_partial: Scheduler init partial. Optimizer are missed.
         init_state_dict: Checkpoint to initialize all parameters except loss.
-        init_prefixes: A list of prefixes to initialize from checkpoint. By default, initialize all parameters.
+        init_prefixes: A list of prefixes to initialize from checkpoint. By default, initialize all parameters
+            except loss and loss projection.
         freeze_prefixes: A list of prefixes to exclude from training.
         val_metric: Validation set metric.
         test_metric: Test set metric.
@@ -124,6 +122,7 @@ class BaseModule(pl.LightningModule):
 
     def embed(self, x):
         """Compatibility with HoTPP."""
+        x = self._loss.prepare_inference_batch(x)
         hiddens = self(x)
         embeddings = self._aggregator(hiddens)
         return embeddings

@@ -26,14 +26,14 @@ module:
       - labels
       - currency
       - operation_kind
-      - card_type
+#      - card_type
       - operation_type
       - operation_type_group
       - ecommerce_flag
       - payment_system
       - income_flag
-      - country
-      - city
+#      - country
+#      - city
       - mcc_category
       - day_of_week
       - hour
@@ -43,14 +43,14 @@ module:
       labels: mode
       currency: mode
       operation_kind: mode
-      card_type: mode
+#      card_type: mode
       operation_type: mode
       operation_type_group: mode
       ecommerce_flag: mode
       payment_system: mode
       income_flag: mode
-      country: mode
-      city: mode
+#      country: mode
+#      city: mode
       mcc_category: mode
       day_of_week: mode
       hour: mode
@@ -63,14 +63,14 @@ module:
       labels: 1.0
       currency: 0.2
       operation_kind: 0.2
-      card_type: 0.2
+#      card_type: 0.2
       operation_type: 0.2
       operation_type_group: 0.2
       ecommerce_flag: 0.2
       payment_system: 0.2
       income_flag: 0.2
-      country: 0.2
-      city: 0.2
+#      country: 0.2
+#      city: 0.2
       mcc_category: 0.2
       day_of_week: 0.2
       hour: 0.2
@@ -100,10 +100,10 @@ module:
           _target_: hotpp.losses.CrossEntropyLoss
           num_classes: 9
           grad_scale: null
-        card_type:
-          _target_: hotpp.losses.CrossEntropyLoss
-          num_classes: 177
-          grad_scale: null
+#        card_type:
+#          _target_: hotpp.losses.CrossEntropyLoss
+#          num_classes: 177
+#          grad_scale: null
         operation_type:
           _target_: hotpp.losses.CrossEntropyLoss
           num_classes: 24
@@ -124,14 +124,14 @@ module:
           _target_: hotpp.losses.CrossEntropyLoss
           num_classes: 5
           grad_scale: null
-        country:
-          _target_: hotpp.losses.CrossEntropyLoss
-          num_classes: 26
-          grad_scale: null
-        city:
-          _target_: hotpp.losses.CrossEntropyLoss
-          num_classes: 170
-          grad_scale: null
+#        country:
+#          _target_: hotpp.losses.CrossEntropyLoss
+#          num_classes: 26
+#          grad_scale: null
+#        city:
+#          _target_: hotpp.losses.CrossEntropyLoss
+#          num_classes: 170
+#          grad_scale: null
         mcc_category:
           _target_: hotpp.losses.CrossEntropyLoss
           num_classes: 30
