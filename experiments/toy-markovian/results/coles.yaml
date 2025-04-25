@@ -1,0 +1,7 @@
+date: '2025-04-24 13:33:01'
+test/downstream: 0.8339999914169312
+test/loss: 5.0498046875
+test/loss_coles: 5.0498046875
+val/downstream: 0.843999981880188
+val/loss: 5.168619632720947
+val/loss_coles: 5.168619632720947

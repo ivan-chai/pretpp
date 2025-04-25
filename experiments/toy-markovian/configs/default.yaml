@@ -1,0 +1,111 @@
+seed_everything: 42
+num_evaluation_seeds: 5
+
+num_classes: 3
+num_classes_plus1: 4
+max_time_delta: 1
+max_duration: 64
+
+rnn_hidden_size: 64
+rnn_half_hidden_size: 32
+rnn_inference_context: null
+rnn_inference_context_step: null
+
+transformer_hidden_size: 64
+transformer_inter_size: 256
+transformer_heads: 4
+transformer_layers: 4
+transformer_context: 256
+transformer_positions: 256
+
+logger:
+  _target_: pytorch_lightning.loggers.WandbLogger
+  project: pretpp-toy-markovian
+  name: ${name}
+  save_dir: lightning_logs
+model_path: checkpoints/${name}.ckpt
+report: results/${name}.yaml
+multiseed_report: results/multiseed_${name}.yaml
+
+data_module:
+  _target_: hotpp.data.HotppDataModule
+  batch_size: 4
+  min_length: 64
+  max_length: 64
+  num_workers: 1
+  train_path: data/train.parquet
+  val_path: data/val.parquet
+  test_path: data/test.parquet
+  global_target_fields: target
+
+metric: null
+
+nohead:
+  _target_: pretpp.nn.IdentityHead
+  _partial_: true
+
+head:
+  _target_: hotpp.nn.Head
+  _partial_: true
+  hidden_dims: []
+  use_batch_norm: true
+
+metric_head:
+  _target_: pretpp.nn.MetricHead
+  _partial_: true
+  hidden_dims: [128]
+  head_params:
+    use_batch_norm: true
+
+conditional_head:
+  _target_: hotpp.nn.ConditionalHead
+  _partial_: true
+  hidden_dims: [128]
+  use_batch_norm: true
+
+metric_conditional_head:
+  _target_: pretpp.nn.MetricConditionalHead
+  _partial_: true
+  hidden_dims: [256, 128]
+  head_params:
+    use_batch_norm: true
+
+module:
+  seq_encoder:
+    embedder:
+      _target_: hotpp.nn.Embedder
+      embeddings:
+        labels:
+          in: ${num_classes}
+          out: 8
+      numeric_values:
+        timestamps: identity
+    max_time_delta: ${max_time_delta}
+  aggregator:
+    _target_: hotpp.nn.MeanAggregator
+  optimizer_partial:
+    _partial_: true
+    _target_: torch.optim.Adam
+    lr: 0.001
+    weight_decay: 0.0
+  lr_scheduler_partial:
+    _partial_: true
+    _target_: torch.optim.lr_scheduler.StepLR
+    step_size: 5
+    gamma: 0.8
+  val_metric: ${metric}
+  test_metric: ${metric}
+  downstream_validation_config: configs/downstream.yaml
+
+trainer:
+  accelerator: cuda
+  devices: 1
+  max_epochs: 60
+  enable_checkpointing: true
+  deterministic: true
+  precision: 16-mixed
+  gradient_clip_val: 1  # Increases training stability.
+  check_val_every_n_epoch: 6
+  model_selection:
+    metric: val/downstream
+    mode: max

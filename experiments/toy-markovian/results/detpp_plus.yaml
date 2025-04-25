@@ -1,0 +1,25 @@
+date: '2025-04-24 14:59:20'
+test/downstream: 0.8899999856948853
+test/loss: 2.0624020099639893
+test/loss__presence: 0.00027086256886832416
+test/loss_labels: 1.0613951683044434
+test/loss_next_item_labels: 0.9895341992378235
+test/loss_next_item_timestamps: 0.003804020816460252
+test/loss_timestamps: 0.007397766225039959
+test/match_cost_mean: -72.32726287841797
+test/match_cost_std: 11.286917686462402
+test/max_cost: 87.03357696533203
+test/prediction_match_rate: 0.875
+test/target_match_rate: 1.0
+val/downstream: 0.8889999985694885
+val/loss: 2.066647529602051
+val/loss__presence: 0.00027675152523443103
+val/loss_labels: 1.065024971961975
+val/loss_next_item_labels: 0.9897724390029907
+val/loss_next_item_timestamps: 0.004120938945561647
+val/loss_timestamps: 0.007452481426298618
+val/match_cost_mean: -72.5104751586914
+val/match_cost_std: 11.164902687072754
+val/max_cost: 84.41793823242188
+val/prediction_match_rate: 0.875
+val/target_match_rate: 1.0
