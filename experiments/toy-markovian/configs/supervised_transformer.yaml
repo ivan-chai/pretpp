@@ -1,0 +1,21 @@
+defaults:
+  - default
+  - default_transformer
+  - default_ft
+  - _self_
+
+base_name: supervised
+
+module:
+  _target_: pretpp.modules.BaseModule
+  seq_encoder:
+    embedder:
+      embeddings:
+        labels:
+          in: ${num_classes_plus1}  # Reserve one label for CLS token.
+  loss_projection_partial: ${head}
+  loss:
+    cls_token:
+      timestamps: -1
+      labels: ${num_classes}  # Use final label for CLS.
+  init_state_dict: null

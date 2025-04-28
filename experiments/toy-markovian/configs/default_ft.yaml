@@ -26,8 +26,8 @@ module:
         cast: true
 
 trainer:
-  max_epochs: 10
-  check_val_every_n_epoch: 1
+  max_epochs: 50
+  check_val_every_n_epoch: 5
   model_selection:
     metric: val/accuracy-target
     mode: max

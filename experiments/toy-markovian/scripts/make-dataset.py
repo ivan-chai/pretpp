@@ -1,10 +1,13 @@
 import argparse
-import os
 import numpy as np
+import os
+import pickle as pkl
 import pyspark.sql.functions as F
 from random import Random
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType, StructField, ArrayType, LongType, FloatType
+
+from common import Model
 
 
 SEED = 42
@@ -17,39 +20,9 @@ def parse_args():
     parser.add_argument("--root", help="Dataset root", default="data")
     parser.add_argument("--n-presets", help="The number of presets", type=int, default=10)
     parser.add_argument("--n-labels", help="The number of labels", type=int, default=3)
-    parser.add_argument("--size", help="Dataset size", type=int, default=1000)
+    parser.add_argument("--size", help="Dataset size", type=int, default=10000)
     parser.add_argument("--length", help="Dataset size", type=int, default=64)
     return parser.parse_args()
-
-
-class Preset:
-    def __init__(self, args):
-        probs = np.random.rand(args.n_labels, args.n_labels)
-        probs /= np.sum(probs, axis=1, keepdims=True)
-        self.probs = probs
-        self.length = args.length
-
-    def generate(self):
-        timestamps = []
-        labels = []
-        prev_label = np.random.choice(len(self.probs))
-        prev_ts = np.random.randint(0, self.length)
-        for i in range(self.length):
-            prev_ts += 1
-            prev_label = np.random.choice(len(self.probs), p=self.probs[prev_label])
-            timestamps.append(float(prev_ts))
-            labels.append(int(prev_label))
-        return timestamps, labels
-
-
-class Model:
-    def __init__(self, args):
-        self.presets = [Preset(args) for _ in range(args.n_presets)]
-
-    def generate(self):
-        target = int(np.random.choice(len(self.presets)))
-        timestamps, labels = self.presets[target].generate()
-        return timestamps, labels, target
 
 
 def dump_parquet(df, path, n_partitions):
@@ -82,6 +55,9 @@ def main(args):
     print("Make")
     np.random.seed(0)
     model = Model(args)
+
+    with open(os.path.join(args.root, "generator.pkl"), "wb") as fp:
+        pkl.dump(model, fp)
 
     df = spark.createDataFrame(
         [(i, timestamps, labels, target)
