@@ -4,11 +4,8 @@ defaults:
   - default_ft
   - _self_
 
-base_name: supervised
+base_name: detpp_plus
 
 module:
   _target_: pretpp.modules.BaseModule
   loss_projection_partial: ${head}
-  init_state_dict: null
-  optimizer_partial:
-    lr: 0.001

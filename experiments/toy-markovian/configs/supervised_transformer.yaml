@@ -4,7 +4,7 @@ defaults:
   - default_ft
   - _self_
 
-base_name: supervised
+base_name: supervised_transformer
 
 module:
   _target_: pretpp.modules.BaseModule
@@ -19,3 +19,5 @@ module:
       timestamps: -1
       labels: ${num_classes}  # Use final label for CLS.
   init_state_dict: null
+  optimizer_partial:
+    lr: 0.001
