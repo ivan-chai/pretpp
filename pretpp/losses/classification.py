@@ -50,7 +50,7 @@ class ClassificationLoss(BaseLoss):
             for k, t in self._cls_token.items():
                 v = inputs.payload[k]
                 new_inputs[k] = torch.cat([v, v[:, -1:]], 1)  # (B, L, *).
-                token = torch.full_like(v[:, 0], t)
+                token = torch.full_like(v[:, :1], t)
                 new_inputs[k].scatter_(1, last_indices.reshape(*([b] + [1] * (v.ndim - 1))), token)
             inputs = PaddedBatch(new_inputs, inputs.seq_lens + 1,
                                  seq_names={k for k in inputs.seq_names if k in self._cls_token})
