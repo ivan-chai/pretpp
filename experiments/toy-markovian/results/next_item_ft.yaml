@@ -1,11 +1,11 @@
-date: '2025-04-25 11:26:11'
-test/accuracy-target: 0.8199999928474426
-test/batch-accuracy-target: 0.8199999928474426
-test/downstream: 0.9020000100135803
-test/loss: 0.8138430714607239
-test/loss_target: 0.8138430714607239
-val/accuracy-target: 0.800000011920929
-val/batch-accuracy-target: 0.800000011920929
-val/downstream: 0.906000018119812
-val/loss: 0.9020573496818542
-val/loss_target: 0.9020573496818542
+date: '2025-04-25 16:02:26'
+test/accuracy-target: 0.5699999928474426
+test/batch-accuracy-target: 0.5699999928474426
+test/downstream: 0.7820000052452087
+test/loss: 1.3419909477233887
+test/loss_target: 1.3419909477233887
+val/accuracy-target: 0.44999998807907104
+val/batch-accuracy-target: 0.44999998807907104
+val/downstream: 0.7440000176429749
+val/loss: 1.4885302782058716
+val/loss_target: 1.4885302782058716
