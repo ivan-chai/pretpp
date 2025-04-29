@@ -13,11 +13,9 @@ data_module:
     - currency
     - trx_category
     - log_amount
-  batch_size: 512
 
 module:
   _target_: pretpp.modules.BaseModule
-  seq_encoder:
   head_partial:
     _target_: pretpp.nn.NormalizationHead
     _partial_: true
