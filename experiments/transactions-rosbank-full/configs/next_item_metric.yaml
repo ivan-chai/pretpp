@@ -17,7 +17,6 @@ data_module:
 
 module:
   _target_: pretpp.modules.BaseModule
-  seq_encoder:
   head_partial:
     _target_: pretpp.nn.NormalizationHead
     _partial_: true
