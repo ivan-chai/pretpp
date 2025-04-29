@@ -8,4 +8,7 @@ base_name: coles
 
 module:
   _target_: pretpp.modules.BaseModule
+  head_partial:
+    _target_: pretpp.nn.NormalizationHead
+    _partial_: true
   loss_projection_partial: ${head}

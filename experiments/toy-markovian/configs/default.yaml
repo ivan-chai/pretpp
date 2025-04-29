@@ -19,10 +19,10 @@ transformer_context: 256
 transformer_positions: 256
 
 logger:
-  _target_: pytorch_lightning.loggers.WandbLogger
-  project: pretpp-toy-markovian
-  name: ${name}
-  save_dir: lightning_logs
+  _target_: pytorch_lightning.loggers.TensorBoardLogger
+  version: ${name}
+  name: lightning_logs
+  save_dir: "."
 model_path: checkpoints/${name}.ckpt
 report: results/${name}.yaml
 multiseed_report: results/multiseed_${name}.yaml
