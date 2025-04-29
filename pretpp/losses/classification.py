@@ -50,7 +50,7 @@ class ClassificationLoss(BaseLoss):
             for k, t in self._cls_token.items():
                 v = inputs.payload[k]
                 new_inputs[k] = torch.cat([v, v[:, -1:]], 1)  # (B, L, *).
-                token = torch.full_like(v[:, 0], t)
+                token = torch.full_like(v[:, :1], t)
                 new_inputs[k].scatter_(1, last_indices.reshape(*([b] + [1] * (v.ndim - 1))), token)
             inputs = PaddedBatch(new_inputs, inputs.seq_lens + 1,
                                  seq_names={k for k in inputs.seq_names if k in self._cls_token})
@@ -122,24 +122,22 @@ class ClassificationLoss(BaseLoss):
     def _split_outputs(self, outputs):
         """Convert parameters tensor to the dictionary with parameters for each loss."""
         outputs, lengths = outputs.payload, outputs.seq_lens
+        if outputs.ndim != 3:
+            raise NotImplementedError("Expected outputs with shape (B, L, C).")
         if self._cls_token is not None:
+            # Extract CLS token embedding.
             last_indices = lengths - 1
+            b = len(last_indices)
+            outputs = outputs.take_along_dim(last_indices.reshape(*([b] + [1] * (outputs.ndim - 1))), 1).squeeze(1)
+        else:
+            if outputs.shape[1] != 1:
+                raise NotImplementedError("Expected aggregated embedding with shape (B, 1, C).")
+            outputs = outputs.squeeze(1)
         offset = 0
         result = {}
         for name in self._order:
             nc = self._targets[name]["num_classes"]
-            output = outputs[..., offset:offset + nc]
-            if output.ndim != 3:
-                raise NotImplementedError("Expected outputs with shape (B, L, C).")
-            if self._cls_token is not None:
-                # Extract CLS token embedding.
-                b = len(last_indices)
-                output = output.take_along_dim(last_indices.reshape(*([b] + [1] * (output.ndim - 1))), 1).squeeze(1)
-            else:
-                if output.shape[1] != 1:
-                    raise NotImplementedError("Expected aggregated embedding with shape (B, 1, C).")
-                output = output.squeeze(1)
-            result[name] = output
+            result[name] = outputs[..., offset:offset + nc]
             offset += nc
         if offset != outputs.shape[-1]:
             raise ValueError("Predictions tensor has inconsistent size.")
