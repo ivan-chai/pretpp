@@ -41,7 +41,7 @@ class PositionalEncoding(torch.nn.Module):
     def forward(self, x):
         # x: (B, L, D).
         if self.angular:
-            x = x + self.pe[:len(x)]
+            x = x + self.pe[:x.shape[1]]
         else:
             x = x + self.embeddings(self.pe[:x.shape[1]])
         return self.dropout(x)
