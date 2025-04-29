@@ -3,7 +3,7 @@ defaults:
   - default_rnn
   - _self_
 
-name: detection
+name: detpp
 
 detection_k: 32
 

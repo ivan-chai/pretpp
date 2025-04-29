@@ -1,6 +1,6 @@
 project: hotpp-sweep-rosbank-full
 run_cap: 100
-name: detection-downstream
+name: detpp-downstream
 command:
   - ${env}
   - python3
@@ -9,7 +9,7 @@ command:
   - --config-dir
   - configs
   - --config-name
-  - detection_hybrid
+  - detpp_hybrid
   - ~seed_everything
   - ~model_path
   - ~report

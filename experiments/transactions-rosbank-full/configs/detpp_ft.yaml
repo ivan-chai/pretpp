@@ -1,0 +1,11 @@
+defaults:
+  - default
+  - default_rnn
+  - default_ft
+  - _self_
+
+base_name: detpp
+
+module:
+  _target_: pretpp.modules.BaseModule
+  loss_projection_partial: ${head}

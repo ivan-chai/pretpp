@@ -1,8 +1,8 @@
 defaults:
-  - detection
+  - detpp
   - _self_
 
-name: detection_hybrid
+name: detpp_plus
 
 module:
   loss:

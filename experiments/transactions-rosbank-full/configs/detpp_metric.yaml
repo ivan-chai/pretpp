@@ -3,7 +3,7 @@ defaults:
   - default_rnn
   - _self_
 
-name: detection_metric
+name: detpp_metric
 
 detection_k: 32
 
