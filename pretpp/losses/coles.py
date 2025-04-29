@@ -14,9 +14,11 @@ class ColesLoss(BaseLoss):
         coles_loss: A contrastive loss from pytorch-lifestream.
         min_length: The minimum number of subsequence events or minimum fraction if the value is less than 1.
         max_length: The maximum number of subsequence events or maximum fraction if the value is less than 1.
+        cls_token: A dictionary with field values for a CLS token (optional, typically for transformer models).
     """
     def __init__(self, embedding_dim, coles_loss, id_field="id",
-                 n_splits=5, min_length=0.1, max_length=0.9):
+                 n_splits=5, min_length=0.1, max_length=0.9,
+                 cls_token=None):
         if min_length > max_length:
             raise ValueError("Max length must be greater than min")
         super().__init__()
@@ -26,6 +28,7 @@ class ColesLoss(BaseLoss):
         self.n_splits = n_splits
         self.min_length = min_length
         self.max_length = max_length
+        self.cls_token = cls_token
 
     @property
     def input_size(self):
@@ -33,7 +36,31 @@ class ColesLoss(BaseLoss):
 
     @property
     def aggregate(self):
-        return True
+        # Use aggregation if there is no special token.
+        return self.cls_token is None
+
+    def prepare_inference_batch(self, inputs):
+        """Extract model inputs for inference.
+
+        Args:
+            inputs: Input events with shape (B, L, *).
+
+        Returns:
+            Model inputs with shape (B, L', *).
+        """
+        if self.cls_token is not None:
+            # Add CLS token to the end of inputs and add fake targets.
+            new_inputs = {k: v for k, v in inputs.payload.items() if k not in inputs.seq_names}
+            last_indices = inputs.seq_lens.unsqueeze(1)  # (B).
+            b = len(inputs)
+            for k, t in self.cls_token.items():
+                v = inputs.payload[k]
+                new_inputs[k] = torch.cat([v, v[:, -1:]], 1)  # (B, L, *).
+                token = torch.full_like(v[:, :1], t)
+                new_inputs[k].scatter_(1, last_indices.reshape(*([b] + [1] * (v.ndim - 1))), token)
+            inputs = PaddedBatch(new_inputs, inputs.seq_lens + 1,
+                                 seq_names={k for k in inputs.seq_names if k in self.cls_token})
+        return inputs
 
     def prepare_batch(self, inputs, targets=None):
         """Extract model inputs and targets.
@@ -75,6 +102,9 @@ class ColesLoss(BaseLoss):
             new_inputs[k] = slices.reshape(b * n, new_l)  # (BN, L').
         new_inputs = PaddedBatch(new_inputs, sample_sizes.flatten(), seq_names=inputs.seq_names)
         targets = new_inputs.payload[self.id_field]  # (BN).
+
+        # Postprocess sequences.
+        new_inputs = self.prepare_inference_batch(new_inputs)
         return new_inputs, targets
 
     def forward(self, outputs, targets):
@@ -87,8 +117,18 @@ class ColesLoss(BaseLoss):
         Returns:
             Losses dict and metrics dict.
         """
-        # Input is an aggregated embedding.
-        loss = self.coles_loss(outputs.payload.squeeze(1), targets)
+        outputs, lengths = outputs.payload, outputs.seq_lens
+        if self.cls_token is not None:
+            # Extract CLS token embedding.
+            last_indices = lengths - 1
+            b = len(last_indices)
+            outputs = outputs.take_along_dim(last_indices.reshape(*([b] + [1] * (outputs.ndim - 1))), 1).squeeze(1)
+        else:
+            # Input is an aggregated embedding.
+            if outputs.shape[1] != 1:
+                raise NotImplementedError("Expected aggregated embedding with shape (B, 1, C).")
+            outputs = outputs.squeeze(1)
+        loss = self.coles_loss(outputs, targets)
         losses = {"coles": loss}
         metrics = {}
         return losses, metrics
