@@ -4,7 +4,7 @@ defaults:
   - default_ft
   - _self_
 
-base_name: rnn_supervised_metric
+base_name: supervised_rnn_metric
 
 module:
   head_partial:

@@ -4,7 +4,7 @@ defaults:
   - default_ft
   - _self_
 
-base_name: rnn_supervised
+base_name: supervised_rnn
 
 module:
   init_state_dict: null

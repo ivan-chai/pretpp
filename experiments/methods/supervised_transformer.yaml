@@ -1,0 +1,10 @@
+defaults:
+  - default
+  - default_transformer
+  - default_ft
+  - _self_
+
+base_name: supervised_transformer
+
+module:
+  init_state_dict: null
