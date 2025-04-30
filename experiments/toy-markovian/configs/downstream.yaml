@@ -24,7 +24,7 @@ models:
     enabled: true
     model:
       _target_: lightgbm.LGBMClassifier
-      n_estimators: 1000
+      n_estimators: 100
       boosting_type: gbdt
       objective: multiclass
       num_class: 10
