@@ -1,15 +1,1 @@
-defaults:
-  - detpp_plus
-  - _self_
-
-name: detpp_plus_metric
-
-metric_conditional_head:
-  head_params:
-    k: ${detection_k}
-
-module:
-  head_partial:
-    _target_: pretpp.nn.NormalizationHead
-    _partial_: true
-  loss_projection_partial: ${metric_conditional_head}
+../../methods/detpp_plus_metric.yaml
