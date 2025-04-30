@@ -1,14 +1,13 @@
 defaults:
   - default
   - default_rnn
-  - default_ft
+  - default_supervised
   - _self_
 
-base_name: supervised_rnn_metric
+name: supervised_rnn_metric
 
 module:
   head_partial:
     _target_: pretpp.nn.NormalizationHead
     _partial_: true
   loss_projection_partial: ${metric_head}
-  init_state_dict: null

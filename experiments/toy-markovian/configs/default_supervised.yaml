@@ -1,0 +1,27 @@
+data_module:
+  train_params:
+    drop_nans: target
+  val_params:
+    drop_nans: target
+
+metric:
+  _target_: pretpp.metrics.DownstreamMetric
+  classification_fields:
+    - target
+
+module:
+  _target_: pretpp.modules.BaseModule
+  loss_projection_partial: ${head}
+  loss:
+    _target_: pretpp.losses.ClassificationLoss
+    targets:
+      target:
+        num_classes: ${num_downstream_classes}
+        cast: true
+  val_metric: ${metric}
+  test_metric: ${metric}
+
+trainer:
+  model_selection:
+    metric: val/accuracy-target
+    mode: max

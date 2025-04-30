@@ -1,1 +1,13 @@
-../../methods/default_ft.yaml
+defaults:
+  - default_supervised
+
+name: ${base_name}_ft
+
+module:
+  optimizer_partial:
+    lr: 0.0001
+  init_state_dict: checkpoints/${base_name}.ckpt
+
+trainer:
+  max_epochs: 10
+  check_val_every_n_epoch: 1
