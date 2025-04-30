@@ -1,9 +1,9 @@
 defaults:
   - default
-  - default_rnn
+  - default_transformer
   - _self_
 
-name: detpp_metric
+name: detpp_transformer_metric
 
 detection_k: 32
 
@@ -42,8 +42,8 @@ module:
       _presence: 8
       timestamps: 1.0
       labels: 2.0
-      channel_type: 0.5
-      currency: 0.5
+      channel_type: 1.0
+      currency: 1.0
       trx_category: 1.0
       log_amount: 1.0
     next_item_loss:

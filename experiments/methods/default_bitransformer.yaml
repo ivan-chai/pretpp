@@ -15,5 +15,6 @@ module:
       n_inner: ${transformer_inter_size}
       max_duration: ${max_duration}
       pos_type: time-angular-rel
+      dropout: ${transformer_dropout}
       causal: False
     max_context: ${transformer_context}

@@ -18,6 +18,7 @@ transformer_heads: 4
 transformer_layers: 4
 transformer_context: 256
 transformer_positions: 512
+transformer_dropout: 0.1
 
 logger:
   _target_: pytorch_lightning.loggers.TensorBoardLogger

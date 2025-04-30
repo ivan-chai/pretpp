@@ -35,13 +35,13 @@ module:
       trx_category: mean
       log_amount: mean
     match_weights:
-      _presence: 3
-      timestamps: 0.35
-      labels: 1.0
-      channel_type: 0.2
-      currency: 0.2
-      trx_category: 0.43
-      log_amount: 0.4
+      _presence: 8
+      timestamps: 1.0
+      labels: 2.0
+      channel_type: 0.5
+      currency: 0.5
+      trx_category: 1.0
+      log_amount: 1.0
     next_item_loss:
       _target_: hotpp.losses.NextItemLoss
       losses:
@@ -71,4 +71,4 @@ module:
           grad_scale: null
         log_amount:
           _target_: hotpp.losses.MAELoss
-          grad_scale: null
+          grad_scale: 0.5
