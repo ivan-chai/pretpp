@@ -6,10 +6,10 @@ class TransformerConfig:
     """Transformer configuration.
 
     Args:
-        n_positions: Use embeddings if integer is provided and use sine/cosine if None.
+        angular_embeddings: Use use sine/cosine if it is set to true and trainable positional embeddings otherwise.
     """
     def __init__(self, n_positions=1024, n_embd=768, n_layer=12, n_head=12, n_inner=None,
-                 dropout=0.1, angular_embeddings=False, output_hidden_states=True, causal=False):
+                 dropout=0.1, angular_embeddings=True, output_hidden_states=True, causal=False):
         self.n_positions = n_positions
         self.n_embd = n_embd
         self.n_layer = n_layer
