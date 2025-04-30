@@ -24,19 +24,24 @@ class Preset:
         return timestamps, labels
 
     def log_like(self, timestamps, labels):
-        # Label streams are independent. Log-likelihood is a sum of log-likelihoods for each label.
+        duration = timestamps[-1]
         timestamps = np.asarray(timestamps)
         labels = np.asarray(labels)
+        # Label streams are independent. Log-likelihood is a sum of log-likelihoods for each label.
         l = 0
         for label, rate in enumerate(self.rates):
             mask = labels == label
-            if mask.sum() == 0:
-                continue
-            lts = timestamps[mask]
-            extended = np.concatenate([np.zeros_like(lts[:1]), lts])
-            intertimes = extended[1:] - extended[:-1]
-            log_pdfs = math.log(rate) - rate * intertimes
-            l += log_pdfs.sum()
+            if mask.sum() > 0:
+                lts = timestamps[mask]
+                extended = np.concatenate([np.zeros_like(lts[:1]), lts])
+                intertimes = extended[1:] - extended[:-1]
+                log_pdfs = math.log(rate) - rate * intertimes
+                l += log_pdfs.sum()
+                last_time = lts[-1]
+            else:
+                last_time = 0
+            # Add likelihood for the end of a sequence.
+            l += -rate * (duration - last_time)
         return l
 
 
