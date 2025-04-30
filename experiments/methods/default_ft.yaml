@@ -1,0 +1,40 @@
+name: ${base_name}_ft
+
+data_module:
+  train_params:
+    drop_nans: target
+  val_params:
+    drop_nans: target
+
+metric:
+  _target_: pretpp.metrics.DownstreamMetric
+  classification_fields:
+    - target
+
+module:
+  _target_: pretpp.modules.BaseModule
+  loss_projection_partial: ${head}
+  loss:
+    _target_: pretpp.losses.ClassificationLoss
+    targets:
+      target:
+        num_classes: 4
+        cast: true
+  optimizer_partial:
+    lr: 0.0001
+    weight_decay: 0.0
+  init_state_dict: checkpoints/${base_name}.ckpt
+  val_metric: ${metric}
+  test_metric: ${metric}
+
+trainer:
+  accelerator: cuda
+  devices: 1
+  max_epochs: 10
+  enable_checkpointing: true
+  precision: 16-mixed
+  gradient_clip_val: 1  # Increases training stability.
+  check_val_every_n_epoch: 1
+  model_selection:
+    metric: val/accuracy-target
+    mode: max

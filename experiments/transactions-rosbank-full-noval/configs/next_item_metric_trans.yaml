@@ -1,0 +1,23 @@
+defaults:
+  - next_item_metric
+  - _self_
+
+data_module:
+  batch_size: 96
+name: next_item_metric_trans_no_freeze
+
+module:
+  init_state_dict: ../transactions-agepred-full/checkpoints/next_item_metric.ckpt
+  init_prefixes:
+    - _seq_encoder.rnn.
+#  freeze_prefixes:
+#    - _seq_encoder.rnn.
+  seq_encoder:
+    rnn_partial:
+      hidden_size: 1536
+#  optimizer_partial:
+#    lr: 0.001
+
+trainer:
+  max_epochs: 10
+  check_val_every_n_epoch: 1

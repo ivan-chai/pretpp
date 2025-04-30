@@ -1,14 +1,1 @@
-module:
-  seq_encoder:
-    _target_: hotpp.nn.Encoder
-    model_partial:
-      _target_: pretpp.nn.Transformer
-      _partial_: true
-      n_positions: ${transformer_positions}
-      n_embd: ${transformer_hidden_size}
-      n_layer: ${transformer_layers}
-      n_head: ${transformer_heads}
-      n_inner: ${transformer_inter_size}
-      max_duration: ${max_duration}
-      causal: False
-    max_context: ${transformer_context}
+../../methods/default_bitransformer.yaml

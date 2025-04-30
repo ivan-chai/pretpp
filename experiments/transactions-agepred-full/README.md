@@ -8,7 +8,7 @@ python3 -m hotpp.train --config-dir configs --config-name next_item.yaml
 
 To fine-tune the model in a supervised mode:
 ```bash
-python3 -m hotpp.train --config-dir configs --config-name next_item_ft.yaml
+python3 -m hotpp.train --config-dir configs --config-name rnn_ft.yaml base_name=next_item
 ```
 
 To disable downstream evaluation with LightGBM use "test_downstream=false" parameter.

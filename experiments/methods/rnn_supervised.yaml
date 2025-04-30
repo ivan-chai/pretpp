@@ -1,0 +1,10 @@
+defaults:
+  - default
+  - default_rnn
+  - default_ft
+  - _self_
+
+base_name: rnn_supervised
+
+module:
+  init_state_dict: null

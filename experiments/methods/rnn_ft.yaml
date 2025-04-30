@@ -1,0 +1,7 @@
+defaults:
+  - default
+  - default_rnn
+  - default_ft
+  - _self_
+
+base_name: _
