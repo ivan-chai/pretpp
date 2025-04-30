@@ -1,0 +1,14 @@
+defaults:
+  - default
+  - default_rnn
+  - default_ft
+  - _self_
+
+base_name: detpp_plus_metric
+
+module:
+  _target_: pretpp.modules.BaseModule
+  head_partial:
+    _target_: pretpp.nn.NormalizationHead
+    _partial_: true
+  loss_projection_partial: ${head}
