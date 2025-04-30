@@ -6,18 +6,13 @@ module:
         labels:
           in: ${num_classes_plus1}  # Add CLS token.
     model_partial:
-      _target_: hotpp.nn.HuggingFaceTransformer
+      _target_: pretpp.nn.Transformer
       _partial_: true
-      model:
-        _target_: pretpp.nn.Transformer
-        config:
-          _target_: pretpp.nn.TransformerConfig
-          n_positions: ${transformer_positions}
-          n_embd: ${transformer_hidden_size}
-          n_layer: ${transformer_layers}
-          n_head: ${transformer_heads}
-          n_inner: ${transformer_inter_size}
-          pos_type: "time-angular"
-          causal: False
-          output_hidden_states: True  #Necessary argument
+      n_positions: ${transformer_positions}
+      n_embd: ${transformer_hidden_size}
+      n_layer: ${transformer_layers}
+      n_head: ${transformer_heads}
+      n_inner: ${transformer_inter_size}
+      max_duration: ${max_duration}
+      causal: False
     max_context: ${transformer_context}

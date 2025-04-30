@@ -1,0 +1,25 @@
+defaults:
+  - default
+  - default_rnn
+  - _self_
+
+name: coles
+
+module:
+  _target_: pretpp.modules.BaseModule
+  head_partial:
+    _target_: pretpp.nn.NormalizationHead
+    _partial_: true
+  loss_projection_partial: ${nohead}
+  loss:
+    _target_: pretpp.losses.ColesLoss
+    embedding_dim: ${module.seq_encoder.rnn_partial.hidden_size}
+    min_length: 16
+    max_length: 48
+    n_splits: 5
+    coles_loss:
+      _target_: ptls.frames.coles.losses.ContrastiveLoss
+      margin: 0.5
+      sampling_strategy:
+        _target_: ptls.frames.coles.sampling_strategies.HardNegativePairSelector
+        neg_count: 5
