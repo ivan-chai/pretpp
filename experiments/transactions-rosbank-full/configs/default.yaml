@@ -41,12 +41,12 @@ data_module:
   train_params:
     min_required_length: 2
     min_length: 256
-    max_length: 1200
+    max_length: 400
   val_params:
-    max_length: 512
+    max_length: 400
     position: last
   test_params:
-    max_length: 512
+    max_length: 400
     position: last
   global_target_fields: target_flag
   train_path: data/train.parquet

@@ -11,7 +11,7 @@ class PositionalEncoding(torch.nn.Module):
     Mei H., Yang C., Eisner J. "Transformer embeddings of irregularly spaced events and their participants", ICLR 2021.
 
     Args:
-        pos_type: Either `pos-embedding`, `pos-angular`, `time-angular`, or `none`.
+        pos_type: Either `pos-embedding`, `pos-angular`, `time-angular-abs`, `time-angular-rel`, or `none`.
         max_duration: Must be provided if time encodings are used.
         min_time_step: The minimum time step (> 0). By default it is max_duration / n_positions.
     """
@@ -30,7 +30,7 @@ class PositionalEncoding(torch.nn.Module):
             pe = torch.arange(n_positions)
             self.register_buffer("pe", pe, persistent=False)
             self.embeddings = torch.nn.Embedding(n_positions, n_embd)
-        elif pos_type == "time-angular":
+        elif pos_type in ["time-angular-abs", "time-angular-rel"]:
             if max_duration is None:
                 raise ValueError("Need max_duration for time embeddings.")
             if n_embd % 2 != 0:
@@ -49,9 +49,11 @@ class PositionalEncoding(torch.nn.Module):
             embeddings = self.pe[:x.shape[1]]
         elif self.pos_type == "pos-embedding":
             embeddings = self.embeddings(self.pe[:x.shape[1]])
-        elif self.pos_type == "time-angular":
+        elif self.pos_type in ["time-angular-abs", "time-angular-rel"]:
             if timestamps is None:
                 raise ValueError("Need timestamps for the selected positional encoding scheme.")
+            if self.pos_type == "time-angular-rel":
+                timestamps = timestamps - timestamps[:, :1]
             args = timestamps.unsqueeze(-1) / self.pe  # (B, L, D).
             embeddings = torch.cat([torch.sin(args), torch.cos(args)], -1)
         else:
@@ -63,7 +65,7 @@ class Transformer(torch.nn.Module):
     """Simple transformer mimicing HuggingFace interface.
 
     Args:
-        pos_type: Either `pos-embedding`, `pos-angular`, `time-angular`, or `none`.
+        pos_type: Either `pos-embedding`, `pos-angular`, `time-angular-abs`, `time-angular-rel`, or `none`.
         max_duration: Must be provided if time encodings are used.
         min_time_step: The minimum time step (> 0). By default it is max_duration / n_positions.
     """

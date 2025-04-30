@@ -14,6 +14,6 @@ module:
       n_head: ${transformer_heads}
       n_inner: ${transformer_inter_size}
       max_duration: ${max_duration}
-      pos_type: time-angular
+      pos_type: time-angular-rel
       causal: True
     max_context: ${transformer_context}
