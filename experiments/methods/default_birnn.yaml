@@ -1,0 +1,9 @@
+defaults:
+  - default_rnn
+  - _self_
+
+module:
+  seq_encoder:
+    rnn_partial:
+      _target_: pretpp.nn.BidirGRU
+      hidden_size: ${rnn_half_hidden_size}

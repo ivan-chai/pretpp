@@ -1,0 +1,19 @@
+defaults:
+  - next_item_metric
+  - _self_
+
+data_module:
+  batch_size: 96
+name: next_item_metric_trans_cont
+
+module:
+  init_state_dict: checkpoints/next_item_metric_trans.ckpt
+  seq_encoder:
+    rnn_partial:
+      hidden_size: 1536
+  optimizer_partial:
+    lr: 0.0001
+
+trainer:
+  max_epochs: 20
+  check_val_every_n_epoch: 1

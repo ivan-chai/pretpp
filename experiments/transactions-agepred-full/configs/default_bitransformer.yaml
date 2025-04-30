@@ -1,18 +1,1 @@
-module:
-  seq_encoder:
-    _target_: hotpp.nn.Encoder
-    model_partial:
-      _target_: hotpp.nn.HuggingFaceTransformer
-      _partial_: true
-      model:
-        _target_: pretpp.nn.Transformer
-        config:
-          _target_: pretpp.nn.TransformerConfig
-          n_positions: ${transformer_positions}
-          n_embd: ${transformer_hidden_size}
-          n_layer: ${transformer_layers}
-          n_head: ${transformer_heads}
-          n_inner: ${transformer_inter_size}
-          causal: False
-          output_hidden_states: True  #Necessary argument
-    max_context: ${transformer_context}
+../../methods/default_bitransformer.yaml
