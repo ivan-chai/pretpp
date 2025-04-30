@@ -5,6 +5,7 @@ num_classes: 109
 num_classes_plus1: 110
 max_time_delta: 30
 max_duration: 500
+num_downstream_classes: 2
 
 rnn_hidden_size: 512
 rnn_half_hidden_size: 256

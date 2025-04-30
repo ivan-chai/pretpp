@@ -18,7 +18,7 @@ module:
     _target_: pretpp.losses.ClassificationLoss
     targets:
       target:
-        num_classes: 4
+        num_classes: ${num_downstream_classes}
         cast: true
   optimizer_partial:
     lr: 0.0001
