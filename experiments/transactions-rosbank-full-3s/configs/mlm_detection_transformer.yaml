@@ -1,0 +1,102 @@
+defaults:
+  - default
+  - default_transformer
+  - _self_
+
+name: mlm_detection_transformer
+
+detection_k: 32
+
+conditional_head:
+  k: ${detection_k}
+
+metric_conditional_head:
+  head_params:
+    k: ${detection_k}
+
+data_module:
+  batch_size: 32
+
+module:
+  _target_: pretpp.modules.BaseModule
+  seq_encoder:
+    _target_: hotpp.nn.Encoder
+    embedder:
+      embeddings:
+        labels:
+          in: ${num_classes_plus1}
+        channel_type:
+          in: 8  # plus 1.
+        currency:
+          in: 69  # plus 1.
+        trx_category:
+          in: 12  # plus 1.
+  loss_projection_partial: ${conditional_head}
+  loss:
+    _target_: pretpp.losses.MLMDeTPPLoss
+    eval_fraction: 0.25
+    mask_prob: 0.2
+    # MLM params.
+    mask_token:
+      timestamps: -1
+      labels: 385
+      channel_type: 7
+      currency: 68
+      trx_category: 11
+      log_amount: 0
+    # Detection params.
+    k: ${detection_k}
+    horizon: 14  # days.
+    prefetch_factor: 1
+    categorical_fields:
+      - labels
+      - currency
+      - channel_type
+      - trx_category
+    next_item_adapter:
+      timestamps: mode
+      labels: mean
+      currency: mean
+      channel_type: mean
+      trx_category: mean
+      log_amount: mean
+    match_weights:
+      _presence: 3
+      timestamps: 0.35
+      labels: 1.0
+      channel_type: 0.2
+      currency: 0.2
+      trx_category: 0.43
+      log_amount: 0.4
+    next_item_loss:
+      _target_: hotpp.losses.NextItemLoss
+      losses:
+        _presence:
+          _target_: hotpp.losses.BinaryCrossEntropyLoss
+          grad_scale: null
+        timestamps:
+          _target_: hotpp.losses.TimeMAELoss
+          delta: start
+          max_delta: ${max_duration}
+          smoothing: 1
+          grad_scale: null
+        labels:
+          _target_: hotpp.losses.CrossEntropyLoss
+          num_classes: ${num_classes}
+        currency:
+          _target_: hotpp.losses.CrossEntropyLoss
+          num_classes: 68
+          grad_scale: null
+        channel_type:
+          _target_: hotpp.losses.CrossEntropyLoss
+          num_classes: 7
+          grad_scale: null
+        trx_category:
+          _target_: hotpp.losses.CrossEntropyLoss
+          num_classes: 11
+          grad_scale: null
+        log_amount:
+          _target_: hotpp.losses.MAELoss
+          grad_scale: null
+trainer:
+  check_val_every_n_epoch: 5
