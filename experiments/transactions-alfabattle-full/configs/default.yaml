@@ -19,6 +19,26 @@ transformer_layers: 6
 transformer_context: 256
 transformer_positions: 1232
 transformer_dropout: 0.1
+transformer_cls_token:
+  timestamps: -1
+  labels: ${num_classes}  # Use final label for CLS.
+  channel_type: 0
+  currency: 0
+  operation_kind: 0
+  operation_type: 0
+  operation_type_group: 0
+#  card_type: 0
+  ecommerce_flag: 0
+  payment_system: 0
+  income_flag: 0
+#  country: 0
+#  city: 0
+  mcc_category: 0
+  day_of_week: 0
+  hour: 0
+  weekofyear: 0
+  log_amount: -1
+  log_hour_diff: -1
 
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger

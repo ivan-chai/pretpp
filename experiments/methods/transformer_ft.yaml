@@ -5,3 +5,7 @@ defaults:
   - _self_
 
 base_name: _
+
+module:
+  loss:
+    cls_token: ${transformer_cls_token}

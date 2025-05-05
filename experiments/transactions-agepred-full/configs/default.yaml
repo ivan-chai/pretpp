@@ -19,6 +19,10 @@ transformer_layers: 4
 transformer_context: 256
 transformer_positions: 1536
 transformer_dropout: 0.3
+transformer_cls_token:
+  timestamps: -1
+  labels: ${num_classes}  # Use final label for CLS.
+  log_amount: -1
 
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger

@@ -45,7 +45,7 @@ class ClassificationLoss(BaseLoss):
         if self._cls_token is not None:
             # Add CLS token to the end of inputs and add fake targets.
             new_inputs = {k: v for k, v in inputs.payload.items() if k not in inputs.seq_names}
-            last_indices = inputs.seq_lens.unsqueeze(1)  # (B).
+            last_indices = inputs.seq_lens  # (B).
             b = len(inputs)
             for k, t in self._cls_token.items():
                 v = inputs.payload[k]
