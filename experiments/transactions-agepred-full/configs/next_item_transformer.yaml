@@ -25,4 +25,4 @@ module:
         _target_: hotpp.losses.MAELoss
         grad_scale: 0.45
 trainer:
-  max_epochs: 60
+  max_epochs: 50

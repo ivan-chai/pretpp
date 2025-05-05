@@ -5,3 +5,7 @@ defaults:
   - _self_
 
 name: supervised_transformer
+
+module:
+  loss:
+    cls_token: ${transformer_cls_token}

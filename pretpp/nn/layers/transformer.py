@@ -83,10 +83,13 @@ class Transformer(torch.nn.Module):
 
         self.input_projection = torch.nn.Linear(input_size, n_embd)
 
+        # We use norm_first by default.
+        # See the original paper: Xiong R. et al. "On layer normalization in the transformer architecture" ICML 2020.
         layer = torch.nn.TransformerEncoderLayer(d_model=n_embd,
                                                  nhead=n_head,
                                                  dim_feedforward=n_inner,
                                                  dropout=dropout,
+                                                 norm_first=True,
                                                  batch_first=True)
         self.encoder = torch.nn.TransformerEncoder(layer, n_layer)
         self.positional = PositionalEncoding(n_embd=n_embd,

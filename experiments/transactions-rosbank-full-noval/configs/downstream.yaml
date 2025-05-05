@@ -1,6 +1,6 @@
 data_splits: [train, test]  # Val is equal to test.
 workers: 2
-total_cpu_count: 8
+total_cpu_count: 15
 log_level: ERROR
 environment:
   work_dir: _
