@@ -45,6 +45,7 @@ class BaseModule(pl.LightningModule):
         init_prefixes: A list of prefixes to initialize from checkpoint. By default, initialize all parameters
             except loss and loss projection.
         freeze_prefixes: A list of prefixes to exclude from training.
+        peft_adapter: A function for applying PEFT to the encoder model.
         val_metric: Validation set metric.
         test_metric: Test set metric.
         downstream_validation_config: If provided, evaluate downstream metrics on each validation step.
@@ -59,6 +60,7 @@ class BaseModule(pl.LightningModule):
                  init_state_dict=None,
                  init_prefixes=None,
                  freeze_prefixes=None,
+                 peft_adapter=None,
                  val_metric=None,
                  test_metric=None,
                  downstream_validation_config=None):
@@ -74,6 +76,8 @@ class BaseModule(pl.LightningModule):
         self._downstream_config = downstream_validation_config
         self._optimizer_partial = optimizer_partial
         self._lr_scheduler_partial = lr_scheduler_partial
+        self._peft_adapter = peft_adapter
+        self._peft_applied = False
 
         if head_partial is None:
             head_partial = IdentityHead
@@ -114,9 +118,21 @@ class BaseModule(pl.LightningModule):
         else:
             self.freeze_parameters = set()
 
+    def setup(self, stage):
+        assert not self._peft_applied
+        if (stage == "fit") and (self._peft_adapter is not None):
+            self._seq_encoder = self._peft_adapter(self._seq_encoder)
+            self._peft_applied = True
+
+    def teardown(self, stage):
+        if self._peft_applied:
+            self._seq_encoder = self._seq_encoder.merge_and_unload()
+            self._peft_applied = False
+
     def forward(self, x):
         """Extract embeddings."""
-        hiddens, _ = self._seq_encoder(x)  # (B, L, D).
+        seq_encoder = self._seq_encoder if not self._peft_applied else self._seq_encoder.base_model
+        hiddens, _ = seq_encoder(x)  # (B, L, D).
         hiddens = self._head(hiddens)
         return hiddens
 
@@ -201,7 +217,8 @@ class BaseModule(pl.LightningModule):
             self._test_metric.reset()
 
     def configure_optimizers(self):
-        optimizer = self._optimizer_partial([v for k, v in self.named_parameters() if k not in self.freeze_parameters])
+        optimizer = self._optimizer_partial([v for k, v in self.named_parameters()
+                                             if (k not in self.freeze_parameters) and v.requires_grad])
         if self._lr_scheduler_partial is None:
             return optimizer
         else:
