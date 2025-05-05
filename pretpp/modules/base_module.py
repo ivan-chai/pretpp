@@ -122,6 +122,9 @@ class BaseModule(pl.LightningModule):
         assert not self._peft_applied
         if (stage == "fit") and (self._peft_adapter is not None):
             self._seq_encoder = self._peft_adapter(self._seq_encoder)
+            import peft
+            if not isinstance(self._seq_encoder.peft_config["default"], peft.LoraConfig):
+                raise NotImplementedError("Only LoRA adapters are supported")
             self._peft_applied = True
 
     def teardown(self, stage):
