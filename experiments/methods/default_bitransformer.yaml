@@ -6,7 +6,7 @@ module:
         labels:
           in: ${num_classes_plus1}  # Add CLS token.
     model_partial:
-      _target_: pretpp.nn.Transformer
+      _target_: hotpp.nn.SimpleTransformer
       _partial_: true
       n_positions: ${transformer_positions}
       n_embd: ${transformer_hidden_size}
