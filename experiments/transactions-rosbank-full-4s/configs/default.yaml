@@ -1,0 +1,9 @@
+defaults:
+  - default_base
+  - _self_
+
+logger:
+  project: pretpp-rosbank-full-4s
+
+data_module:
+  train_path: data/train_unsup.parquet
