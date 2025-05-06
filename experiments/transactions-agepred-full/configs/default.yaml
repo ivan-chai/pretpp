@@ -38,7 +38,7 @@ data_module:
   fields: [timestamps, labels, log_amount]
   batch_size: 64
   train_params:
-    min_length: 128
+    min_length: 1000
     max_length: 1200
   num_workers: 4
   global_target_fields: target
