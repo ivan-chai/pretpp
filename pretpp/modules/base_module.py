@@ -76,6 +76,7 @@ class BaseModule(pl.LightningModule):
         self._downstream_config = downstream_validation_config
         self._optimizer_partial = optimizer_partial
         self._lr_scheduler_partial = lr_scheduler_partial
+        self._freeze_prefixes = freeze_prefixes
         self._peft_adapter = peft_adapter
         self._peft_applied = False
 
@@ -109,23 +110,30 @@ class BaseModule(pl.LightningModule):
                           for k in my_state_dict}
             self.load_state_dict(state_dict)
 
-        if freeze_prefixes is not None:
-            all_names = set(self.state_dict())
-            self.freeze_parameters = set()
-            for prefix in freeze_prefixes:
-                self.freeze_parameters |= {name for name in all_names if name.startswith(prefix)}
-            print("Freeze", self.freeze_parameters)
-        else:
-            self.freeze_parameters = set()
-
     def setup(self, stage):
         assert not self._peft_applied
+        freeze_prefixes = self._freeze_prefixes or set()
         if (stage == "fit") and (self._peft_adapter is not None):
             self._seq_encoder = self._peft_adapter(self._seq_encoder)
             import peft
             if not isinstance(self._seq_encoder.peft_config["default"], peft.LoraConfig):
                 raise NotImplementedError("Only LoRA adapters are supported")
+            freeze_prefixes = {prefix.replace("_seq_encoder", "_seq_encoder.base_model.model")
+                               for prefix in freeze_prefixes}
             self._peft_applied = True
+
+        if freeze_prefixes:
+            all_names = set(self.state_dict())
+            freeze_parameters = set()
+            for prefix in freeze_prefixes:
+                freeze_parameters |= {name for name in all_names if name.startswith(prefix)}
+            print("Freeze", freeze_parameters)
+            for name, p in self.named_parameters():
+                if name in freeze_parameters:
+                    p.requires_grad = False
+                    freeze_parameters.discard(name)
+            if freeze_parameters:
+                raise RuntimeError(f"The following parameters were not found: {freeze_parameters}")
 
     def teardown(self, stage):
         if self._peft_applied:
@@ -220,8 +228,7 @@ class BaseModule(pl.LightningModule):
             self._test_metric.reset()
 
     def configure_optimizers(self):
-        optimizer = self._optimizer_partial([v for k, v in self.named_parameters()
-                                             if (k not in self.freeze_parameters) and v.requires_grad])
+        optimizer = self._optimizer_partial([v for k, v in self.named_parameters() if v.requires_grad])
         if self._lr_scheduler_partial is None:
             return optimizer
         else:
@@ -289,7 +296,7 @@ class BaseModule(pl.LightningModule):
     @torch.no_grad()
     def _get_grad_norm(self):
         names, parameters = zip(*[pair for pair in self.named_parameters()
-                                  if pair[1].requires_grad and (pair[0] not in self.freeze_parameters)])
+                                  if pair[1].requires_grad])
         norms = torch.zeros(len(parameters), device=parameters[0].device)
         for i, (name, p) in enumerate(zip(names, parameters)):
             if p.grad is None:
