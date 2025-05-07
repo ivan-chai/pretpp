@@ -1,0 +1,11 @@
+date: '2025-05-05 14:33:32'
+test/accuracy-target_flag: 0.7559999823570251
+test/batch-accuracy-target_flag: 0.7560000419616699
+test/downstream: 0.8119999766349792
+test/loss: 0.5983603000640869
+test/loss_target_flag: 0.5983603000640869
+val/accuracy-target_flag: 0.7559999823570251
+val/batch-accuracy-target_flag: 0.7560000419616699
+val/downstream: 0.8989999890327454
+val/loss: 0.5983603000640869
+val/loss_target_flag: 0.5983603000640869

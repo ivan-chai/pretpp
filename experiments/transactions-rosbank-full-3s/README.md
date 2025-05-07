@@ -1,1 +1,4 @@
-Use different subset of train for pretraining and fine-tuning.
+A variant of Rosbank preprocessing with the following subsets:
+- train (unlabeled and part of labeled)
+- val (all labeled except test)
+- test

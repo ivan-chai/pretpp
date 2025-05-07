@@ -1,0 +1,17 @@
+date: '2025-04-30 22:10:27'
+test/downstream: 0.8240000009536743
+test/loss: 5.07686710357666
+test/loss_channel_type: 0.0005754722515121102
+test/loss_currency: 0.08248185366392136
+test/loss_labels: 2.603342056274414
+test/loss_log_amount: 1.2451362609863281
+test/loss_timestamps: 0.6170920729637146
+test/loss_trx_category: 0.5282394886016846
+val/downstream: 0.8230000138282776
+val/loss: 4.958987712860107
+val/loss_channel_type: 0.0005650994135066867
+val/loss_currency: 0.06606879085302353
+val/loss_labels: 2.5752670764923096
+val/loss_log_amount: 1.2217319011688232
+val/loss_timestamps: 0.6018558740615845
+val/loss_trx_category: 0.49349886178970337

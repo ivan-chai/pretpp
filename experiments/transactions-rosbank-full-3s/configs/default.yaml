@@ -4,7 +4,3 @@ defaults:
 
 logger:
   project: pretpp-rosbank-full-3s
-
-data_module:
-  train_path: data/train1.parquet
-  val_path: data/train2.parquet
