@@ -16,6 +16,7 @@ TRANSACTIONS_FILES = [
 
 SEED = 42
 TEST_SIZE = 0.1
+VAL_LABELED_SIZE = 0.5
 
 TARGET_FILE = "train"
 
@@ -100,12 +101,12 @@ def train_val_test_split(transactions, targets):
     Random(SEED).shuffle(labeled_ids)
     n_clients_test = int(len(labeled_ids) * TEST_SIZE)
     test_ids = set(labeled_ids[-n_clients_test:])
-    train_unsup_ids = unlabeled_ids
     dev_sup_ids = list(sorted(labeled_ids[:-n_clients_test]))
     Random(SEED + 1).shuffle(dev_sup_ids)
-    n_clients_val = int(len(dev_sup_ids) * 0.5)
+    n_clients_val = int(len(dev_sup_ids) * VAL_LABELED_SIZE)
     val_ids = set(dev_sup_ids[-n_clients_val:])
     train_sup_ids = set(dev_sup_ids[:-n_clients_val])
+    train_unsup_ids = unlabeled_ids | train_sup_ids
 
     testset = transactions.filter(transactions["id"].isin(test_ids))
     valset = transactions.filter(transactions["id"].isin(val_ids))
