@@ -1,3 +1,7 @@
+data_module:
+  train_params:
+    min_length: ${transformer_min_length}
+
 module:
   seq_encoder:
     _target_: hotpp.nn.Encoder
