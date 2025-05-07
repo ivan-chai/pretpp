@@ -11,8 +11,9 @@ class ClassificationLoss(BaseLoss):
     Args:
         targets: A mapping from a target name to dictionary with "num_classes" and optional "weight" and "cast" fields.
         cls_token: A dictionary with field values for a CLS token (optional, typically for transformer models).
+        apply_to_all_outputs: Whether to compute loss for global classification targets with aggregated embedding or for each embedding.
     """
-    def __init__(self, targets, cls_token=None):
+    def __init__(self, targets, cls_token=None, apply_to_all_outputs=False):
         super().__init__()
         for name, spec in targets.items():
             if "num_classes" not in spec:
@@ -23,6 +24,7 @@ class ClassificationLoss(BaseLoss):
         self._targets = targets
         self._order = list(sorted(targets))
         self._cls_token = cls_token
+        self._apply_to_all_outputs = apply_to_all_outputs
 
     @property
     def input_size(self):
@@ -31,7 +33,7 @@ class ClassificationLoss(BaseLoss):
     @property
     def aggregate(self):
         # Use aggregation if there is no special token.
-        return self._cls_token is None
+        return (self._cls_token is None) and (not self._apply_to_all_outputs)
 
     def prepare_inference_batch(self, inputs):
         """Extract model inputs for inference.
@@ -85,54 +87,56 @@ class ClassificationLoss(BaseLoss):
 
         Args:
             outputs: Model outputs with shape (B, L, D).
-                Outputs can be dictionary with predictions for particular fields.
             targets: Target features with shape (B, L) or (B).
 
         Returns:
             Losses dict and metrics dict.
         """
-        # Input is an aggregated embedding.
-        if not isinstance(outputs, dict):
-            outputs = self._split_outputs(outputs)  # (B, 1, D).
+        outputs, lengths = self._split_outputs(outputs)  # (B, L, D).
+        last = (lengths - 1).clip(min=0)[:, None, None]  # (B, 1, 1).
         losses = {}
         metrics = {}
         for name in set(targets.payload) & set(outputs):
             spec = self._targets[name]
-            if targets.payload[name].ndim != 1:
+            target = targets.payload[name]  # (B).
+            if target.ndim != 1:
                 raise NotImplementedError("Only global targets are supported.")
-            logits = outputs[name]
-            target = targets.payload[name]
+            logits = outputs[name]  # (B, L, D).
             if spec.get("cast", False):
                 target = target.long()
-            losses[name] = torch.nn.functional.cross_entropy(logits, target)
+            losses[name] = torch.nn.functional.cross_entropy(logits.flatten(0, -2), target[:, None].repeat(1, logits.shape[1]).flatten())
             if spec.get("weight", 1) != 1:
                 losses[name] = ScaleGradient.apply(losses[name], spec["weight"])
-            metrics[f"batch-accuracy-{name}"] = (logits.detach().argmax(1) == target).float().mean()
+            with torch.no_grad():
+                last_logits = logits.take_along_dim(last, 1).squeeze(1)  # (B, D).
+                metrics[f"batch-accuracy-{name}"] = (last_logits.argmax(-1) == target).float().mean()
         return losses, metrics
 
     def predict(self, outputs):
-        lengths = outputs.seq_lens
-        if not isinstance(outputs, dict):
-            outputs = self._split_outputs(outputs)  # (B, 1, D).
+        orig_lengths = outputs.seq_lens
+        outputs, lengths = self._split_outputs(outputs)  # (B, L, D).
+        last = (lengths - 1).clip(min=0)[:, None, None]  # (B, 1, 1).
         result = {}
         for name in set(self._targets) & set(outputs):
-            result[name] = outputs[name].squeeze(1).argmax(-1)  # (B).
-        return PaddedBatch(result, lengths, seq_names={})
+            result[name] = outputs[name].take_along_dim(last, 1).squeeze(1).argmax(-1)  # (B).
+        return PaddedBatch(result, orig_lengths, seq_names={})
 
     def _split_outputs(self, outputs):
         """Convert parameters tensor to the dictionary with parameters for each loss."""
         outputs, lengths = outputs.payload, outputs.seq_lens
         if outputs.ndim != 3:
             raise NotImplementedError("Expected outputs with shape (B, L, C).")
-        if self._cls_token is not None:
+        if self._apply_to_all_outputs:
+            # Use all output vectors.
+            pass
+        elif self._cls_token is not None:
             # Extract CLS token embedding.
             last_indices = lengths - 1
             b = len(last_indices)
-            outputs = outputs.take_along_dim(last_indices.reshape(*([b] + [1] * (outputs.ndim - 1))), 1).squeeze(1)
-        else:
-            if outputs.shape[1] != 1:
-                raise NotImplementedError("Expected aggregated embedding with shape (B, 1, C).")
-            outputs = outputs.squeeze(1)
+            outputs = outputs.take_along_dim(last_indices.reshape(*([b] + [1] * (outputs.ndim - 1))), 1)  # (B, 1, C).
+            lengths = (lengths > 0).long()
+        elif outputs.shape[1] != 1:
+            raise NotImplementedError("Expected aggregated embedding with shape (B, 1, C).")
         offset = 0
         result = {}
         for name in self._order:
@@ -141,4 +145,4 @@ class ClassificationLoss(BaseLoss):
             offset += nc
         if offset != outputs.shape[-1]:
             raise ValueError("Predictions tensor has inconsistent size.")
-        return result
+        return result, lengths

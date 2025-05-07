@@ -48,7 +48,7 @@ def evaluation_worker(config, tasks_queue, results_queue):
                                      precomputed_embeddings=embeddings,
                                      precomputed_targets=targets)
             metrics = {f"{split}/downstream": mean
-                    for split, (mean, std) in scores.items()}
+                       for split, (mean, std) in scores.items()}
             results_queue.put((i, step, metrics))
     except Exception as e:
         results_queue.put(e)
@@ -207,8 +207,11 @@ class DownstreamEvaluator:
     def _receive(self, wait=False):
         messaged = False
         while True:
-            while not self.results_queue.empty():
-                result = self.results_queue.get()
+            while True:
+                try:
+                    result = self.results_queue.get(block=False)
+                except queue.Empty:
+                    break
                 if isinstance(result, Exception):
                     raise result
                 i, step, metrics = result
