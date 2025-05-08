@@ -21,6 +21,8 @@ module:
   head_partial:
     _target_: pretpp.nn.NormalizationHead
     _partial_: true
+  aggregator:
+    _target_: hotpp.nn.LastAggregator
   loss_projection_partial: ${nohead}
   loss:
     _target_: pretpp.losses.ColesLoss
