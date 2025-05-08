@@ -10,9 +10,6 @@ data_module:
 
 detection_k: 32
 
-conditional_head:
-  k: ${detection_k}
-
 metric_conditional_head:
   head_params:
     k: ${detection_k}
@@ -30,24 +27,28 @@ module:
     loss_subset: 0.25
     prefetch_factor: 1
     match_weights:
-      _presence: 3
-      timestamps: 0.35
-      labels: 0.43
-      log_amount: 0.4
+      _presence: 8
+      timestamps: 1
+      labels: 1
+      log_amount: 1
     next_item_loss:
       _target_: hotpp.losses.NextItemLoss
       losses:
         _presence:
           _target_: hotpp.losses.BinaryCrossEntropyLoss
+          grad_scale: null
         timestamps:
           _target_: hotpp.losses.TimeMAELoss
           delta: start
           max_delta: ${max_duration}
+          grad_scale: null
         labels:
           _target_: hotpp.losses.CrossEntropyLoss
           num_classes: ${num_classes}
+          grad_scale: null
         log_amount:
           _target_: hotpp.losses.MAELoss
+          grad_scale: null
     next_item_adapter:
       timestamps: mode
       labels: mean
