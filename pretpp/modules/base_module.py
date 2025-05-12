@@ -123,7 +123,7 @@ class BaseModule(pl.LightningModule):
             self._peft_applied = True
 
         if freeze_prefixes:
-            all_names = set(self.state_dict())
+            all_names = [name for name, p in self.named_parameters()]
             freeze_parameters = set()
             for prefix in freeze_prefixes:
                 freeze_parameters |= {name for name in all_names if name.startswith(prefix)}
