@@ -140,6 +140,20 @@ class BaseModule(pl.LightningModule):
             self._seq_encoder = self._seq_encoder.merge_and_unload()
             self._peft_applied = False
 
+    def load_state_dict(self, state_dict, strict=True, assign=False):
+        try:
+            return super().load_state_dict(state_dict, strict=strict, assign=assign)
+        except RuntimeError:
+            if self._peft_adapter is None:
+                raise
+        print("Try to restore from PEFT checkpoint")
+        self._seq_encoder = self._peft_adapter(self._seq_encoder)
+        try:
+            result = super().load_state_dict(state_dict, strict=strict, assign=assign)
+        finally:
+            self._seq_encoder = self._seq_encoder.merge_and_unload()
+        return result
+
     def forward(self, x):
         """Extract embeddings."""
         seq_encoder = self._seq_encoder if not self._peft_applied else self._seq_encoder.base_model
