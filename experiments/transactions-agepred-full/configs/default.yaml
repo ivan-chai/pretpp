@@ -8,7 +8,7 @@ max_duration: 8
 num_downstream_classes: 4
 
 rnn_hidden_size: 800
-rnn_half_hidden_size: 256
+rnn_half_hidden_size: 400
 rnn_inference_context: 1200
 rnn_inference_context_step: 200
 rnn_min_length: 1000
