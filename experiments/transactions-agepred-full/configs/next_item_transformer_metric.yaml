@@ -1,8 +1,8 @@
 defaults:
-  - next_item
+  - next_item_transformer
   - _self_
 
-name: next_item_metric
+name: next_item_transformer_metric
 
 module:
   head_partial:

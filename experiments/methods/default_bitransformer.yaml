@@ -1,23 +1,7 @@
+defaults:
+  - default_transformer
+  - _self_
+
 module:
-  seq_encoder:
-    _target_: hotpp.nn.Encoder
-    embedder:
-      embeddings:
-        labels:
-          in: ${num_classes_plus1}  # Add CLS token.
     model_partial:
-      _target_: hotpp.nn.SimpleTransformer
-      _partial_: true
-      n_positions: ${transformer_positions}
-      n_embd: ${transformer_hidden_size}
-      n_layer: ${transformer_layers}
-      n_head: ${transformer_heads}
-      n_inner: ${transformer_inter_size}
-      max_duration: ${max_duration}
-      pos_type: time-angular-rel
-      activation:
-        _partial_: True
-        _target_: torch.nn.functional.gelu
-      dropout: ${transformer_dropout}
       causal: False
-    max_context: ${transformer_context}

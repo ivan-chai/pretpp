@@ -1,6 +1,6 @@
 import torch
 from hotpp.data import PaddedBatch
-from hotpp.nn import Head, ConditionalHead
+from hotpp.nn import Head, ConditionalHead, SimpleTransformer
 from .metric import MetricLayer
 
 
@@ -73,3 +73,10 @@ class MetricConditionalHead(torch.nn.Sequential):
     @property
     def output_size(self):
         return self._output_size
+
+
+class TransformerHead(SimpleTransformer):
+    def forward(self, x):
+        b, l = x.shape
+        dummy_timestamps = PaddedBatch(torch.arange(l)[None].float().expand(b, l), x.seq_lens)
+        return super().forward(x, dummy_timestamps)[0]

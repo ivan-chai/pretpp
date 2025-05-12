@@ -1,5 +1,6 @@
-defaults:
-  - _self_
+data_module:
+  train_params:
+    min_length: ${rnn_min_length}
 
 module:
   seq_encoder:

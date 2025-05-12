@@ -5,9 +5,9 @@ name: ${base_name}_ft
 
 module:
   optimizer_partial:
-    lr: 0.0001
+    lr: 0.001
   init_state_dict: checkpoints/${base_name}.ckpt
 
 trainer:
-  max_epochs: 30
-  check_val_every_n_epoch: 3
+  max_epochs: 20
+  check_val_every_n_epoch: 1

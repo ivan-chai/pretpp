@@ -7,10 +7,11 @@ max_time_delta: 8
 max_duration: 8
 num_downstream_classes: 4
 
-rnn_hidden_size: 512
-rnn_half_hidden_size: 256
+rnn_hidden_size: 800
+rnn_half_hidden_size: 400
 rnn_inference_context: 1200
 rnn_inference_context_step: 200
+rnn_min_length: 1000
 
 transformer_hidden_size: 512
 transformer_inter_size: 1024
@@ -19,6 +20,7 @@ transformer_layers: 4
 transformer_context: 256
 transformer_positions: 1536
 transformer_dropout: 0.3
+transformer_min_length: 128
 transformer_cls_token:
   timestamps: -1
   labels: ${num_classes}  # Use final label for CLS.
@@ -38,7 +40,7 @@ data_module:
   fields: [timestamps, labels, log_amount]
   batch_size: 64
   train_params:
-    min_length: 1000
+    min_length: _
     max_length: 1200
   num_workers: 4
   global_target_fields: target
@@ -91,7 +93,7 @@ module:
         log_amount: identity
     max_time_delta: ${max_time_delta}
   aggregator:
-    _target_: hotpp.nn.LastAggregator
+    _target_: hotpp.nn.MeanAggregator
   optimizer_partial:
     _partial_: true
     _target_: torch.optim.Adam
@@ -109,7 +111,7 @@ module:
 trainer:
   accelerator: cuda
   devices: 1
-  max_epochs: 30
+  max_epochs: 45
   enable_checkpointing: true
   precision: 16-mixed
   gradient_clip_val: 1  # Increases training stability.
