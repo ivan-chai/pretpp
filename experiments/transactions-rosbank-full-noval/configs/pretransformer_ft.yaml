@@ -1,0 +1,46 @@
+defaults:
+  - default
+  - default_transformer
+  - default_ft
+  - _self_
+
+base_name: agepred_trans_next_item_transformer # agepred_trans_detpp_plus_transformer_metric
+
+transformer_hidden_size: 512
+transformer_inter_size: 1024
+transformer_heads: 4
+transformer_layers: 4
+transformer_dropout: 0.1
+
+module:
+#  head_partial:
+#    _target_: pretpp.nn.NormalizationHead
+#    _partial_: true
+  loss:
+    cls_token: ${transformer_cls_token}
+#  init_state_dict: ../pretrained-models/detpp_plus_transformer_metric.ckpt
+  init_state_dict: ../pretrained-models/next_item_transformer.ckpt
+  init_prefixes:
+    - _seq_encoder.model.encoder.
+#  freeze_prefixes:
+#    - _seq_encoder.model.encoder.layers.1
+#    - _seq_encoder.model.encoder.layers.2
+  peft_adapter:
+    _partial_: true
+    _target_: peft.get_peft_model
+    peft_config:
+      _target_: peft.LoraConfig
+      task_type:
+        _target_: peft.TaskType
+        _args_: ["SEQ_CLS"]
+      r: 32
+      lora_alpha: 32
+      lora_dropout: 0.1
+      target_modules: ["self_attn", "linear1", "linear2"]
+      modules_to_save: []
+  optimizer_partial:
+    lr: 0.001
+
+trainer:
+  max_epochs: 50
+  check_val_every_n_epoch: 5
