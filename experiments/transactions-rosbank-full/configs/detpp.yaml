@@ -20,7 +20,7 @@ module:
     _target_: pretpp.losses.DeTPPLoss
     k: ${detection_k}
     horizon: 7  # week.
-    loss_subset: 0.25
+    loss_subset: 0.5
     prefetch_factor: 1
     categorical_fields:
       - labels
