@@ -13,7 +13,7 @@ rnn_inference_context: 1200
 rnn_inference_context_step: 200
 rnn_min_length: 1000
 
-transformer_hidden_size: 512
+transformer_hidden_size: 1024
 transformer_inter_size: 1024
 transformer_heads: 4
 transformer_layers: 4
@@ -70,13 +70,13 @@ metric_head:
 conditional_head:
   _target_: hotpp.nn.ConditionalHead
   _partial_: true
-  hidden_dims: [512]
+  hidden_dims: [256]
   use_batch_norm: true
 
 metric_conditional_head:
   _target_: pretpp.nn.MetricConditionalHead
   _partial_: true
-  hidden_dims: [512]
+  hidden_dims: [256]
   head_params:
     use_batch_norm: true
 
