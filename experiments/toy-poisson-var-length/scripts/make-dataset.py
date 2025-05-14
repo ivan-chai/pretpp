@@ -20,8 +20,10 @@ def parse_args():
     parser.add_argument("--root", help="Dataset root", default="data")
     parser.add_argument("--n-presets", help="The number of presets", type=int, default=10)
     parser.add_argument("--n-labels", help="The number of labels", type=int, default=3)
+    parser.add_argument("--max-frequency", help="The maximum events frequency", type=float, default=1)
     parser.add_argument("--size", help="Dataset size", type=int, default=10000)
-    parser.add_argument("--length", help="Sequence length", type=int, default=64)
+    parser.add_argument("--min-length", help="A minimum sequence length", type=int, default=16)
+    parser.add_argument("--max-length", help="A maximum sequence length", type=int, default=64)
     return parser.parse_args()
 
 

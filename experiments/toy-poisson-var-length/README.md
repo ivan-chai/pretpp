@@ -2,7 +2,7 @@ C presets, N clients.
 
 Each preset is characterized by label frequencies. The goal is to recognize preset from each client's transactions.
 
-All sequences have a length equal to 64.
+Sequences have varying lengths.
 
 Make dataset:
 ```sh

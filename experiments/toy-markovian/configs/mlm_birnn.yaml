@@ -1,0 +1,23 @@
+defaults:
+  - default
+  - default_birnn
+  - _self_
+
+name: mlm_birnn
+
+module:
+  _target_: pretpp.modules.BaseModule
+  loss_projection_partial: ${head}
+  loss:
+    _target_: pretpp.losses.MLMLoss
+    timedeltas_field: timedeltas
+    losses:
+      timedeltas:
+        _target_: hotpp.losses.MAELoss
+      labels:
+        _target_: hotpp.losses.CrossEntropyLoss
+        num_classes: ${num_classes}
+    mask_token:
+      timestamps: -1
+      timedeltas: -1
+      labels: ${num_classes}

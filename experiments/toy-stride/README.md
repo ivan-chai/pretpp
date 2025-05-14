@@ -1,6 +1,6 @@
 C presets, N clients.
 
-Each preset is characterized by label frequencies. The goal is to recognize preset from each client's transactions.
+Each preset generates deterministic sequences with a particular stride.
 
 All sequences have a length equal to 64.
 
