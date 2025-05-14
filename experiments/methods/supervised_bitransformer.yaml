@@ -1,0 +1,11 @@
+defaults:
+  - default
+  - default_bitransformer
+  - default_supervised
+  - _self_
+
+name: supervised_bitransformer
+
+module:
+  loss:
+    cls_token: ${transformer_cls_token}

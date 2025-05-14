@@ -7,11 +7,6 @@ name: coles_bitransformer
 
 module:
   _target_: pretpp.modules.BaseModule
-  seq_encoder:
-    embedder:
-      embeddings:
-        labels:
-          in: ${num_classes_plus1}  # Reserve one label for CLS token.
   head_partial:
     _target_: pretpp.nn.NormalizationHead
     _partial_: true
@@ -28,6 +23,4 @@ module:
       sampling_strategy:
         _target_: ptls.frames.coles.sampling_strategies.HardNegativePairSelector
         neg_count: 5
-    cls_token:
-      timestamps: -1
-      labels: ${num_classes}  # Use final label for CLS.
+    cls_token: ${transformer_cls_token}
