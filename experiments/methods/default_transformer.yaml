@@ -18,7 +18,9 @@ module:
       n_head: ${transformer_heads}
       n_inner: ${transformer_inter_size}
       max_duration: ${max_duration}
-      pos_type: time-angular-rel
+      pos_type:
+        - pos-angular
+        - time-angular-rel
       activation:
         _partial_: True
         _target_: torch.nn.functional.gelu

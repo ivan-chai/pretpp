@@ -1,0 +1,8 @@
+defaults:
+  - transformer_ft
+  - _self_
+
+module:
+  seq_encoder:
+    model_partial:
+      causal: False
