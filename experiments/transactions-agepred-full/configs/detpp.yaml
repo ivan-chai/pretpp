@@ -32,19 +32,19 @@ module:
       losses:
         _presence:
           _target_: hotpp.losses.BinaryCrossEntropyLoss
-          grad_scale: 0.8
+          grad_scale: 0.65
         timestamps:
           _target_: hotpp.losses.TimeMAELoss
           delta: start
           max_delta: ${max_duration}
-          grad_scale: 0.3
+          grad_scale: 0.15
         labels:
           _target_: hotpp.losses.CrossEntropyLoss
           num_classes: ${num_classes}
           grad_scale: null
         log_amount:
           _target_: hotpp.losses.MAELoss
-          grad_scale: 0.5
+          grad_scale: 0.8
     next_item_adapter:
       timestamps: mode
       labels: mean

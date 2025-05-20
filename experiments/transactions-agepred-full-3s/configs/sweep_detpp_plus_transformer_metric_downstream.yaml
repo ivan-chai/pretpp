@@ -1,0 +1,41 @@
+project: pretpp-sweep-agepred-full-3s
+run_cap: 100
+name: detpp-plus-transformer-metric
+command:
+  - ${env}
+  - python3
+  - -m
+  - hotpp.train
+  - --config-dir
+  - configs
+  - --config-name
+  - detpp_plus_transformer_metric
+  - ~seed_everything
+  - ~model_path
+  - ~report
+  - ${args_no_hyphens}
+method: bayes
+metric:
+  name: val/downstream
+  goal: maximize
+parameters:
+  transformer_hidden_size:
+    values: [128, 256, 512, 1024, 1536, 2048]
+  transformer_inter_size:
+    values: [256, 512, 1024, 1536, 2048]
+  transformer_layers:
+    min: 1
+    max: 6
+  metric_conditional_head.hidden_dims:
+    values:
+      - []
+      - [128]
+      - [256]
+      - [256, 128]
+      - [512, 256]
+  module.loss.horizon:
+    min: 1
+    max: 14
+  detection_k:
+    min: 16
+    max: 64
