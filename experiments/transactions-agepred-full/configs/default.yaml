@@ -13,13 +13,13 @@ rnn_inference_context: 1200
 rnn_inference_context_step: 200
 rnn_min_length: 1000
 
-transformer_hidden_size: 1024
+transformer_hidden_size: 512
 transformer_inter_size: 1024
 transformer_heads: 4
-transformer_layers: 4
+transformer_layers: 8
 transformer_context: 256
 transformer_positions: 1536
-transformer_dropout: 0.3
+transformer_dropout: 0.1
 transformer_min_length: 128
 transformer_cls_token:
   timestamps: -1
@@ -88,8 +88,12 @@ module:
         labels:
           in: ${num_classes}
           out: 256
+        timestamps:
+          in: 800
+          out: 16
+          clip: true
+          cast: true
       numeric_values:
-        timestamps: identity
         log_amount: identity
     max_time_delta: ${max_time_delta}
   aggregator:

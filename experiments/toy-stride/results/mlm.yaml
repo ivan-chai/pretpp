@@ -1,0 +1,9 @@
+date: '2025-05-14 18:33:23'
+test/downstream: 1.0
+test/loss: 0.18090403079986572
+test/loss_labels: 0.00016457019955851138
+test/loss_timedeltas: 0.18073949217796326
+val/downstream: 1.0
+val/loss: 0.15810860693454742
+val/loss_labels: 0.0001645118900341913
+val/loss_timedeltas: 0.15794406831264496
