@@ -97,26 +97,26 @@ nohead:
 head:
   _target_: hotpp.nn.Head
   _partial_: true
-  hidden_dims: []
+  hidden_dims: [256]
   use_batch_norm: true
 
 metric_head:
   _target_: pretpp.nn.MetricHead
   _partial_: true
-  hidden_dims: [128]
+  hidden_dims: [256]
   head_params:
     use_batch_norm: true
 
 conditional_head:
   _target_: hotpp.nn.ConditionalHead
   _partial_: true
-  hidden_dims: [128]
+  hidden_dims: [256]
   use_batch_norm: true
 
 metric_conditional_head:
   _target_: pretpp.nn.MetricConditionalHead
   _partial_: true
-  hidden_dims: [256, 128]
+  hidden_dims: [256]
   head_params:
     use_batch_norm: true
 
@@ -177,7 +177,7 @@ module:
         log_hour_diff: identity
     max_time_delta: ${max_time_delta}
   aggregator:
-    _target_: hotpp.nn.LastAggregator
+    _target_: hotpp.nn.MeanAggregator
   optimizer_partial:
     _partial_: true
     _target_: torch.optim.Adam
