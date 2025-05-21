@@ -154,23 +154,24 @@ class BaseModule(pl.LightningModule):
             self._seq_encoder = self._seq_encoder.merge_and_unload()
         return result
 
-    def forward(self, x):
+    def forward(self, x, return_states=False):
         """Extract embeddings."""
         seq_encoder = self._seq_encoder if not self._peft_applied else self._seq_encoder.base_model
-        hiddens, _ = seq_encoder(x)  # (B, L, D).
-        hiddens = self._head(hiddens)
-        return hiddens
+        hiddens, states = seq_encoder(x, return_states=return_states)  # (B, L, D).
+        outputs = self._head(hiddens)
+        return outputs, states
 
     def embed(self, x):
         """Compatibility with HoTPP."""
         x = self._loss.prepare_inference_batch(x)
-        hiddens = self(x)
-        embeddings = self._aggregator(hiddens)
+        return_states = "full" if self._aggregator.need_states else False
+        hiddens, states = self(x, return_states=return_states)
+        embeddings = self._aggregator(hiddens, states)
         return embeddings
 
-    def _compute_loss(self, outputs, targets):
+    def _compute_loss(self, outputs, states, targets):
         if self._loss.aggregate:
-            outputs = PaddedBatch(self._aggregator(outputs).unsqueeze(1),
+            outputs = PaddedBatch(self._aggregator(outputs, states).unsqueeze(1),
                                   torch.ones_like(outputs.seq_lens))  # (B, 1, D).
         outputs = self._loss_projection(outputs)  # (B, L, D).
         losses, metrics = self._loss(outputs, targets)
@@ -179,8 +180,9 @@ class BaseModule(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         x, y = batch
         inputs, targets = self._loss.prepare_batch(x, y)
-        outputs = self.forward(inputs)
-        outputs, losses, metrics = self._compute_loss(outputs, targets)
+        return_states = "full" if self._loss.aggregate and self._aggregator.need_states else False
+        outputs, states = self.forward(inputs, return_states=return_states)
+        outputs, losses, metrics = self._compute_loss(outputs, states, targets)
         loss = sum(losses.values())
 
         # Log statistics.
@@ -196,8 +198,9 @@ class BaseModule(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         x, y = batch
         inputs, targets = self._loss.prepare_batch(x, y)
-        outputs = self.forward(inputs)  # (B, L, D).
-        outputs, losses, metrics = self._compute_loss(outputs, targets)
+        return_states = "full" if self._loss.aggregate and self._aggregator.need_states else False
+        outputs, states = self.forward(inputs, return_states=return_states)
+        outputs, losses, metrics = self._compute_loss(outputs, states, targets)
         loss = sum(losses.values())
 
         if self._val_metric is not None:
@@ -213,8 +216,9 @@ class BaseModule(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         x, y = batch
         inputs, targets = self._loss.prepare_batch(x, y)
-        outputs = self.forward(inputs)  # (B, L, D).
-        outputs, losses, metrics = self._compute_loss(outputs, targets)
+        return_states = "full" if self._loss.aggregate and self._aggregator.need_states else False
+        outputs, states = self.forward(inputs, return_states=return_states)
+        outputs, losses, metrics = self._compute_loss(outputs, states, targets)
         loss = sum(losses.values())
 
         if self._test_metric is not None:
