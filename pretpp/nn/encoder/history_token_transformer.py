@@ -73,26 +73,38 @@ class HistoryTokenTransformer(SimpleTransformer):
     Args:
         history_token_fraction: The fraction of batches to apply history token to.
         n_history_tokens: The number of tokens inserted in each sequence (including padding).
+        mode: Either `pretrain`, `supervised-append` or `supervised-replace`.
     """
-    def __init__(self, input_size, history_token_fraction=1, n_history_tokens=1, **kwargs):
+    def __init__(self, input_size, history_token_fraction=1, n_history_tokens=1, mode="pretrain", **kwargs):
+        if mode not in {"pretrain", "supervised-append", "supervised-replace"}:
+            raise ValueError(f"Unknown mode: {mode}")
         super().__init__(input_size, **kwargs)
         if not self.causal:
             raise NotImplementedError("A history-token transformer must be causal.")
         self.history_token = torch.nn.Parameter(torch.rand(self.n_embd))  # (D).
         self.history_token_fraction = history_token_fraction
         self.n_history_tokens = n_history_tokens
+        self.mode = mode
+
+    def _add_token_to_the_end(self, payload, timestamps, seq_lens, append=True):
+        b, l, d = payload.shape
+        if append:
+            payload = torch.cat([payload, payload[:, :1]], 1)  # (B, L + 1, D).
+            timestamps = torch.cat([timestamps, timestamps[:, :1]], 1)  # (B, L + 1).
+            last = seq_lens  # (B).
+        else:
+            last = (seq_lens - 1).clip(min=0)  # (B).
+        payload.scatter_(1, last[:, None, None].expand(b, 1, d), self.history_token.to(payload.dtype)[None, None].expand(b, 1, d))
+
+        last_ts = timestamps.take_along_dim((seq_lens[:, None] - 1).clip(min=0), 1)  # (B, 1).
+        timestamps.scatter_(1, last[:, None], last_ts)
+        return payload, timestamps, last
 
     def embed(self, x, timestamps):
         payload = self.input_projection(x.payload)  # (B, L, D).
 
         # Append history token to the end.
-        payload = torch.cat([payload, payload[:, :1]], 1)  # (B, L + 1, D).
-        last = x.seq_lens[:, None, None]  # (B, 1, 1).
-        payload.scatter_(1, last, self.history_token.to(payload.dtype)[None, None].expand(len(x), 1, payload.shape[-1]))
-
-        timestamps = torch.cat([timestamps.payload, timestamps.payload[:, :1]], 1)  # (B, L + 1).
-        last_ts = timestamps.take_along_dim((x.seq_lens[:, None] - 1).clip(min=0), 1)  # (B, 1).
-        timestamps.scatter_(1, x.seq_lens[:, None], last_ts)
+        payload, timestamps, last = self._add_token_to_the_end(payload, timestamps.payload, x.seq_lens)
 
         # Extract history token embedding.
         payload = self.positional(payload, timestamps)  # (B, L + 1, D).
@@ -100,6 +112,18 @@ class HistoryTokenTransformer(SimpleTransformer):
         return outputs.payload.take_along_dim(last, 1).squeeze(1)  # (B, D).
 
     def forward(self, x, timestamps, states=None, return_states=False):
+        if self.mode in {"supervised-append", "supervised-replace"}:
+            if return_states:
+                raise NotImplementedError("HistoryTokenTransformer doesn't support states return.")
+            append = self.mode == "supervised-append"
+            payload = self.input_projection(x.payload)  # (B, L, D).
+            payload, timestamps, last = self._add_token_to_the_end(payload, timestamps.payload, x.seq_lens, append=append)
+            payload = self.positional(payload, timestamps)  # (B, L, D).
+            outputs, _ = self.transform(PaddedBatch(payload, x.seq_lens + int(append)))
+            token_branch = 0 * self.history_token.mean()
+            outputs = PaddedBatch(outputs.payload + token_branch, outputs.seq_lens)
+            states = None
+            return outputs, states
         if not self.training:
             # Don't insert history tokens.
             return super().forward(x, timestamps, states=states, return_states=return_states)
@@ -129,9 +153,10 @@ class HistoryTokenTransformer(SimpleTransformer):
 
         # Apply transformer.
         payload = self.positional(payload, timestamps)  # (B, L + R, D).
+        assert self.causal
+        # src_key_padding_mask is optional for causal transformers.
         outputs = self.encoder(payload,
                                mask=mask,
-                               src_key_padding_mask=~PaddedBatch(payload, x.seq_lens + r).seq_len_mask.bool(),
                                is_causal=self.causal)  # (B, L + R, D).
 
         # Remove history tokens and return.
