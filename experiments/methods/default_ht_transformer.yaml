@@ -1,0 +1,11 @@
+defaults:
+  - default_transformer
+  - _self_
+
+module:
+  seq_encoder:
+    model_partial:
+      _target_: pretpp.nn.HistoryTokenTransformer
+      history_token_fraction: ${transformer_history_token_fraction}
+      n_history_tokens: ${transformer_history_tokens}
+  aggregator: null
