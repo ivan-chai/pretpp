@@ -32,7 +32,7 @@ module:
       lora_alpha: 32
       lora_dropout: 0.2
       target_modules: ["self_attn", "linear1", "linear2"]
-  freeze_prefixes:
+#  freeze_prefixes:
 #    - _seq_encoder.embedder.
 #    - _seq_encoder.model.encoder.layers.1
 #    - _seq_encoder.model.encoder.layers.2
