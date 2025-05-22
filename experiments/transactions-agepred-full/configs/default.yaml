@@ -25,6 +25,8 @@ transformer_cls_token:
   timestamps: -1
   labels: ${num_classes}  # Use final label for CLS.
   log_amount: -1
+transformer_history_tokens: 5
+transformer_history_token_fraction: 0.5
 
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
