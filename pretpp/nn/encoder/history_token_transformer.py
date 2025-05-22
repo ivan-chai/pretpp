@@ -109,7 +109,7 @@ class HistoryTokenTransformer(SimpleTransformer):
         # Extract history token embedding.
         payload = self.positional(payload, timestamps)  # (B, L + 1, D).
         outputs, _ = self.transform(PaddedBatch(payload, x.seq_lens + 1))
-        return outputs.payload.take_along_dim(last, 1).squeeze(1)  # (B, D).
+        return outputs.payload.take_along_dim(last[:, None, None], 1).squeeze(1)  # (B, D).
 
     def forward(self, x, timestamps, states=None, return_states=False):
         if self.mode in {"supervised-append", "supervised-replace"}:
