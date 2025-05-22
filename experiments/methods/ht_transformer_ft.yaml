@@ -20,18 +20,19 @@ module:
 #      dropout: 0.3
 #  loss:
 #    cls_token: ${transformer_cls_token}
-#  peft_adapter:
-#    _partial_: true
-#    _target_: peft.get_peft_model
-#    peft_config:
-#      _target_: peft.LoraConfig
-#      task_type:
-#        _target_: peft.TaskType
-#        _args_: ["SEQ_CLS"]
-#      r: 16
-#      lora_alpha: 32
-#      lora_dropout: 0.2
-#      target_modules: ["self_attn", "linear1", "linear2"]
-#  freeze_prefixes:
+  peft_adapter:
+    _partial_: true
+    _target_: peft.get_peft_model
+    peft_config:
+      _target_: peft.LoraConfig
+      task_type:
+        _target_: peft.TaskType
+        _args_: ["SEQ_CLS"]
+      r: 16
+      lora_alpha: 32
+      lora_dropout: 0.2
+      target_modules: ["self_attn", "linear1", "linear2"]
+  freeze_prefixes:
+#    - _seq_encoder.embedder.
 #    - _seq_encoder.model.encoder.layers.1
 #    - _seq_encoder.model.encoder.layers.2
