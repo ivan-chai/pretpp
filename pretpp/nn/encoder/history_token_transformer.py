@@ -68,11 +68,18 @@ def sample_mask(positions, l):
 
 
 class HistoryTokenTransformer(SimpleTransformer):
-    def __init__(self, input_size, n_history_tokens=1, **kwargs):
+    """An extension of the transformer model with extra <history-tokens> for context aggregation.
+
+    Args:
+        history_token_fraction: The fraction of batches to apply history token to.
+        n_history_tokens: The number of tokens inserted in each sequence (including padding).
+    """
+    def __init__(self, input_size, history_token_fraction=1, n_history_tokens=1, **kwargs):
         super().__init__(input_size, **kwargs)
         if not self.causal:
             raise NotImplementedError("A history-token transformer must be causal.")
         self.history_token = torch.nn.Parameter(torch.rand(self.n_embd))  # (D).
+        self.history_token_fraction = history_token_fraction
         self.n_history_tokens = n_history_tokens
 
     def embed(self, x, timestamps):
@@ -96,6 +103,13 @@ class HistoryTokenTransformer(SimpleTransformer):
         if not self.training:
             # Don't insert history tokens.
             return super().forward(x, timestamps, states=states, return_states=return_states)
+        if torch.rand([]) > self.history_token_fraction:
+            # Don't insert history tokens.
+            outputs, states = super().forward(x, timestamps, states=states, return_states=return_states)
+            token_branch = 0 * self.history_token.mean()
+            outputs = PaddedBatch(outputs.payload + token_branch, outputs.seq_lens)
+            states = states + token_branch if states is not None else None
+            return outputs, states
         if return_states:
             raise NotImplementedError("HistoryTokenTransformer doesn't support states return.")
         b, l = x.shape
