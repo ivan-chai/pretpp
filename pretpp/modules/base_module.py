@@ -38,7 +38,7 @@ class BaseModule(pl.LightningModule):
         head_partial: Head model class which accepts encoder output and makes prediction.
             Input size is provided as positional argument.
         loss_projection_partial: Loss preprocessing head. Input and output sizes are provided as positional arguments.
-        aggregator: Embeddings aggregator.
+        aggregator: Embeddings aggregator. By default try to use encoder aggregator.
         optimizer_partial: Optimizer init partial. Network parameters are missed.
         lr_scheduler_partial: Scheduler init partial. Optimizer are missed.
         init_state_dict: Checkpoint to initialize all parameters except loss.
@@ -164,9 +164,12 @@ class BaseModule(pl.LightningModule):
     def embed(self, x):
         """Compatibility with HoTPP."""
         x = self._loss.prepare_inference_batch(x)
-        return_states = "full" if self._aggregator.need_states else False
-        hiddens, states = self(x, return_states=return_states)
-        embeddings = self._aggregator(hiddens, states)
+        if self._aggregator is None:
+            embeddings = self._seq_encoder.embed(x)
+        else:
+            return_states = "full" if self._aggregator.need_states else False
+            hiddens, states = self(x, return_states=return_states)
+            embeddings = self._aggregator(hiddens, states)
         return embeddings
 
     def _compute_loss(self, outputs, states, targets):
