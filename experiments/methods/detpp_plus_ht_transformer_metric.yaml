@@ -1,0 +1,13 @@
+defaults:
+  - detpp_ht_transformer_metric
+  - _self_
+
+name: detpp_plus_ht_transformer_metric
+
+module:
+  loss:
+    next_item_adapter: head
+    next_item_loss_weight: 4
+
+trainer:
+  deterministic: false
