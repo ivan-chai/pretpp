@@ -1,0 +1,12 @@
+defaults:
+  - default
+  - default_ht_transformer
+  - default_supervised
+  - _self_
+
+name: supervised_ht_transformer
+
+module:
+  loss:
+    cls_token: null
+    apply_to_all_outputs: true
