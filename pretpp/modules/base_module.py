@@ -165,7 +165,8 @@ class BaseModule(pl.LightningModule):
         """Compatibility with HoTPP."""
         x = self._loss.prepare_inference_batch(x)
         if self._aggregator is None:
-            embeddings = self._seq_encoder.embed(x)
+            embeddings = self._seq_encoder.embed(x)  # (B, D).
+            embeddings = self._head(PaddedBatch(embeddings.unsqueeze(1), torch.ones_like(x.seq_lens))).payload.squeeze(1)  # (B, D).
         else:
             return_states = "full" if self._aggregator.need_states else False
             hiddens, states = self(x, return_states=return_states)
