@@ -70,12 +70,18 @@ def sample_mask(positions, l):
 class HistoryTokenTransformer(SimpleTransformer):
     """An extension of the transformer model with extra <history-tokens> for context aggregation.
 
+    Experimental flags:
+        n_history_tokens="all"
+        add_last_output_to_embedding=True
+
     Args:
         history_token_fraction: The fraction of batches to apply history token to.
         n_history_tokens: The number of tokens inserted in each sequence (including padding).
+            Use "all" to put HT before each real token.
         mode: Either `pretrain`, `supervised-append` or `supervised-replace`.
     """
-    def __init__(self, input_size, history_token_fraction=1, n_history_tokens=1, mode="pretrain", **kwargs):
+    def __init__(self, input_size, history_token_fraction=1, n_history_tokens=1, mode="pretrain", embed_layer=None,
+                 add_last_output_to_embedding=False, **kwargs):
         if mode not in {"pretrain", "supervised-append", "supervised-replace"}:
             raise ValueError(f"Unknown mode: {mode}")
         super().__init__(input_size, **kwargs)
@@ -85,6 +91,8 @@ class HistoryTokenTransformer(SimpleTransformer):
         self.history_token_fraction = history_token_fraction
         self.n_history_tokens = n_history_tokens
         self.mode = mode
+        self.embed_layer = embed_layer
+        self.add_last_output_to_embedding = add_last_output_to_embedding
 
     def _add_token_to_the_end(self, payload, timestamps, seq_lens, append=True):
         b, l, d = payload.shape
@@ -105,11 +113,26 @@ class HistoryTokenTransformer(SimpleTransformer):
 
         # Append history token to the end.
         payload, timestamps, last = self._add_token_to_the_end(payload, timestamps.payload, x.seq_lens)
+        new_lengths = x.seq_lens + 1
 
         # Extract history token embedding.
         payload = self.positional(payload, timestamps)  # (B, L + 1, D).
-        outputs, _ = self.transform(PaddedBatch(payload, x.seq_lens + 1))
-        return outputs.payload.take_along_dim(last[:, None, None], 1).squeeze(1)  # (B, D).
+        if self.embed_layer is not None:
+            _, states = self.transform(PaddedBatch(payload, new_lengths), return_states="full")  # N * (B, L, D).
+            outputs = states[self.embed_layer]
+            layer = self.encoder.layers[0]
+            is_last_layer = self.embed_layer == len(states) - 1
+            if layer.norm_first and (not is_last_layer):
+                outputs = layer.norm1(outputs)
+            outputs = PaddedBatch(outputs, new_lengths)
+        else:
+            outputs, _ = self.transform(PaddedBatch(payload, new_lengths))
+        embeddings = outputs.payload.take_along_dim(last[:, None, None], 1).squeeze(1)  # (B, D).
+        if self.add_last_output_to_embedding:
+            prev = (last - 1).clip(min=0)
+            prev_embeddings = outputs.payload.take_along_dim(prev[:, None, None], 1).squeeze(1)
+            embeddings = 0.5 * (embeddings + prev_embeddings)
+        return embeddings
 
     def forward(self, x, timestamps, states=None, return_states=False):
         if self.mode in {"supervised-append", "supervised-replace"}:
@@ -143,7 +166,10 @@ class HistoryTokenTransformer(SimpleTransformer):
 
         # Insert history tokens.
         max_length = x.seq_lens.max()
-        positions = torch.randperm(max_length, device=device)[:self.n_history_tokens].sort()[0]  # (R), sorted.
+        if self.n_history_tokens == "all":
+            positions = torch.arange(max_length, device=device) * 2
+        else:
+            positions = torch.randperm(max_length + self.n_history_tokens, device=device)[:self.n_history_tokens].sort()[0]  # (R) in [0, L + R), sorted.
         r = len(positions)
         payload, timestamps, indices = insert_tokens(payload, timestamps, positions[None].expand(b, r), self.history_token)  # (B, L + R, D), (B, L + R), (B, L).
 
