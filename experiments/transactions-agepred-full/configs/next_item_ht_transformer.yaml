@@ -5,6 +5,10 @@ defaults:
 
 name: next_item_ht_transformer
 
+transformer_layers: 6
+transformer_hidden_size: 1024
+transformer_inter_size: 1536
+
 module:
   _target_: pretpp.modules.BaseModule
   loss_projection_partial: ${head}
