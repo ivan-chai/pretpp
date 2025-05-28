@@ -86,8 +86,6 @@ class BaseModule(pl.LightningModule):
         if loss_projection_partial is None:
             loss_projection_partial = IdentityHead
         self._loss_projection = loss_projection_partial(self._head.output_size, loss.input_size)
-        if self._loss.aggregate and (aggregator is None):
-            raise ValueError("Loss requires aggregator")
         self._aggregator = aggregator
 
         if init_state_dict is not None:
@@ -161,22 +159,28 @@ class BaseModule(pl.LightningModule):
         outputs = self._head(hiddens)
         return outputs, states
 
-    def embed(self, x):
-        """Compatibility with HoTPP."""
-        x = self._loss.prepare_inference_batch(x)
+    def _embed_impl(self, inputs):
         if self._aggregator is None:
-            embeddings = self._seq_encoder.embed(x)  # (B, D).
-            embeddings = self._head(PaddedBatch(embeddings.unsqueeze(1), torch.ones_like(x.seq_lens))).payload.squeeze(1)  # (B, D).
+            embeddings = self._seq_encoder.embed(inputs)  # (B, D).
+            embeddings = self._head(PaddedBatch(embeddings.unsqueeze(1), torch.ones_like(inputs.seq_lens))).payload.squeeze(1)  # (B, D).
         else:
             return_states = "full" if self._aggregator.need_states else False
-            hiddens, states = self(x, return_states=return_states)
+            hiddens, states = self.forward(inputs, return_states=return_states)
             embeddings = self._aggregator(hiddens, states)
+        return embeddings  # (B, D).
+
+    def embed(self, x):
+        """Compatibility with HoTPP."""
+        inputs = self._loss.prepare_inference_batch(x)
+        embeddings = self._embed_impl(inputs)
         return embeddings
 
-    def _compute_loss(self, outputs, states, targets):
+    def _compute_loss(self, inputs, targets):
         if self._loss.aggregate:
-            outputs = PaddedBatch(self._aggregator(outputs, states).unsqueeze(1),
-                                  torch.ones_like(outputs.seq_lens))  # (B, 1, D).
+            outputs = PaddedBatch(self._embed_impl(inputs).unsqueeze(1),
+                                  torch.ones_like(inputs.seq_lens))  # (B, 1, D).
+        else:
+            outputs, _ = self.forward(inputs)
         outputs = self._loss_projection(outputs)  # (B, L, D).
         losses, metrics = self._loss(outputs, targets)
         return outputs, losses, metrics
@@ -184,9 +188,7 @@ class BaseModule(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         x, y = batch
         inputs, targets = self._loss.prepare_batch(x, y)
-        return_states = "full" if self._loss.aggregate and self._aggregator.need_states else False
-        outputs, states = self.forward(inputs, return_states=return_states)
-        outputs, losses, metrics = self._compute_loss(outputs, states, targets)
+        outputs, losses, metrics = self._compute_loss(inputs, targets)
         loss = sum(losses.values())
 
         # Log statistics.
@@ -202,9 +204,7 @@ class BaseModule(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         x, y = batch
         inputs, targets = self._loss.prepare_batch(x, y)
-        return_states = "full" if self._loss.aggregate and self._aggregator.need_states else False
-        outputs, states = self.forward(inputs, return_states=return_states)
-        outputs, losses, metrics = self._compute_loss(outputs, states, targets)
+        outputs, losses, metrics = self._compute_loss(inputs, targets)
         loss = sum(losses.values())
 
         if self._val_metric is not None:
@@ -220,9 +220,7 @@ class BaseModule(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         x, y = batch
         inputs, targets = self._loss.prepare_batch(x, y)
-        return_states = "full" if self._loss.aggregate and self._aggregator.need_states else False
-        outputs, states = self.forward(inputs, return_states=return_states)
-        outputs, losses, metrics = self._compute_loss(outputs, states, targets)
+        outputs, losses, metrics = self._compute_loss(inputs, targets)
         loss = sum(losses.values())
 
         if self._test_metric is not None:
