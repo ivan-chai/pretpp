@@ -24,8 +24,7 @@ transformer_min_length: 64
 transformer_cls_token:
   timestamps: -1
   labels: ${num_classes}  # Use final label for CLS.
-transformer_history_tokens: 2
-transformer_history_token_fraction: 0.5
+transformer_history_token_locality: 0
 
 logger:
   _target_: pytorch_lightning.loggers.TensorBoardLogger
