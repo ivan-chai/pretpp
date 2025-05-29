@@ -48,11 +48,11 @@ class TestHistoryTokenTransformer(TestCase):
 
         mask_gt = torch.tensor([
             [0, 1, 0, 1, 0, 1],
-            [0, 0, 0, 0, 0, 0],  # History token.
+            [0, 0, 0, 1, 0, 1],  # History token.
             [1, 1, 1, 0, 0, 1],
-            [0, 0, 0, 0, 0, 0],  # History token.
+            [0, 1, 0, 0, 0, 1],  # History token.
             [1, 0, 0, 1, 0, 1],
-            [0, 0, 0, 0, 0, 0]   # History token.
+            [0, 1, 0, 1, 0, 0]   # History token.
         ]).bool()
         self.assertTrue((mask == mask_gt).all())
 
@@ -60,18 +60,18 @@ class TestHistoryTokenTransformer(TestCase):
         mask = sample_mask(3, locality=1)
         mask_gt = torch.tensor([
             [0, 1, 0, 1, 0, 1],
-            [0, 0, 0, 0, 0, 0],  # History token.
+            [0, 0, 0, 1, 0, 1],  # History token.
             [1, 0, 0, 1, 0, 1],
-            [0, 0, 0, 0, 0, 0],  # History token.
+            [0, 1, 0, 0, 0, 1],  # History token.
             [1, 1, 1, 0, 0, 1],
-            [0, 0, 0, 0, 0, 0]   # History token.
+            [0, 1, 0, 1, 0, 0]   # History token.
         ]).bool()
         self.assertTrue((mask == mask_gt).all())
 
         for _ in range(8):
             mask = sample_mask(3, locality=0)
             self.assertEqual(mask.shape, (6, 6))
-            self.assertTrue((~mask[1::2]).all())
+            self.assertTrue((~mask[1::2, ::2]).all())
             self.assertTrue((~mask.diag()).all())
 
 

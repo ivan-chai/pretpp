@@ -9,9 +9,10 @@ base_name: _
 module:
   seq_encoder:
     model_partial:
-      mode: supervised-append
-  aggregator:
-    _target_: hotpp.nn.LastAggregator
+      mode: sft
+#      history_token_locality: 1
+#  aggregator:
+#    _target_: hotpp.nn.LastAggregator
 #  head_partial:
 #    _target_: pretpp.nn.NormalizationHead
 #    _partial_: true
@@ -20,6 +21,8 @@ module:
 #      dropout: 0.3
 #  loss:
 #    cls_token: ${transformer_cls_token}
+#  loss:
+#    apply_to_all_outputs: false
   peft_adapter:
     _partial_: true
     _target_: peft.get_peft_model

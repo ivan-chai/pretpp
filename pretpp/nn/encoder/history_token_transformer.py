@@ -23,10 +23,19 @@ def insert_tokens(embeddings, timestamps, token):
 
 
 def remove_tokens(embeddings):
+    """Remove history tokens from output."""
     b, l, d = embeddings.shape
     if l % 2 != 0:
         raise ValueError("Unexpected input shape")
     return embeddings[:, ::2]
+
+
+def keep_tokens(embeddings):
+    """Keep only history tokens outputs."""
+    b, l, d = embeddings.shape
+    if l % 2 != 0:
+        raise ValueError("Unexpected input shape")
+    return embeddings[:, 1::2]
 
 
 def make_mask(n_summarize):
@@ -43,20 +52,29 @@ def make_mask(n_summarize):
     l = len(n_summarize)
     mask = torch.zeros(l, 4 * l, device=device, dtype=torch.bool)  # (L, 4 * L).
 
+    # Make real tokens masks.
     n_summarize2 = n_summarize * 2  # (L).
     mask = torch.arange(2 * l, device=device)[None] < n_summarize2[:, None]  # (L, 2 * L).
     mask[:, 1::2] = True
     mask.scatter_(1, (n_summarize2 - 1).clip(min=0).unsqueeze(1), False)
-    mask = torch.cat([mask, torch.zeros_like(mask)], 1).reshape(2 * l, 2 * l)
+
+    # Make history tokens masks. Disable attention between history tokens.
+    ht_mask = torch.zeros_like(mask)
+    ht_mask[:, 1::2] = True
+    ht_mask[:, 1::2].fill_diagonal_(False)
+
+    # Join masks.
+    mask = torch.cat([mask, ht_mask], 1).reshape(2 * l, 2 * l)
     return mask
 
 
-def sample_mask(l, locality=0, device=None):
+def sample_mask(l, fraction=1, locality=0, device=None):
     """Generate attention mask for history tokens at specified locations.
 
     Args:
         l: The original sequence length.
         device: Target device.
+        fraction: The average fraction of batches to apply history token to.
         locality: The value between 0 and 1 with 0 meaning uniform history token selection
             and 1 for using the last available token.
 
@@ -69,6 +87,8 @@ def sample_mask(l, locality=0, device=None):
     if locality > 0:
         prefix_size = torch.arange(l, device=device)
         n_summarize = torch.where(torch.rand(l, device=device) < locality, prefix_size, n_summarize)  # (L).
+    if torch.rand([]) > fraction:
+        n_summarize.fill_(0)
     return make_mask(n_summarize)
 
 
@@ -76,15 +96,21 @@ class HistoryTokenTransformer(SimpleTransformer):
     """An extension of the transformer model with extra <history-tokens> (HT) for context aggregation.
 
     Args:
+        mode: Either `pretrain`, `sft` or `sft-full`.
+        history_token_fraction: The average fraction of batches to apply history token to.
         history_token_locality: The value between 0 and 1 with 0 meaning uniform history token selection
             and 1 for using the last available token.
         embed_layer: The layer to extract HT embeddings from.
     """
-    def __init__(self, input_size, history_token_locality=0, embed_layer=None, **kwargs):
+    def __init__(self, input_size, mode="pretrain", history_token_fraction=1, history_token_locality=0, embed_layer=None, **kwargs):
+        if mode not in {"pretrain", "sft", "sft-full"}:
+            raise ValueError(f"Unexpected mode: {mode}")
         super().__init__(input_size, **kwargs)
         if not self.causal:
             raise NotImplementedError("A history-token transformer must be causal.")
         self.history_token = torch.nn.Parameter(torch.rand(self.n_embd))  # (D).
+        self.mode = mode
+        self.history_token_fraction = history_token_fraction
         self.history_token_locality = history_token_locality
         self.embed_layer = embed_layer
 
@@ -125,7 +151,7 @@ class HistoryTokenTransformer(SimpleTransformer):
         return embeddings
 
     def forward(self, x, timestamps, states=None, return_states=False):
-        if not self.training:
+        if (not self.training) and (self.mode == "pretrain"):
             # Don't insert history tokens.
             return super().forward(x, timestamps, states=states, return_states=return_states)
         if return_states:
@@ -139,7 +165,9 @@ class HistoryTokenTransformer(SimpleTransformer):
         payload, timestamps = insert_tokens(payload, timestamps, self.history_token)  # (B, 2 * L, D), (B, 2 * L).
 
         # Update attention mask.
-        history_mask = sample_mask(l, locality=self.history_token_locality, device=device)  # (2 * L, 2 * L).
+        history_mask = sample_mask(l, device=device,
+                                   fraction=self.history_token_fraction if self.mode == "pretrain" else 0,
+                                   locality=self.history_token_locality)  # (2 * L, 2 * L).
         mask = history_mask if self.sa_mask is None else torch.logical_or(self.sa_mask[:2 * l, :2 * l], history_mask)
 
         # Apply transformer.
@@ -151,6 +179,12 @@ class HistoryTokenTransformer(SimpleTransformer):
                                is_causal=self.causal)  # (B, 2 * L, D).
 
         # Remove history tokens and return.
-        outputs = PaddedBatch(remove_tokens(outputs), x.seq_lens)  # (B, L, D).
+        if self.mode == "pretrain":
+            outputs = remove_tokens(outputs)
+        elif self.mode == "sft":
+            outputs = keep_tokens(outputs)
+        else:
+            assert self.mode == "sft-full"
+        outputs = PaddedBatch(outputs, x.seq_lens)  # (B, L, D).
         states = None
         return outputs, states
