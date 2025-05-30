@@ -1,11 +1,11 @@
-date: '2025-05-22 21:42:07'
-test/accuracy-target_flag: 0.7639999985694885
-test/batch-accuracy-target_flag: 0.7639999985694885
-test/downstream: 0.8560000061988831
-test/loss: 0.6320949196815491
-test/loss_target_flag: 0.6320949196815491
-val/accuracy-target_flag: 0.7639999985694885
-val/batch-accuracy-target_flag: 0.7639999985694885
-val/downstream: 0.8479999899864197
-val/loss: 0.6320949196815491
-val/loss_target_flag: 0.6320949196815491
+date: '2025-05-30 16:54:52'
+test/accuracy-target_flag: 0.7419999837875366
+test/batch-accuracy-target_flag: 0.7420000433921814
+test/downstream: 0.8600000143051147
+test/loss: 0.631629228591919
+test/loss_target_flag: 0.631629228591919
+val/accuracy-target_flag: 0.7419999837875366
+val/batch-accuracy-target_flag: 0.7420000433921814
+val/downstream: 0.8420000076293945
+val/loss: 0.631629228591919
+val/loss_target_flag: 0.631629228591919

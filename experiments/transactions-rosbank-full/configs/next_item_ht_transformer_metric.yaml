@@ -46,3 +46,7 @@ module:
       log_amount:
         _target_: hotpp.losses.MAELoss
         grad_scale: 1
+
+trainer:
+  max_epochs: 20
+  deterministic: true
