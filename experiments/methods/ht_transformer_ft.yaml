@@ -9,7 +9,7 @@ base_name: _
 module:
   seq_encoder:
     model_partial:
-      mode: sft
+      mode: sft-full
 #      history_token_locality: 1
 #  aggregator:
 #    _target_: hotpp.nn.LastAggregator
