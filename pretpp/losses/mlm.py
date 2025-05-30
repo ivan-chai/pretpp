@@ -137,7 +137,7 @@ class MLMLoss(BaseLoss):
         mask = targets.seq_len_mask.bool() if (targets.seq_lens != targets.shape[1]).any() else None
         losses = {}
         metrics = {}
-        for name in set(targets.payload) & set(outputs):
+        for name in sorted(set(targets.payload) & set(outputs)):
             loss, loss_metrics = self._losses[name](targets.payload[name], outputs[name], mask, reduction="none")
             losses[name] = loss[targets.payload[EVAL_MASK_FIELD][:, 1:]].mean()
             for k, v in loss_metrics.items():

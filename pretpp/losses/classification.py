@@ -96,7 +96,7 @@ class ClassificationLoss(BaseLoss):
         last = (lengths - 1).clip(min=0)[:, None, None]  # (B, 1, 1).
         losses = {}
         metrics = {}
-        for name in set(targets.payload) & set(outputs):
+        for name in sorted(set(targets.payload) & set(outputs)):
             spec = self._targets[name]
             target = targets.payload[name]  # (B).
             if target.ndim != 1:
@@ -117,7 +117,7 @@ class ClassificationLoss(BaseLoss):
         outputs, lengths = self._split_outputs(outputs)  # (B, L, D).
         last = (lengths - 1).clip(min=0)[:, None, None]  # (B, 1, 1).
         result = {}
-        for name in set(self._targets) & set(outputs):
+        for name in sorted(set(self._targets) & set(outputs)):
             result[name] = outputs[name].take_along_dim(last, 1).squeeze(1).argmax(-1)  # (B).
         return PaddedBatch(result, orig_lengths, seq_names={})
 
