@@ -243,7 +243,12 @@ class SubsetHTStrategy(HTStrategyBase):
             last_input = (self.insert_mask.cumsum(0) - 1).clip(min=0)  # (L + R).
             self.index = last_input.scatter(0, self.positions, l)  # (L + R).
             self.prev_input = last_input.take_along_dim(self.positions, 0)  # (R).
-            self.source_indices = self.insert_mask.nonzero().squeeze(1)  # (L).
+            if self.predict == "input_tokens":
+                self.output_indices = self.insert_mask.nonzero().squeeze(1)  # (L).
+            elif self.predict == "history_tokens":
+                self.output_indices = (1 - self.insert_mask).nonzero().squeeze(1)  # (L).
+            else:
+                assert self.predict == "all"
 
     def clear_state(self):
         del self.seq_lens
@@ -255,7 +260,7 @@ class SubsetHTStrategy(HTStrategyBase):
             del self.insert_mask
             del self.index
             del self.prev_input
-            del self.source_indices
+            del self.output_indices
         del self.apply_to_batch
 
     def insert_tokens(self, x, timestamps):
@@ -309,7 +314,8 @@ class SubsetHTStrategy(HTStrategyBase):
     def extract_outputs(self, x):
         if self.embedding:
             return x.payload.take_along_dim(self.seq_lens[:, None, None], 1).squeeze(1)  # (B, D).
-        elif self.apply_to_batch:
-            return PaddedBatch(x.payload.take_along_dim(self.source_indices[None, :, None], 1), self.seq_lens)  # (B, L, D).
-        else:
+        elif (not self.apply_to_batch) or (self.predict == "all"):
             return x
+        else:
+            assert self.predict in {"input_tokens", "history_tokens"}
+            return PaddedBatch(x.payload.take_along_dim(self.output_indices[None, :, None], 1), self.seq_lens)  # (B, L, D).
