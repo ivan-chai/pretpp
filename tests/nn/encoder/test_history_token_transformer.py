@@ -21,7 +21,7 @@ def mock_randperm(result):
 
 class TestFullHTStrategy(TestCase):
     def test_insert_remove_tokens(self):
-        strategy = FullHTStrategy(1)
+        strategy = FullHTStrategy(1, apply_probability=1)
         strategy.token.data.fill_(-1)
 
         embeddings = torch.tensor([
@@ -81,7 +81,7 @@ class TestFullHTStrategy(TestCase):
             3, 3, 3
         ])
         timestamps = PaddedBatch(timestamps, lengths)
-        with FullHTStrategy(1)(timestamps) as s:
+        with FullHTStrategy(1, apply_probability=1)(timestamps) as s:
             for _ in range(8):
                 mask = s.make_attention_mask()
                 self.assertEqual(mask.shape, (6, 6))
@@ -91,7 +91,7 @@ class TestFullHTStrategy(TestCase):
 
 class TestSubsetHTStrategy(TestCase):
     def test_insert_remove_tokens(self):
-        strategy = SubsetHTStrategy(1, max_tokens=2)
+        strategy = SubsetHTStrategy(1, max_tokens=2, apply_probability=1)
         strategy.token.data.fill_(-1)
 
         embeddings = torch.tensor([
