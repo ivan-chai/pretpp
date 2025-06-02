@@ -9,8 +9,9 @@ base_name: _
 module:
   seq_encoder:
     model_partial:
-      mode: sft-full
-#      history_token_locality: 1
+      strategy_partial:
+        apply_probability: 0  # Insert HTs, but don't use them for regular tokens.
+        predict: all  # Output both HT and regular tokens. SFT is applied to all outputs.
 #  aggregator:
 #    _target_: hotpp.nn.LastAggregator
 #  head_partial:

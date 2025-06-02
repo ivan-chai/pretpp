@@ -6,6 +6,8 @@ module:
   seq_encoder:
     model_partial:
       _target_: pretpp.nn.HistoryTokenTransformer
-      history_token_locality: ${transformer_history_token_locality}
-      history_token_fraction: ${transformer_history_token_fraction}
+      strategy_partial:
+        _target_: pretpp.nn.FullHTStrategy
+        _partial_: true
+        apply_probability: ${transformer_history_token_probability}
   aggregator: null
