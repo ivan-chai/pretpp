@@ -203,3 +203,113 @@ class FullHTStrategy(HTStrategyBase):
                 new_x = x.payload
                 new_lengths = x.seq_lens
             return PaddedBatch(new_x, new_lengths)
+
+
+class SubsetHTStrategy(HTStrategyBase):
+    """Insert history token before each real token.
+
+    Args:
+        k: The number of tokens to insert.
+        predict: The type of tokens used for prediction (`input_tokens`, `history_tokens` or `all`).
+        apply_probability: The probability of HT usage for each real token.
+    """
+    def __init__(self, n_embd, max_tokens=1, apply_probability=0.5, predict="input_tokens"):
+        if predict not in {"input_tokens", "history_tokens", "all"}:
+            raise ValueError(f"Unknown prediction mode: {predict}")
+        super().__init__(n_embd)
+        self.max_tokens = max_tokens
+        self.apply_probability = apply_probability
+        self.predict = predict
+
+    def select(self, timestamps, embedding=False):
+        self.seq_lens = timestamps.seq_lens
+        self.length = timestamps.shape[1]
+        self.embedding = embedding
+        self.device = timestamps.device
+
+        self.apply_to_batch = torch.rand([]) < self.apply_probability
+
+        if self.apply_to_batch:
+            max_length = max(1, self.seq_lens.max().item())
+            self.after_positions = torch.randperm(max_length, device=self.device)[:self.max_tokens].sort()[0]  # (R) in [0, L), sorted.
+            self.positions = torch.arange(1, len(self.after_positions) + 1, device=self.device) + self.after_positions  # (R) in [0, L + R), sorted.
+
+            # Precompute indices.
+            b, l = timestamps.shape
+            d = len(self.token)
+            r = len(self.positions)
+            self.insert_mask = torch.ones(l + r, device=self.device, dtype=torch.long)  # (L + R).
+            self.insert_mask.scatter_(0, self.positions, 0)  # (L + R).
+            last_input = (self.insert_mask.cumsum(0) - 1).clip(min=0)  # (L + R).
+            self.index = last_input.scatter(0, self.positions, l)  # (L + R).
+            self.prev_input = last_input.take_along_dim(self.positions, 0)  # (R).
+            self.source_indices = self.insert_mask.nonzero().squeeze(1)  # (L).
+
+    def clear_state(self):
+        del self.seq_lens
+        del self.length
+        del self.embedding
+        del self.device
+        if self.apply_to_batch:
+            del self.positions
+            del self.insert_mask
+            del self.index
+            del self.prev_input
+            del self.source_indices
+        del self.apply_to_batch
+
+    def insert_tokens(self, x, timestamps):
+        if self.embedding:
+            return add_token_to_the_end(x, timestamps, self.token.to(x.payload.dtype))
+        elif self.apply_to_batch:
+            b, l = x.shape
+            d = len(self.token)
+            r = len(self.positions)
+            device = x.device
+
+            # Insert tokens.
+            extended = torch.cat([x.payload, self.token[None, None].expand(b, 1, d)], 1)  # (B, L + 1, D).
+            new_x = extended.take_along_dim(self.index[None, :, None], 1)  # (B, L + R, D).
+            extended = torch.cat([timestamps.payload, timestamps.payload[:, :1]], 1)  # (B, L + 1)
+            new_timestamps = extended.take_along_dim(self.index[None, :], 1)  # (B, L + R).
+            prev_ts = timestamps.payload.take_along_dim(self.prev_input[None], 1)  # (B, R).
+            new_timestamps.scatter_(1, self.positions[None].expand(b, r), prev_ts)
+
+            active_tokens = (self.after_positions[None] < x.seq_lens[:, None]).sum(1)  # (B) in [0, R].
+            new_lengths = x.seq_lens + active_tokens  # (B) in [0, L + R].
+            return PaddedBatch(new_x, new_lengths), PaddedBatch(new_timestamps, new_lengths)
+        else:
+            token_gradient_branch = 0 * self.token.sum()
+            new_x = PaddedBatch(x.payload + token_gradient_branch, x.seq_lens)
+            return new_x, timestamps
+
+    def _make_attention_mask_last_impl(self):
+        """Allow reference only to the last history token."""
+        l = self.length
+        r = len(self.positions)
+
+        # Skip events before the last history token.
+        insert_mask = 1 - self.insert_mask
+        mask = insert_mask[None].expand(l + r, l + r)  # (L + R, L + R).
+        mask = torch.tril(mask, diagonal=-1)
+        mask = mask.fliplr().cumsum(1).fliplr() > insert_mask  # (L + R, L + R).
+
+        # Allow history tokens to access full history.
+        mask[insert_mask.bool()] = 0
+        return mask
+
+    def make_attention_mask(self):
+        if self.embedding:
+            return None  # Simple causal mask.
+        elif self.apply_to_batch:
+            return self._make_attention_mask_last_impl()
+        else:
+            return None
+
+    def extract_outputs(self, x):
+        if self.embedding:
+            return x.payload.take_along_dim(self.seq_lens[:, None, None], 1).squeeze(1)  # (B, D).
+        elif self.apply_to_batch:
+            return PaddedBatch(x.payload.take_along_dim(self.source_indices[None, :, None], 1), self.seq_lens)  # (B, L, D).
+        else:
+            return x

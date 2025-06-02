@@ -1,0 +1,14 @@
+defaults:
+  - default_transformer
+  - _self_
+
+module:
+  seq_encoder:
+    model_partial:
+      _target_: pretpp.nn.HistoryTokenTransformer
+      strategy_partial:
+        _target_: pretpp.nn.SubsetHTStrategy
+        _partial_: true
+        apply_probability: ${transformer_history_token_probability}
+        max_tokens: ${transformer_history_num_tokens}
+  aggregator: null
