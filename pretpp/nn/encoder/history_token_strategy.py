@@ -200,6 +200,6 @@ class FullHTStrategy(HTStrategyBase):
                 new_lengths = self.seq_lens
             else:
                 assert self.predict == "all"
-                new_x = x
+                new_x = x.payload
                 new_lengths = x.seq_lens
             return PaddedBatch(new_x, new_lengths)
