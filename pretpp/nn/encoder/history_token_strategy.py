@@ -221,6 +221,10 @@ class SubsetHTStrategy(HTStrategyBase):
         self.apply_probability = apply_probability
         self.predict = predict
 
+    def select_positions(self, max_length):
+        """Select tokens to insert HT after them."""
+        return torch.randperm(max_length, device=self.device)[:self.max_tokens].sort()[0]  # (R) in [0, L), sorted.
+
     def select(self, timestamps, embedding=False):
         self.seq_lens = timestamps.seq_lens
         self.length = timestamps.shape[1]
@@ -231,7 +235,7 @@ class SubsetHTStrategy(HTStrategyBase):
 
         if self.apply_to_batch:
             max_length = max(1, self.seq_lens.max().item())
-            self.after_positions = torch.randperm(max_length, device=self.device)[:self.max_tokens].sort()[0]  # (R) in [0, L), sorted.
+            self.after_positions = self.select_positions(max_length)  # (R) in [0, L), sorted.
             self.positions = torch.arange(1, len(self.after_positions) + 1, device=self.device) + self.after_positions  # (R) in [0, L + R), sorted.
 
             # Precompute indices.
@@ -319,3 +323,24 @@ class SubsetHTStrategy(HTStrategyBase):
         else:
             assert self.predict in {"input_tokens", "history_tokens"}
             return PaddedBatch(x.payload.take_along_dim(self.output_indices[None, :, None], 1), self.seq_lens)  # (B, L, D).
+
+
+class FixedHTStrategy(SubsetHTStrategy):
+    """Insert history token at specified positions.
+
+    Args:
+        positions: The number of tokens to insert.
+        predict: The type of tokens used for prediction (`input_tokens`, `history_tokens` or `all`).
+        apply_probability: The probability of HT usage for each real token.
+    """
+    def __init__(self, n_embd, positions, apply_probability=0.5, predict="input_tokens"):
+        if predict not in {"input_tokens", "history_tokens", "all"}:
+            raise ValueError(f"Unknown prediction mode: {predict}")
+        super().__init__(n_embd, max_tokens=len(positions))
+        self.specified_positions = positions
+
+    def select_positions(self, max_length):
+        """Select tokens to insert HT after them."""
+        positions = torch.tensor(self.specified_positions, device=self.device, dtype=torch.long).sort()[0]  # (R) in [0, L), sorted.
+        positions = positions[positions < max_length]
+        return positions
