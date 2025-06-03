@@ -22,6 +22,27 @@ def add_token_to_the_end(x, timestamps, token):
     return new_x, new_timestamps
 
 
+def add_token_at_position(x, timestamps, token, position):
+    if position == 0:
+        raise ValueError("Can't estimate token timestamp at zero position")
+    b, l, d = x.payload.shape
+    new_lengths = x.seq_lens + 1
+
+    index = torch.as_tensor(position, device=x.device, dtype=torch.long)
+
+    # Add HT to to the end.
+    new_x = torch.cat([x.payload[:, :position], x.payload[:, :1], x.payload[:, position:]], 1)  # (B, L + 1, D).
+    new_x.scatter_(1, index[None, None, None].expand(b, 1, d), token[None, None].expand(b, 1, d))
+    new_x = PaddedBatch(new_x, new_lengths)
+
+    # Duplicate the last timestamp.
+    prev_ts = timestamps.payload.take_along_dim(index[None, None] - 1, 1)  # (B, 1).
+    new_timestamps = torch.cat([timestamps.payload[:, :position], timestamps.payload[:, :1], timestamps.payload[:, position:]], 1)  # (B, L + 1).
+    new_timestamps.scatter_(1, index[None, None].expand(b, 1), prev_ts)
+    new_timestamps = PaddedBatch(new_timestamps, new_lengths)
+    return new_x, new_timestamps
+
+
 class HTStrategyBase(ABC, torch.nn.Module):
     """History token strategy."""
 
@@ -333,14 +354,40 @@ class FixedHTStrategy(SubsetHTStrategy):
         predict: The type of tokens used for prediction (`input_tokens`, `history_tokens` or `all`).
         apply_probability: The probability of HT usage for each real token.
     """
-    def __init__(self, n_embd, positions, apply_probability=0.5, predict="input_tokens"):
+    def __init__(self, n_embd, positions, apply_probability=0.5, predict="input_tokens", embed_end=False):
         if predict not in {"input_tokens", "history_tokens", "all"}:
             raise ValueError(f"Unknown prediction mode: {predict}")
-        super().__init__(n_embd, max_tokens=len(positions))
+        super().__init__(n_embd, max_tokens=len(positions),
+                         apply_probability=apply_probability,
+                         predict=predict)
         self.specified_positions = positions
+        self.embed_end = embed_end
 
     def select_positions(self, max_length):
         """Select tokens to insert HT after them."""
         positions = torch.tensor(self.specified_positions, device=self.device, dtype=torch.long).sort()[0]  # (R) in [0, L), sorted.
         positions = positions[positions < max_length]
         return positions
+
+    def insert_tokens(self, x, timestamps):
+        if self.embedding:
+            if self.embed_end:
+                return add_token_to_the_end(x, timestamps, self.token.to(x.payload.dtype))
+            else:
+                positions = list(sorted([p for p in self.specified_positions if p < x.shape[1]]))
+                if len(positions) == 0:
+                    raise RuntimeError(f"Can't insert HT for embedding extraction: very short sequence")
+                return add_token_at_position(x, timestamps, self.token.to(x.payload.dtype), positions[-1])
+        else:
+            return super().insert_tokens(x, timestamps)
+
+    def extract_outputs(self, x):
+        if self.embedding:
+            if self.embed_end:
+                return x.payload.take_along_dim(self.seq_lens[:, None, None], 1).squeeze(1)  # (B, D).
+            else:
+                position = list(sorted([p for p in self.specified_positions if p < x.shape[1]]))[-1]
+                position = torch.as_tensor(position, device=x.device, dtype=torch.long)
+                return x.payload.take_along_dim(position[None, None, None], 1).squeeze(1)  # (B, D).
+        else:
+            return super().extract_outputs(x)

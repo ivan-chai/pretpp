@@ -6,7 +6,7 @@ from unittest import TestCase, main
 import torch
 
 from hotpp.data import PaddedBatch
-from pretpp.nn.encoder import HistoryTokenTransformer, FullHTStrategy, SubsetHTStrategy
+from pretpp.nn.encoder import HistoryTokenTransformer, FullHTStrategy, SubsetHTStrategy, FixedHTStrategy
 
 
 @contextmanager
@@ -137,6 +137,81 @@ class TestSubsetHTStrategy(TestCase):
 
                 reverted_embeddings = s.extract_outputs(new_embeddings)
                 self.assertTrue((reverted_embeddings.payload == embeddings).all())
+
+
+class TestFixedHTStrategy(TestCase):
+    def test_insert_remove_tokens(self):
+        strategy = FixedHTStrategy(1, positions=[1, 3], apply_probability=1)
+        strategy.token.data.fill_(-1)
+
+        embeddings = torch.tensor([
+            [0, 1, 2, 3],
+            [4, 5, 6, 7],
+            [8, 9, 10, 11]
+        ]).reshape(3, 4, 1)
+        timestamps = torch.tensor([
+            [0, 1.5, 3, 4],
+            [5, 6.5, 7, -1],
+            [5, 5, 5, 5]
+        ])
+        lengths = torch.tensor([4, 3, 4])
+        with strategy(PaddedBatch(timestamps, lengths)) as s:
+            new_embeddings, new_timestamps, mask = s.apply(PaddedBatch(embeddings, lengths),
+                                                           PaddedBatch(timestamps, lengths))
+
+            gt_embeddings = torch.tensor([
+                [0, 1, -1, 2, 3, -1],
+                [4, 5, -1, 6, 7, -1],
+                [8, 9, -1, 10, 11, -1]
+            ]).reshape(3, 6, 1)
+            self.assertTrue((new_embeddings.payload == gt_embeddings).all())
+
+            gt_timestamps = torch.tensor([
+                [0, 1.5, 1.5, 3, 4, 4],
+                [5, 6.5, 6.5, 7, -1, -1],
+                [5, 5, 5, 5, 5, 5]
+            ])
+            self.assertTrue((new_timestamps.payload - gt_timestamps).abs().max() < 1e-6)
+
+            mask_gt = torch.tensor([
+                [0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0],  # History token.
+                [1, 1, 0, 0, 0, 0],
+                [1, 1, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0],  # History token.
+            ])
+            self.assertTrue((mask == mask_gt).all())
+
+            reverted_embeddings = s.extract_outputs(new_embeddings)
+            self.assertTrue((reverted_embeddings.payload == embeddings).all())
+
+        strategy = FixedHTStrategy(1, positions=[1, 2], apply_probability=1)
+        strategy.token.data.fill_(-1)
+
+        with strategy(PaddedBatch(timestamps, lengths), embedding=True) as s:
+            new_embeddings, new_timestamps, mask = s.apply(PaddedBatch(embeddings, lengths),
+                                                           PaddedBatch(timestamps, lengths))
+
+            gt_embeddings = torch.tensor([
+                [0, 1, -1, 2, 3],
+                [4, 5, -1, 6, 7],
+                [8, 9, -1, 10, 11]
+            ]).reshape(3, 5, 1)
+            self.assertTrue((new_embeddings.payload == gt_embeddings).all())
+
+            gt_timestamps = torch.tensor([
+                [0, 1.5, 1.5, 3, 4],
+                [5, 6.5, 6.5, 7, -1],
+                [5, 5, 5, 5, 5]
+            ])
+            self.assertTrue((new_timestamps.payload - gt_timestamps).abs().max() < 1e-6)
+
+            output_embeddings = s.extract_outputs(new_embeddings)
+            output_embeddings_gt = torch.tensor([
+                -1, -1, -1
+            ]).reshape(3, 1)
+            self.assertTrue((output_embeddings == output_embeddings_gt).all())
 
 
 if __name__ == "__main__":
