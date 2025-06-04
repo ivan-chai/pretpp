@@ -91,7 +91,7 @@ class TestFullHTStrategy(TestCase):
 
 class TestSubsetHTStrategy(TestCase):
     def test_insert_remove_tokens(self):
-        strategy = SubsetHTStrategy(1, max_tokens=2, apply_probability=1)
+        strategy = SubsetHTStrategy(1, frequency=0.5, apply_probability=1)
         strategy.token.data.fill_(-1)
 
         embeddings = torch.tensor([

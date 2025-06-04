@@ -230,21 +230,22 @@ class SubsetHTStrategy(HTStrategyBase):
     """Insert history token before each real token.
 
     Args:
-        k: The number of tokens to insert.
+        frequency: The average fraction of history tokens.
         predict: The type of tokens used for prediction (`input_tokens`, `history_tokens` or `all`).
         apply_probability: The probability of HT usage for each real token.
     """
-    def __init__(self, n_embd, max_tokens=1, apply_probability=0.5, predict="input_tokens"):
+    def __init__(self, n_embd, frequency=0.1, apply_probability=0.5, predict="input_tokens"):
         if predict not in {"input_tokens", "history_tokens", "all"}:
             raise ValueError(f"Unknown prediction mode: {predict}")
         super().__init__(n_embd)
-        self.max_tokens = max_tokens
+        self.frequency = frequency
         self.apply_probability = apply_probability
         self.predict = predict
 
     def select_positions(self, max_length):
         """Select tokens to insert HT after them."""
-        return torch.randperm(max_length, device=self.device)[:self.max_tokens].sort()[0]  # (R) in [0, L), sorted.
+        max_tokens = max(1, int(round(self.frequency * max_length)))
+        return torch.randperm(max_length, device=self.device)[:max_tokens].sort()[0]  # (R) in [0, L), sorted.
 
     def select(self, timestamps, embedding=False):
         self.seq_lens = timestamps.seq_lens
@@ -357,7 +358,7 @@ class FixedHTStrategy(SubsetHTStrategy):
     def __init__(self, n_embd, positions, apply_probability=0.5, predict="input_tokens", embed_end=False):
         if predict not in {"input_tokens", "history_tokens", "all"}:
             raise ValueError(f"Unknown prediction mode: {predict}")
-        super().__init__(n_embd, max_tokens=len(positions),
+        super().__init__(n_embd, frequency=None,
                          apply_probability=apply_probability,
                          predict=predict)
         self.specified_positions = positions

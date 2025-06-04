@@ -9,6 +9,6 @@ module:
       strategy_partial:
         _target_: pretpp.nn.SubsetHTStrategy
         _partial_: true
+        frequency: ${transformer_history_token_frequency}
         apply_probability: ${transformer_history_token_probability}
-        max_tokens: ${transformer_history_num_tokens}
   aggregator: null
