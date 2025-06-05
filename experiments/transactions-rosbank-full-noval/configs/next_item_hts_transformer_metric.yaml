@@ -48,5 +48,5 @@ module:
         grad_scale: 1
 
 trainer:
-  max_epochs: 20
+  max_epochs: 120
   deterministic: true
