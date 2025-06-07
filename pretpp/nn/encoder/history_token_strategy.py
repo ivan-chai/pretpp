@@ -261,14 +261,16 @@ class SubsetHTStrategy(HTStrategyBase):
         frequency: The average fraction of history tokens.
         predict: The type of tokens used for prediction (`input_tokens`, `history_tokens` or `all`).
         apply_probability: The probability of HT usage for each real token.
+        token_selection: Either `last` or `random`.
     """
-    def __init__(self, n_embd, frequency=0.1, apply_probability=0.5, predict="input_tokens"):
+    def __init__(self, n_embd, frequency=0.1, apply_probability=0.5, token_selection="last", predict="input_tokens"):
         if predict not in {"input_tokens", "history_tokens", "all"}:
             raise ValueError(f"Unknown prediction mode: {predict}")
         super().__init__(n_embd)
         self.frequency = frequency
         self.apply_probability = apply_probability
         self.predict = predict
+        self.token_selection = token_selection
 
     def select_positions(self, max_length):
         """Select tokens to insert HT after them."""
@@ -346,7 +348,9 @@ class SubsetHTStrategy(HTStrategyBase):
         if self.embedding:
             return None  # Simple causal mask.
         elif self.apply_to_batch:
-            return make_ht_attention_mask(self.length, self.after_positions, active_tokens="last", device=self.device)
+            return make_ht_attention_mask(self.length, self.after_positions,
+                                          active_tokens=self.token_selection,
+                                          device=self.device)
         else:
             return None
 
