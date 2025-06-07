@@ -1,9 +1,9 @@
 defaults:
   - default
-  - default_ht_transformer
+  - default_hts_transformer
   - _self_
 
-name: next_item_ht_transformer
+name: next_item_hts_transformer
 
 module:
   _target_: pretpp.modules.BaseModule
