@@ -51,7 +51,7 @@ def get_transactions(cache_dir):
 
     # Extract timestamp.
     dataset = dataset.na.fill({"channel_type": "unknown"})
-    
+
     dataset = dataset.withColumn("_et_day", F.substring(F.col("TRDATETIME"), 1, 7))
     dataset = dataset.withColumn("_et_day", F.unix_timestamp("_et_day", "ddMMMyy"))
     dataset = dataset.withColumn("_et_time", F.substring(F.col("TRDATETIME"), 9, 8))
