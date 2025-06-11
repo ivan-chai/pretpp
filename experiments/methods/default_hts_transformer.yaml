@@ -11,4 +11,5 @@ module:
         _partial_: true
         frequency: ${transformer_history_token_frequency}
         apply_probability: ${transformer_history_token_probability}
+        token_selection: last
   aggregator: null
