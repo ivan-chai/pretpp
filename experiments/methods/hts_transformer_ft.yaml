@@ -10,7 +10,8 @@ module:
   seq_encoder:
     model_partial:
       strategy_partial:
-        apply_probability: 0  # Insert HTs, but don't use them for regular tokens.
+        apply_probability: 1
+        token_selection: none  # Insert HTs, but don't use them for regular tokens.
         predict: all  # Output both HT and regular tokens. SFT is applied to all outputs.
 #  aggregator:
 #    _target_: hotpp.nn.LastAggregator

@@ -49,7 +49,7 @@ def make_ht_attention_mask(length, ht_positions, active_tokens="random", device=
     Args:
         length: The length of input sequence.
         ht_positions: Sorted token indices to insert HT after with shape (R).
-        active_tokens: Either `random`, `last` or a tensor with shape (L) of HT token indices
+        active_tokens: Either `random`, `last`, `none` or a tensor with shape (L) of HT token indices
             with 0 meaning no HT and R meaning the last HT.
 
     Returns:
@@ -71,6 +71,8 @@ def make_ht_attention_mask(length, ht_positions, active_tokens="random", device=
         else:
             assert active_tokens == "last"
             active_tokens = n_active_tokens
+    elif active_tokens == "none":
+        active_tokens = torch.zeros(l, device=device, dtype=torch.long)
     assert active_tokens.shape == (l,)
     n_summarize = torch.cat([torch.zeros_like(ht_positions[:1]), ht_positions + 1], 0).take_along_dim(active_tokens, 0)
     selected_tokens = active_tokens - 1
@@ -185,97 +187,35 @@ class HTStrategyBase(ABC, torch.nn.Module):
             raise
 
 
-class FullHTStrategy(HTStrategyBase):
-    """Insert history token before each real token.
+class HTStrategyImpl(HTStrategyBase):
+    """Simple implementation of common strategy algorithms.
 
     Args:
-        predict: The type of tokens used for prediction (`input_tokens`, `history_tokens` or `all`).
         apply_probability: The probability of HT usage for each real token.
+        token_selection: Either `random`, `last` or `none`.
+        predict: The type of tokens used for prediction (`input_tokens`, `history_tokens` or `all`).
     """
-    def __init__(self, n_embd, apply_probability=0.5, predict="input_tokens"):
+    def __init__(self, n_embd, apply_probability=0.5, token_selection="random", predict="input_tokens"):
+        if token_selection not in {"random", "last", "none"}:
+            raise ValueError(f"Unknown token selection mode: {token_selection}")
         if predict not in {"input_tokens", "history_tokens", "all"}:
             raise ValueError(f"Unknown prediction mode: {predict}")
         super().__init__(n_embd)
         self.apply_probability = apply_probability
-        self.predict = predict
-
-    def select(self, timestamps, embedding=False):
-        self.seq_lens = timestamps.seq_lens
-        self.length = timestamps.shape[1]
-        self.embedding = embedding
-        self.device = timestamps.device
-
-    def clear_state(self):
-        del self.seq_lens
-        del self.length
-        del self.embedding
-        del self.device
-
-    def insert_tokens(self, x, timestamps):
-        if self.embedding:
-            return add_token_to_the_end(x, timestamps, self.token.to(x.payload.dtype))
-        else:
-            # Insert before each real token.
-            b, l, d = x.payload.shape
-            device = x.device
-            new_x = torch.stack([x.payload, self.token[None, None].expand(b, l, d)], 2).flatten(1, 2)  # (B, 2 * L, D).
-            new_timestamps = timestamps.payload.repeat_interleave(2, 1)  # (B, 2 * L).
-            new_lengths = x.seq_lens * 2
-        return PaddedBatch(new_x, new_lengths), PaddedBatch(new_timestamps, new_lengths)
-
-    def make_attention_mask(self):
-        if self.embedding:
-            return None  # Simple causal mask.
-        else:
-            ht_positions = torch.arange(self.length, device=self.device)
-            if torch.rand([]) < self.apply_probability:
-                active_tokens = "random"
-            else:
-                active_tokens = torch.zeros(self.length, device=self.device, dtype=torch.long)
-            return make_ht_attention_mask(self.length, ht_positions, active_tokens=active_tokens, device=self.device)
-
-    def extract_outputs(self, x):
-        if self.embedding:
-            return x.payload.take_along_dim(self.seq_lens[:, None, None], 1).squeeze(1)  # (B, D).
-        else:
-            b, l = x.shape
-            if l % 2 != 0:
-                raise ValueError("Unexpected input shape")
-            if self.predict == "input_tokens":
-                new_x = x.payload[:, ::2]
-                new_lengths = self.seq_lens
-            elif self.predict == "history_tokens":
-                new_x = x.payload[:, 1::2]
-                new_lengths = self.seq_lens
-            else:
-                assert self.predict == "all"
-                new_x = x.payload
-                new_lengths = x.seq_lens
-            return PaddedBatch(new_x, new_lengths)
-
-
-class SubsetHTStrategy(HTStrategyBase):
-    """Insert history token before each real token.
-
-    Args:
-        frequency: The average fraction of history tokens.
-        predict: The type of tokens used for prediction (`input_tokens`, `history_tokens` or `all`).
-        apply_probability: The probability of HT usage for each real token.
-        token_selection: Either `last` or `random`.
-    """
-    def __init__(self, n_embd, frequency=0.1, apply_probability=0.5, token_selection="last", predict="input_tokens"):
-        if predict not in {"input_tokens", "history_tokens", "all"}:
-            raise ValueError(f"Unknown prediction mode: {predict}")
-        super().__init__(n_embd)
-        self.frequency = frequency
-        self.apply_probability = apply_probability
-        self.predict = predict
         self.token_selection = token_selection
+        self.predict = predict
 
-    def select_positions(self, max_length):
-        """Select tokens to insert HT after them."""
-        max_tokens = max(1, int(round(self.frequency * max_length)))
-        return torch.randperm(max_length, device=self.device)[:max_tokens].sort()[0]  # (R) in [0, L), sorted.
+    @abstractmethod
+    def select_positions(self, lengths):
+        """Select tokens to insert HT after.
+
+        Args:
+            lengths: Input lengths.
+
+        Returns:
+            Indices with shape (R) in the range [0, L).
+        """
+        pass
 
     def select(self, timestamps, embedding=False):
         self.seq_lens = timestamps.seq_lens
@@ -283,11 +223,10 @@ class SubsetHTStrategy(HTStrategyBase):
         self.embedding = embedding
         self.device = timestamps.device
 
-        self.apply_to_batch = torch.rand([]) < self.apply_probability
+        self.apply_to_batch = not embedding and torch.rand([]) < self.apply_probability
 
         if self.apply_to_batch:
-            max_length = max(1, self.seq_lens.max().item())
-            self.after_positions = self.select_positions(max_length)  # (R) in [0, L), sorted.
+            self.after_positions = self.select_positions(self.seq_lens)  # (R) in [0, L), sorted.
             self.positions = torch.arange(1, len(self.after_positions) + 1, device=self.device) + self.after_positions  # (R) in [0, L + R), sorted.
 
             # Precompute indices.
@@ -364,6 +303,56 @@ class SubsetHTStrategy(HTStrategyBase):
             return PaddedBatch(x.payload.take_along_dim(self.output_indices[None, :, None], 1), self.seq_lens)  # (B, L, D).
 
 
+class FullHTStrategy(HTStrategyImpl):
+    """Insert history token before each real token.
+
+    Args:
+        apply_probability: The probability of HT usage for each real token.
+        token_selection: Either `random`, `last` or `none`.
+        predict: The type of tokens used for prediction (`input_tokens`, `history_tokens` or `all`).
+    """
+    def select_positions(self, lengths):
+        """Select tokens to insert HT after.
+
+        Args:
+            lengths: Input lengths.
+
+        Returns:
+            Indices with shape (R) in the range [0, L).
+        """
+        return torch.arange(lengths.max(), device=lengths.device)
+
+
+class SubsetHTStrategy(HTStrategyImpl):
+    """Insert history token before each real token.
+
+    Args:
+        frequency: The average fraction of history tokens.
+        apply_probability: The probability of HT usage for each real token.
+        token_selection: Either `random`, `last` or `none`.
+        predict: The type of tokens used for prediction (`input_tokens`, `history_tokens` or `all`).
+    """
+    def __init__(self, n_embd, frequency=0.1, apply_probability=0.5, token_selection="last", predict="input_tokens"):
+        super().__init__(n_embd,
+                         apply_probability=apply_probability,
+                         token_selection=token_selection,
+                         predict=predict)
+        self.frequency = frequency
+
+    def select_positions(self, lengths):
+        """Select tokens to insert HT after.
+
+        Args:
+            lengths: Input lengths.
+
+        Returns:
+            Indices with shape (R) in the range [0, L).
+        """
+        max_length = lengths.max().item()
+        max_tokens = max(1, int(round(self.frequency * max_length)))
+        return torch.randperm(max_length, device=self.device)[:max_tokens].sort()[0]  # (R) in [0, L), sorted.
+
+
 class FixedHTStrategy(SubsetHTStrategy):
     """Insert history token at specified positions.
 
@@ -381,8 +370,16 @@ class FixedHTStrategy(SubsetHTStrategy):
         self.specified_positions = positions
         self.embed_end = embed_end
 
-    def select_positions(self, max_length):
-        """Select tokens to insert HT after them."""
+    def select_positions(self, lengths):
+        """Select tokens to insert HT after.
+
+        Args:
+            lengths: Input lengths.
+
+        Returns:
+            Indices with shape (R) in the range [0, L).
+        """
+        max_length = lengths.max().item()
         positions = torch.tensor(self.specified_positions, device=self.device, dtype=torch.long).sort()[0]  # (R) in [0, L), sorted.
         positions = positions[positions < max_length]
         return positions

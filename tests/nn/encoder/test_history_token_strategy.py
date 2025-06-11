@@ -18,6 +18,8 @@ class TestMakeHTAttentionMask(TestCase):
     def test_make_attention_mask(self):
         l = 4
         ht_positions = torch.tensor([0, 2, 3])
+
+        # Fixed HT tokens.
         active_tokens = torch.tensor([0, 1, 0, 2])
         mask = make_ht_attention_mask(l, ht_positions, active_tokens=active_tokens)
 
@@ -28,6 +30,34 @@ class TestMakeHTAttentionMask(TestCase):
             [0, 1, 0, 0, 1, 0, 1],  # 0 active tokens.
             [0, 1, 0, 0, 0, 0, 1],  # History token.
             [1, 1, 1, 1, 0, 0, 1],  # 2 active tokens.
+            [0, 1, 0, 0, 1, 0, 0]   # History token.
+        ]).bool()
+        self.assertTrue((mask == mask_gt).all())
+
+        # Last HT token.
+        mask = make_ht_attention_mask(l, ht_positions, active_tokens="last")
+
+        mask_gt = torch.tensor([
+            [0, 1, 0, 0, 1, 0, 1],  # 0 active tokens.
+            [0, 0, 0, 0, 1, 0, 1],  # History token.
+            [1, 0, 0, 0, 1, 0, 1],  # 1 active token.
+            [1, 0, 0, 0, 1, 0, 1],  # 1 active tokens.
+            [0, 1, 0, 0, 0, 0, 1],  # History token.
+            [1, 1, 1, 1, 0, 0, 1],  # 2 active tokens.
+            [0, 1, 0, 0, 1, 0, 0]   # History token.
+        ]).bool()
+        self.assertTrue((mask == mask_gt).all())
+
+        # No HT tokens.
+        mask = make_ht_attention_mask(l, ht_positions, active_tokens="none")
+
+        mask_gt = torch.tensor([
+            [0, 1, 0, 0, 1, 0, 1],  # 0 active tokens.
+            [0, 0, 0, 0, 1, 0, 1],  # History token.
+            [0, 1, 0, 0, 1, 0, 1],  # 0 active token.
+            [0, 1, 0, 0, 1, 0, 1],  # 0 active tokens.
+            [0, 1, 0, 0, 0, 0, 1],  # History token.
+            [0, 1, 0, 0, 1, 0, 1],  # 0 active tokens.
             [0, 1, 0, 0, 1, 0, 0]   # History token.
         ]).bool()
         self.assertTrue((mask == mask_gt).all())
@@ -99,21 +129,11 @@ class TestHTStrategy(TestCase):
         # Case 2: don't apply.
         with strategy(self.timestamps) as s:
             new_embeddings, new_timestamps, attention_mask = s.apply(self.embeddings, self.timestamps)
-            self.assertEqual(new_embeddings.seq_lens.tolist(), [8, 6, 8])
-            self.assertTrue((new_embeddings.payload == gt_embeddings).all())
-            self.assertTrue((new_timestamps.payload - gt_timestamps).abs().max() < 1e-6)
+            self.assertEqual(new_embeddings.seq_lens.tolist(), [4, 3, 4])
+            self.assertTrue((new_embeddings.payload == self.embeddings.payload).all())
+            self.assertTrue((new_timestamps.payload - self.timestamps.payload).abs().max() < 1e-6)
 
-            gt_attention_mask = torch.tensor([
-                [0, 1, 0, 1, 0, 1, 0, 1],  # 0 active tokens.
-                [0, 0, 0, 1, 0, 1, 0, 1],  # History token.
-                [0, 1, 0, 1, 0, 1, 0, 1],  # 0 active tokens.
-                [0, 1, 0, 0, 0, 1, 0, 1],  # History token.
-                [0, 1, 0, 1, 0, 1, 0, 1],  # 0 active tokens.
-                [0, 1, 0, 1, 0, 0, 0, 1],  # History token.
-                [0, 1, 0, 1, 0, 1, 0, 1],  # 0 active token.
-                [0, 1, 0, 1, 0, 1, 0, 0]   # History token.
-            ])
-            self.assertTrue((attention_mask == gt_attention_mask).all())
+            self.assertTrue(attention_mask is None)
 
             reverted_embeddings = s.extract_outputs(new_embeddings)
             self.assertTrue((reverted_embeddings.payload == self.embeddings.payload).all())
