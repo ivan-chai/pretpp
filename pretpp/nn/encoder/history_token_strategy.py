@@ -255,7 +255,8 @@ class HTStrategyImpl(HTStrategyBase):
             del self.insert_mask
             del self.index
             del self.prev_input
-            del self.output_indices
+            if self.predict in {"input_tokens", "history_tokens"}:
+                del self.output_indices
         del self.apply_to_batch
 
     def insert_tokens(self, x, timestamps):
