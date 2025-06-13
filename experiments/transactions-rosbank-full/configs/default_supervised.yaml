@@ -11,7 +11,10 @@ metric:
 
 module:
   _target_: pretpp.modules.BaseModule
-  loss_projection_partial: ${head}
+  head_partial:
+    _target_: pretpp.nn.NormalizationHead
+    _partial_: true
+  loss_projection_partial: ${metric_head}
   loss:
     _target_: pretpp.losses.ClassificationLoss
     apply_to_all_outputs: true

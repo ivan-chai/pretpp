@@ -41,21 +41,40 @@ class NormalizationHead(IdentityHead):
         return PaddedBatch(torch.nn.functional.normalize(x.payload, dim=-1), x.seq_lens)
 
 
-class MetricHead(torch.nn.Sequential):
+class MetricHead(torch.nn.Module):
     def __init__(self, input_size, output_size, hidden_dims=None,
                  metric_params=None, head_params=None):
+        super().__init__()
+        if head_params and head_params.get("use_batch_norm", False):
+            self.bn = torch.nn.BatchNorm1d(input_size)
+        else:
+            self.bn = None
         layers = []
         if not hidden_dims:
             layers.append(MetricLayer(input_size, output_size, **(metric_params or {})))
         else:
             layers.append(MetricLayer(input_size, hidden_dims[0], **(metric_params or {})))
             layers.append(Head(hidden_dims[0], output_size, hidden_dims=hidden_dims[1:], **(head_params or {})))
+        self.proj = torch.nn.Sequential(*layers)
         self._output_size = output_size
-        super().__init__(*layers)
 
     @property
     def output_size(self):
         return self._output_size
+
+    def forward(self, x):
+        if self.bn is not None:
+            # Workaround for a correct BatchNorm computation for variable-lenght sequences.
+            x, lengths, mask = x.payload, x.seq_lens, x.seq_len_mask.bool()
+            assert x.ndim > 2  # (B, L, *, D).
+            shape = list(x.shape)
+            x_masked = x[mask]  # (V, *, D).
+            v = len(x_masked)
+            x_mapped = self.bn(x_masked.flatten(0, -2)).reshape(*x_masked.shape)  # (V, *, D).
+            x_new = torch.zeros(*[shape[:-1] + [shape[-1]]], dtype=x_mapped.dtype, device=x_mapped.device)  # (B, L, *, D).
+            x_new[mask] = x_mapped
+            x = PaddedBatch(x_new, lengths)
+        return self.proj(x)
 
 
 class MetricConditionalHead(torch.nn.Sequential):
