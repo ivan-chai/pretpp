@@ -18,7 +18,7 @@ transformer_inter_size: 1536
 transformer_heads: 4
 transformer_layers: 6
 transformer_context: 256
-transformer_positions: 1536
+transformer_positions: 3072
 transformer_dropout: 0.1
 transformer_min_length: 128
 transformer_cls_token:
