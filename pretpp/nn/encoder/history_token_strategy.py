@@ -4,6 +4,29 @@ import torch
 from hotpp.data import PaddedBatch
 
 
+def batch_nonzero(x):
+    """Find indices of non-zero elements along second dimension.
+
+    NOTE: the number of non-zero elements must match.
+
+    Args:
+        x: Tensor with shape (B, D).
+
+    Returns:
+        Indices with shape (B, R).
+    """
+    nonzero = (x > 0).long()
+    n_nonzero = nonzero.sum(1)  # (B).
+    if (n_nonzero != n_nonzero[0]).any():
+        raise ValueError(f"Different number of non-zero elements in rows: {n_nonzero.tolist()}.")
+    order = torch.argsort(nonzero, dim=1, descending=True, stable=True)
+    return order[:, :n_nonzero[0]]
+
+
+def batch_randperm(b, r, device=None):
+    return torch.rand(b, r, device=device).argsort(1)
+
+
 def add_token_to_the_end(x, timestamps, token):
     b, l, d = x.payload.shape
     last = x.seq_lens  # (B).
@@ -22,82 +45,69 @@ def add_token_to_the_end(x, timestamps, token):
     return new_x, new_timestamps
 
 
-def add_token_at_position(x, timestamps, token, position):
-    if position == 0:
-        raise ValueError("Can't estimate token timestamp at zero position")
-    b, l, d = x.payload.shape
-    new_lengths = x.seq_lens + 1
-
-    index = torch.as_tensor(position, device=x.device, dtype=torch.long)
-
-    # Add HT to to the end.
-    new_x = torch.cat([x.payload[:, :position], x.payload[:, :1], x.payload[:, position:]], 1)  # (B, L + 1, D).
-    new_x.scatter_(1, index[None, None, None].expand(b, 1, d), token[None, None].expand(b, 1, d))
-    new_x = PaddedBatch(new_x, new_lengths)
-
-    # Duplicate the last timestamp.
-    prev_ts = timestamps.payload.take_along_dim(index[None, None] - 1, 1)  # (B, 1).
-    new_timestamps = torch.cat([timestamps.payload[:, :position], timestamps.payload[:, :1], timestamps.payload[:, position:]], 1)  # (B, L + 1).
-    new_timestamps.scatter_(1, index[None, None].expand(b, 1), prev_ts)
-    new_timestamps = PaddedBatch(new_timestamps, new_lengths)
-    return new_x, new_timestamps
-
-
-def make_ht_attention_mask(length, ht_positions, active_tokens="random", device=None):
+def make_ht_attention_mask(length, ht_positions,
+                           active_tokens="random", use_ht_mask=None,
+                           device=None):
     """Make attention mask for history tokens.
 
     Args:
         length: The length of input sequence.
-        ht_positions: Sorted token indices to insert HT after with shape (R).
-        active_tokens: Either `random`, `last`, `none` or a tensor with shape (L) of HT token indices
+        ht_positions: Sorted token indices to insert HT after with shape (B, R).
+        active_tokens: Either `random`, `last`, `none` or a tensor with shape (B, L) of HT token indices
             with 0 meaning no HT and R meaning the last HT.
+        use_ht_mask: Indicates elements of the batch to use history tokens for.
 
     Returns:
-        Atteniton mask with shape (L + R, L + R).
+        Atteniton mask with shape (B, L + R, L + R).
     """
     # Prepare.
     if device is None:
         device = torch.get_default_device()
     l = length
-    r = len(ht_positions)
+    b, r = ht_positions.shape
     assert r <= l
-    ht_positions_mask = torch.zeros(l, device=device, dtype=torch.bool).scatter_(0, ht_positions, True)  # (L).
+    ht_positions_mask = torch.zeros(b, l, device=device, dtype=torch.bool).scatter_(1, ht_positions, True)  # (B, L).
 
     # Generate prefix lengths.
     if active_tokens in {"random", "last"}:
-        n_active_tokens = torch.cat([torch.zeros_like(ht_positions_mask[:1]), ht_positions_mask[:-1]], 0).cumsum(0)  # (L).
+        n_active_tokens = torch.cat([torch.zeros_like(ht_positions_mask[:, :1]), ht_positions_mask[:, :-1]], 1).cumsum(1)  # (B, L).
         if active_tokens == "random":
-            active_tokens = (torch.rand(l, device=device) * n_active_tokens).round().long()  # (L) in [0, R].
+            active_tokens = (torch.rand(b, l, device=device) * n_active_tokens).round().long()  # (B, L) in [0, R].
         else:
             assert active_tokens == "last"
             active_tokens = n_active_tokens
     elif active_tokens == "none":
-        active_tokens = torch.zeros(l, device=device, dtype=torch.long)
-    assert active_tokens.shape == (l,)
-    n_summarize = torch.cat([torch.zeros_like(ht_positions[:1]), ht_positions + 1], 0).take_along_dim(active_tokens, 0)
-    selected_tokens = active_tokens - 1
+        active_tokens = torch.zeros(b, l, device=device, dtype=torch.long)
+    assert active_tokens.shape == (b, l)
+    if use_ht_mask is not None:
+        active_tokens[~use_ht_mask.bool()] = 0
+
+    n_summarize = torch.cat([torch.zeros_like(ht_positions[:, :1]), ht_positions + 1], 1).take_along_dim(active_tokens, 1)  # (B, L)
+    selected_tokens = active_tokens - 1  # (B, L).
 
     # Fill grouped attention mask, with separated real and history tokens blocks:
     # [LL LR]
     # [RL RR]
     # The mask will be sorted after filling.
 
-    mask_ll = torch.arange(l, device=device)[None] < n_summarize[:, None]
-    mask_rr = ~torch.eye(r, device=device, dtype=torch.bool)
-    mask_lr = torch.ones(l, r, device=device, dtype=torch.bool).scatter_(1, selected_tokens.clip(min=0)[:, None], False)
-    mask_lr[selected_tokens == -1, 0] = True
-    mask_rl = torch.zeros(r, l, device=device, dtype=torch.bool)
+    mask_ll = (torch.arange(l, device=device)[None, None] < n_summarize[:, :, None]).expand(b, l, l)  # (B, L, L).
+    mask_rr = (~torch.eye(r, device=device, dtype=torch.bool))[None].expand(b, r, r)  # (B, R, R).
+    mask_lr = torch.ones(b, l, r, device=device, dtype=torch.bool).scatter_(2, selected_tokens.clip(min=0)[:, :, None], False)  # (B, L, R).
+    mask_lr = mask_lr.reshape(b * l, r)
+    mask_lr[selected_tokens.flatten() == -1, 0] = True
+    mask_lr = mask_lr.reshape(b, l, r)
+    mask_rl = torch.zeros(r, l, device=device, dtype=torch.bool)[None].expand(b, r, l)  # (B, R, L).
 
     # Merge and order masks.
-    ht_mask = torch.zeros(l + r, device=device, dtype=torch.bool).scatter_(0, torch.arange(1, 1 + r, device=device) + ht_positions, True)
-    real_mask = ~ht_mask
-    order = torch.argsort(torch.cat([torch.nonzero(real_mask).squeeze(1), torch.nonzero(ht_mask).squeeze(1)], 0))
+    ht_mask = torch.zeros(b, l + r, device=device, dtype=torch.bool).scatter_(1, torch.arange(1, 1 + r, device=device) + ht_positions, True)  # (B, L + R).
+    real_mask = ~ht_mask  # (B, L + R).
+    order = torch.argsort(torch.cat([batch_nonzero(real_mask), batch_nonzero(ht_mask)], 1), dim=1)  # (B, L + R).
 
     mask = torch.cat([
-        torch.cat([mask_ll, mask_lr], 1),
-        torch.cat([mask_rl, mask_rr], 1)
-    ], 0)
-    mask = mask.take_along_dim(order[:, None], 0).take_along_dim(order[None, :], 1)
+        torch.cat([mask_ll, mask_lr], 2),
+        torch.cat([mask_rl, mask_rr], 2)
+    ], 1)  # (B, L + R, L + R).
+    mask = mask.take_along_dim(order[:, :, None], 1).take_along_dim(order[:, None, :], 2)
     return mask
 
 
@@ -113,7 +123,7 @@ class HTStrategyBase(ABC, torch.nn.Module):
 
     @abstractmethod
     def select(self, timestamps, embedding=False):
-        """Select token positions based on lengths. Use internal state for storage."""
+        """Select token positions with shape (B, R) based on lengths. Use internal state for storage."""
         pass
 
     @abstractmethod
@@ -140,7 +150,7 @@ class HTStrategyBase(ABC, torch.nn.Module):
         """Sample an attention mask for the last input, transformed with `insert_tokens`.
 
         Returns:
-            Attention mask with shape (L', L').
+            Attention mask with shape (B, L', L').
         """
         pass
 
@@ -194,6 +204,7 @@ class HTStrategyImpl(HTStrategyBase):
         apply_probability: The probability of HT usage for each real token.
         token_selection: Either `random`, `last` or `none`.
         predict: The type of tokens used for prediction (`input_tokens`, `history_tokens` or `all`).
+        batch: Whether to apply individual strategy to each element of the batch or the same for all elements.
     """
     def __init__(self, n_embd, apply_probability=0.5, token_selection="random", predict="input_tokens"):
         if token_selection not in {"random", "last", "none"}:
@@ -213,7 +224,7 @@ class HTStrategyImpl(HTStrategyBase):
             lengths: Input lengths.
 
         Returns:
-            Indices with shape (R) in the range [0, L).
+            Indices with shape (B, R) in the range [0, L).
         """
         pass
 
@@ -223,46 +234,54 @@ class HTStrategyImpl(HTStrategyBase):
         self.embedding = embedding
         self.device = timestamps.device
 
-        self.apply_to_batch = not embedding and torch.rand([]) < self.apply_probability
-
-        if self.apply_to_batch:
-            self.after_positions = self.select_positions(self.seq_lens)  # (R) in [0, L), sorted.
-            self.positions = torch.arange(1, len(self.after_positions) + 1, device=self.device) + self.after_positions  # (R) in [0, L + R), sorted.
+        if not embedding:
+            self.after_positions = self.select_positions(self.seq_lens)  # (B, R) in [0, L), sorted.
+            r = self.after_positions.shape[1]
+            self.positions = torch.arange(1, r + 1, device=self.device) + self.after_positions  # (B, R) in [0, L + R), sorted.
 
             # Precompute indices.
             b, l = timestamps.shape
             d = len(self.token)
-            r = len(self.positions)
-            self.insert_mask = torch.ones(l + r, device=self.device, dtype=torch.long)  # (L + R).
-            self.insert_mask.scatter_(0, self.positions, 0)  # (L + R).
-            last_input = (self.insert_mask.cumsum(0) - 1).clip(min=0)  # (L + R).
-            self.index = last_input.scatter(0, self.positions, l)  # (L + R).
-            self.prev_input = last_input.take_along_dim(self.positions, 0)  # (R).
+            # Mask with zeros at HT positions.
+            self.insert_mask = torch.ones(b, l + r, device=self.device, dtype=torch.long)  # (B, L + R).
+            self.insert_mask.scatter_(1, self.positions, 0)  # (B, L + R).
+            # Find prefix length for each token.
+            last_input = (self.insert_mask.cumsum(1) - 1).clip(min=0)  # (B, L + R).
+            # Helper index for HT token insertion from the last position.
+            self.index = last_input.scatter(1, self.positions, l)  # (B, L + R).
+            # Prefix length for each HT token.
+            self.prev_input = last_input.take_along_dim(self.positions, 1)  # (B, R).
             if self.predict == "input_tokens":
-                self.output_indices = self.insert_mask.nonzero().squeeze(1)  # (L).
+                self.output_indices = batch_nonzero(self.insert_mask)  # (B, L).
+                self.output_lengths = self.seq_lens
             elif self.predict == "history_tokens":
-                self.output_indices = (1 - self.insert_mask).nonzero().squeeze(1)  # (L).
+                self.output_indices = batch_nonzero(1 - self.insert_mask)  # (B, R).
+                self.output_lengths = (self.after_positions < self.seq_lens[:, None]).sum(1)  # (B).
             else:
                 assert self.predict == "all"
+
+            # Disable HT for some elements.
+            self.use_ht_mask = torch.rand(b, device=self.device) < self.apply_probability  # (B).
 
     def clear_state(self):
         del self.seq_lens
         del self.length
-        del self.embedding
         del self.device
-        if self.apply_to_batch:
+        if not self.embedding:
             del self.positions
             del self.insert_mask
             del self.index
             del self.prev_input
             if self.predict in {"input_tokens", "history_tokens"}:
                 del self.output_indices
-        del self.apply_to_batch
+                del self.output_lengths
+            del self.use_ht_mask
+        del self.embedding
 
     def insert_tokens(self, x, timestamps):
         if self.embedding:
             return add_token_to_the_end(x, timestamps, self.token.to(x.payload.dtype))
-        elif self.apply_to_batch:
+        else:
             b, l = x.shape
             d = len(self.token)
             r = len(self.positions)
@@ -270,38 +289,33 @@ class HTStrategyImpl(HTStrategyBase):
 
             # Insert tokens.
             extended = torch.cat([x.payload, self.token[None, None].expand(b, 1, d)], 1)  # (B, L + 1, D).
-            new_x = extended.take_along_dim(self.index[None, :, None], 1)  # (B, L + R, D).
+            new_x = extended.take_along_dim(self.index[:, :, None], 1)  # (B, L + R, D).
             extended = torch.cat([timestamps.payload, timestamps.payload[:, :1]], 1)  # (B, L + 1)
-            new_timestamps = extended.take_along_dim(self.index[None, :], 1)  # (B, L + R).
-            prev_ts = timestamps.payload.take_along_dim(self.prev_input[None], 1)  # (B, R).
-            new_timestamps.scatter_(1, self.positions[None].expand(b, r), prev_ts)
+            new_timestamps = extended.take_along_dim(self.index, 1)  # (B, L + R).
+            prev_ts = timestamps.payload.take_along_dim(self.prev_input, 1)  # (B, R).
+            new_timestamps.scatter_(1, self.positions, prev_ts)
 
-            active_tokens = (self.after_positions[None] < x.seq_lens[:, None]).sum(1)  # (B) in [0, R].
+            active_tokens = (self.after_positions < x.seq_lens[:, None]).sum(1)  # (B) in [0, R].
             new_lengths = x.seq_lens + active_tokens  # (B) in [0, L + R].
             return PaddedBatch(new_x, new_lengths), PaddedBatch(new_timestamps, new_lengths)
-        else:
-            token_gradient_branch = 0 * self.token.sum()
-            new_x = PaddedBatch(x.payload + token_gradient_branch, x.seq_lens)
-            return new_x, timestamps
 
     def make_attention_mask(self):
         if self.embedding:
             return None  # Simple causal mask.
-        elif self.apply_to_batch:
+        else:
             return make_ht_attention_mask(self.length, self.after_positions,
                                           active_tokens=self.token_selection,
+                                          use_ht_mask=self.use_ht_mask,
                                           device=self.device)
-        else:
-            return None
 
     def extract_outputs(self, x):
         if self.embedding:
             return x.payload.take_along_dim((x.seq_lens[:, None, None] - 1).clip(min=0), 1).squeeze(1)  # (B, D).
-        elif (not self.apply_to_batch) or (self.predict == "all"):
+        elif self.predict == "all":
             return x
         else:
             assert self.predict in {"input_tokens", "history_tokens"}
-            return PaddedBatch(x.payload.take_along_dim(self.output_indices[None, :, None], 1), self.seq_lens)  # (B, L, D).
+            return PaddedBatch(x.payload.take_along_dim(self.output_indices[:, :, None], 1), self.output_lengths)  # (B, L, D).
 
 
 class FullHTStrategy(HTStrategyImpl):
@@ -319,9 +333,10 @@ class FullHTStrategy(HTStrategyImpl):
             lengths: Input lengths.
 
         Returns:
-            Indices with shape (R) in the range [0, L).
+            Indices with shape (B, R) in the range [0, L).
         """
-        return torch.arange(lengths.max(), device=lengths.device)
+        r = lengths.max()
+        return torch.arange(r, device=lengths.device)[None].expand(len(lengths), r)
 
 
 class SubsetHTStrategy(HTStrategyImpl):
@@ -351,7 +366,7 @@ class SubsetHTStrategy(HTStrategyImpl):
         """
         max_length = lengths.max().item()
         max_tokens = max(1, int(round(self.frequency * max_length)))
-        return torch.randperm(max_length, device=self.device)[:max_tokens].sort()[0]  # (R) in [0, L), sorted.
+        return batch_randperm(len(lengths), max_length, device=self.device)[:, :max_tokens].sort(dim=1)[0]  # (B, R) in [0, L), sorted.
 
 
 class FixedHTStrategy(SubsetHTStrategy):
@@ -383,6 +398,7 @@ class FixedHTStrategy(SubsetHTStrategy):
         max_length = lengths.max().item()
         positions = torch.tensor(self.specified_positions, device=self.device, dtype=torch.long).sort()[0]  # (R) in [0, L), sorted.
         positions = positions[positions < max_length]
+        positions = positions[None].expand(len(lengths), len(positions))  # (B, R).
         return positions
 
     def insert_tokens(self, x, timestamps):
@@ -392,7 +408,7 @@ class FixedHTStrategy(SubsetHTStrategy):
                 return add_token_to_the_end(x, timestamps, token)
             else:
                 # Truncate to the first valid position.
-                positions = torch.tensor(self.specified_positions, device=self.device, dtype=torch.long)  # (R).
+                positions = torch.tensor(self.specified_positions, device=self.device, dtype=torch.long).sort()[0]  # (R).
                 valid = positions[None].expand(x.shape[0], len(positions)) < x.seq_lens[:, None]  # (B, R).
                 valid_sum = valid.cumsum(1)  # (B, R).
                 last = torch.logical_and(valid, valid_sum == valid.sum(1)[:, None])
