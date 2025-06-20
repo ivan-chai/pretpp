@@ -328,7 +328,7 @@ class SubsetHTStrategy(HTStrategyImpl):
     """Insert history token before each real token.
 
     Args:
-        frequency: The average fraction of history tokens.
+        frequency: The average fraction of history tokens (use 0 to use single token).
         apply_probability: The probability of HT usage for each real token.
         token_selection: Either `random`, `last` or `none`.
         predict: The type of tokens used for prediction (`input_tokens`, `history_tokens` or `all`).
