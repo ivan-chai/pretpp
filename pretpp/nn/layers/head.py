@@ -45,10 +45,12 @@ class MetricHead(torch.nn.Module):
     def __init__(self, input_size, output_size, hidden_dims=None,
                  metric_params=None, head_params=None):
         super().__init__()
-        if head_params and head_params.get("use_batch_norm", False):
-            self.bn = torch.nn.BatchNorm1d(input_size)
-        else:
-            self.bn = None
+        # TODO: DEBUG CHECK BATCH NORM CONSISTENCY BETWEEN PRETRAIN / SFT / EMBED.
+        #if head_params and head_params.get("use_batch_norm", False):
+        #    self.bn = torch.nn.BatchNorm1d(input_size)
+        #else:
+        #    self.bn = None
+        self.bn = None
         layers = []
         if not hidden_dims:
             layers.append(MetricLayer(input_size, output_size, **(metric_params or {})))
