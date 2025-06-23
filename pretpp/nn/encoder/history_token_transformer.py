@@ -31,10 +31,11 @@ class HistoryTokenTransformer(SimpleTransformer):
             if self.embed_layer is not None:
                 _, states = self.transform(x, return_states="full", attention_mask=attention_mask)  # N * (B, L, D).
                 outputs = states[self.embed_layer]
-                layer = self.encoder.layers[0]
                 is_last_layer = self.embed_layer == len(states) - 1
-                if layer.norm_first and (not is_last_layer):
-                    outputs = layer.norm1(outputs)
+                if not is_last_layer:
+                    layer = self.encoder.layers[self.embed_layer + 1]
+                    if layer.norm_first:
+                        outputs = layer.norm1(outputs)
                 outputs = PaddedBatch(outputs, x.seq_lens)
             else:
                 outputs, _ = self.transform(x)
