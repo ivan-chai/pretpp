@@ -22,27 +22,6 @@ def add_token_to_the_end(x, timestamps, token):
     return new_x, new_timestamps
 
 
-def add_token_at_position(x, timestamps, token, position):
-    if position == 0:
-        raise ValueError("Can't estimate token timestamp at zero position")
-    b, l, d = x.payload.shape
-    new_lengths = x.seq_lens + 1
-
-    index = torch.as_tensor(position, device=x.device, dtype=torch.long)
-
-    # Add HT to to the end.
-    new_x = torch.cat([x.payload[:, :position], x.payload[:, :1], x.payload[:, position:]], 1)  # (B, L + 1, D).
-    new_x.scatter_(1, index[None, None, None].expand(b, 1, d), token[None, None].expand(b, 1, d))
-    new_x = PaddedBatch(new_x, new_lengths)
-
-    # Duplicate the last timestamp.
-    prev_ts = timestamps.payload.take_along_dim(index[None, None] - 1, 1)  # (B, 1).
-    new_timestamps = torch.cat([timestamps.payload[:, :position], timestamps.payload[:, :1], timestamps.payload[:, position:]], 1)  # (B, L + 1).
-    new_timestamps.scatter_(1, index[None, None].expand(b, 1), prev_ts)
-    new_timestamps = PaddedBatch(new_timestamps, new_lengths)
-    return new_x, new_timestamps
-
-
 def make_ht_attention_mask(length, ht_positions, active_tokens="random", device=None):
     """Make attention mask for history tokens.
 
