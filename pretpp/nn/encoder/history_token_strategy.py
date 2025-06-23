@@ -88,7 +88,7 @@ class HTStrategyBase(ABC, torch.nn.Module):
         self.init_token(n_embd)
 
     def init_token(self, n_embd):
-        self.token = torch.nn.Parameter(torch.rand(n_embd))  # (D).
+        self.token = torch.nn.Parameter(torch.randn(n_embd))  # (D).
 
     @abstractmethod
     def select(self, timestamps, embedding=False):

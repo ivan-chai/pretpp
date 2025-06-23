@@ -80,16 +80,20 @@ class TestHTStrategy(TestCase):
         self.timestamps = PaddedBatch(timestamps, lengths)
 
     @mock.patch("torch.rand")
-    def test_full_strategy(self, mock_rand):
+    @mock.patch("torch.randn")
+    def test_full_strategy(self, mock_randn, mock_rand):
         n_active_tokens = torch.arange(4)
+        mock_randn.side_effect = [
+            torch.tensor([-1.0]),  # Token embedding.
+        ]
         mock_rand.side_effect = [
             # Case 1: apply.
-            torch.tensor([-1.0]),  # Token embedding.
             torch.tensor(0.2),  # < apply_probability = 0.5.
             torch.tensor([0, 0, 2, 1]) / n_active_tokens.clip(min=1),  # Active tokens.
             # Case 2: don't apply.
             torch.tensor(0.8),  # > apply_probability = 0.5.
         ]
+
         strategy = FullHTStrategy(1)
 
         gt_embeddings = torch.tensor([
@@ -164,10 +168,13 @@ class TestHTStrategy(TestCase):
 
     @mock.patch("torch.rand")
     @mock.patch("torch.randperm")
-    def test_subset_strategy(self, mock_randperm, mock_rand):
+    @mock.patch("torch.randn")
+    def test_subset_strategy(self, mock_randn, mock_randperm, mock_rand):
+        mock_randn.side_effect = [
+            torch.tensor([-1.0]),  # Token embedding.
+        ]
         mock_rand.side_effect = [
             # Case 1: apply.
-            torch.tensor([-1.0]),  # Token embedding.
             torch.tensor(0.2),  # < apply_probability = 0.5.
             # Case 2: don't apply.
             torch.tensor(0.8),  # > apply_probability = 0.5.
@@ -251,10 +258,13 @@ class TestHTStrategy(TestCase):
             self.assertTrue((reverted_embeddings - (-1)).abs().max() < 1e-6)
 
     @mock.patch("torch.rand")
-    def test_fixed_strategy(self, mock_rand):
+    @mock.patch("torch.randn")
+    def test_fixed_strategy(self, mock_randn, mock_rand):
+        mock_randn.side_effect = [
+            torch.tensor([-1.0]),  # Token embedding.
+        ]
         mock_rand.side_effect = [
             # Case 1: apply.
-            torch.tensor([-1.0]),  # Token embedding.
             torch.tensor(0.2),  # < apply_probability = 0.5.
             # Case 2: don't apply.
             torch.tensor(0.8),  # > apply_probability = 0.5.
