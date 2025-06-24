@@ -417,3 +417,26 @@ class FixedHTStrategy(SubsetHTStrategy):
                 return add_token_to_the_end(PaddedBatch(x.payload, new_lengths), PaddedBatch(timestamps.payload, new_lengths), token)
         else:
             return super().insert_tokens(x, timestamps)
+
+
+class LastHTStrategy(HTStrategyImpl):
+    """Insert history token at the end of each sequence.
+
+    Args:
+        apply_probability: The probability of HT usage for each real token.
+        token_selection: Either `random`, `last` or `none`.
+        predict: The type of tokens used for prediction (`input_tokens`, `history_tokens` or `all`).
+    """
+    def __init__(self, n_embd, predict="input_tokens"):
+        super().__init__(n_embd, apply_probability=1, token_selection="none", predict=predict)
+
+    def select_positions(self, lengths):
+        """Select tokens to insert HT after.
+
+        Args:
+            lengths: Input lengths.
+
+        Returns:
+            Indices with shape (B, R) in the range [0, L).
+        """
+        return (lengths.unsqueeze(1) - 1).clip(min=0)  # (B, 1).
