@@ -149,15 +149,21 @@ class TestHTStrategy(TestCase):
         self.timestamps = PaddedBatch(timestamps, lengths)
 
     @mock.patch("torch.rand")
-    def test_full_strategy(self, mock_rand):
+    @mock.patch("torch.randn")
+    def test_full_strategy(self, mock_randn, mock_rand):
         n_active_tokens = torch.arange(4)
+        mock_randn.side_effect = [
+            torch.tensor([-1.0]),  # Token embedding.
+        ]
         mock_rand.side_effect = [
             # Case 1: apply.
-            torch.tensor([-1.0]),  # Token embedding.
             torch.tensor([0.2, 0.3, 0.1]),  # < apply_probability = 0.5.
             torch.tensor([0, 0, 2, 1])[None].repeat(3, 1) / n_active_tokens.clip(min=1),  # Active tokens.
             # Case 2: embedding.
+            torch.tensor(0.2),  # < apply_probability = 0.5.
+            torch.tensor([0, 0, 2, 1]) / n_active_tokens.clip(min=1),  # Active tokens.
         ]
+
         strategy = FullHTStrategy(1)
 
         gt_embeddings = torch.tensor([
@@ -219,16 +225,25 @@ class TestHTStrategy(TestCase):
             self.assertTrue((reverted_embeddings - (-1)).abs().max() < 1e-6)
 
     @mock.patch("torch.rand")
-    def test_subset_strategy(self, mock_rand):
+    @mock.patch("torch.randperm")
+    @mock.patch("torch.randn")
+    def test_subset_strategy(self, mock_randn, mock_randperm, mock_rand):
+        mock_randn.side_effect = [
+            torch.tensor([-1.0]),  # Token embedding.
+        ]
         mock_rand.side_effect = [
             # Case 1: apply.
-            torch.tensor([-1.0]),  # Token embedding.
             torch.tensor([
                 [1, 0.1, 1, 0.2],  # put 1 and 3 at the first place.
                 [0, 0.1, 0.2, 1],  # put 0 and 1 at the first place
                 [1, 0.1, 1, 0.2],  # put 1 and 3 at the first place.
             ]),  # batch_randperm, put 1 and 3 at the first place.
             torch.tensor([0.2, 0.1, 0.3]),  # < apply_probability = 0.5.
+            # Case 2: embedding
+        ]
+        mock_randperm.side_effect = [
+            # Case 1: apply.
+            torch.tensor([1, 3]),  # Selected positions.
             # Case 2: embedding.
         ]
         strategy = SubsetHTStrategy(1, frequency=0.5)
@@ -308,10 +323,13 @@ class TestHTStrategy(TestCase):
             self.assertTrue((reverted_embeddings - (-1)).abs().max() < 1e-6)
 
     @mock.patch("torch.rand")
-    def test_fixed_strategy(self, mock_rand):
+    @mock.patch("torch.randn")
+    def test_fixed_strategy(self, mock_randn, mock_rand):
+        mock_randn.side_effect = [
+            torch.tensor([-1.0]),  # Token embedding.
+        ]
         mock_rand.side_effect = [
             # Case 1: apply.
-            torch.tensor([-1.0]),  # Token embedding.
             torch.tensor([0.2, 0.6, 0.3]),  # Disable 0.6, as it > apply_probability = 0.5.
             # Case 2: embedding.
         ]
