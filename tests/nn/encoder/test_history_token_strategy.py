@@ -10,7 +10,7 @@ from unittest import TestCase, main, mock
 import torch
 
 from hotpp.data import PaddedBatch
-from pretpp.nn.encoder import FullHTStrategy, SubsetHTStrategy, FixedHTStrategy
+from pretpp.nn.encoder import FullHTStrategy, SubsetHTStrategy, FixedHTStrategy, LastHTStrategy
 from pretpp.nn.encoder.history_token_strategy import make_ht_attention_mask
 
 
@@ -334,6 +334,49 @@ class TestHTStrategy(TestCase):
                 [5, 6.5, 6.5, 7, -1],
                 [5, 5, 5, 5, 5]
             ])
+            self.assertTrue(torch.logical_or((new_timestamps.payload - gt_timestamps).abs() < 1e-6, ~new_embeddings.seq_len_mask).all())
+
+            self.assertTrue(attention_mask is None)
+
+            reverted_embeddings = s.extract_outputs(new_embeddings)
+            self.assertTrue((reverted_embeddings - (-1)).abs().max() < 1e-6)
+
+    @mock.patch("torch.randn")
+    def test_last_strategy(self, mock_randn):
+        mock_randn.side_effect = [
+            torch.tensor([-1.0]),  # Token embedding.
+        ]
+        strategy = LastHTStrategy(1)
+
+        gt_embeddings = torch.tensor([
+            [0, 1, 2, 3, -1],
+            [4, 5, 6, -1, 7],
+            [8, 9, 10, 11, -1]
+        ]).reshape(3, 5, 1)
+
+        gt_timestamps = torch.tensor([
+            [0, 1.5, 3, 4, 4],
+            [5, 6.5, 7, 7, -1],
+            [5, 5, 5, 5, 5]
+        ])
+
+        # Case 1: apply.
+        with strategy(self.timestamps) as s:
+            new_embeddings, new_timestamps, attention_mask = s.apply(self.embeddings, self.timestamps)
+            self.assertEqual(new_embeddings.seq_lens.tolist(), [5, 4, 5])
+            self.assertTrue(torch.logical_or(new_embeddings.payload == gt_embeddings, ~new_embeddings.seq_len_mask.unsqueeze(2)).all())
+            self.assertTrue(torch.logical_or((new_timestamps.payload - gt_timestamps).abs() < 1e-6, ~new_embeddings.seq_len_mask).all())
+
+            self.assertTrue(attention_mask is None)
+
+            reverted_embeddings = s.extract_outputs(new_embeddings)
+            self.assertTrue(torch.logical_or(reverted_embeddings.payload == self.embeddings.payload, ~self.embeddings.seq_len_mask.unsqueeze(2)).all())
+
+        # Case 2: embedding.
+        with strategy(self.timestamps, embedding=True) as s:
+            new_embeddings, new_timestamps, attention_mask = s.apply(self.embeddings, self.timestamps)
+            self.assertEqual(new_embeddings.seq_lens.tolist(), [5, 4, 5])
+            self.assertTrue(torch.logical_or(new_embeddings.payload == gt_embeddings, ~new_embeddings.seq_len_mask.unsqueeze(2)).all())
             self.assertTrue(torch.logical_or((new_timestamps.payload - gt_timestamps).abs() < 1e-6, ~new_embeddings.seq_len_mask).all())
 
             self.assertTrue(attention_mask is None)

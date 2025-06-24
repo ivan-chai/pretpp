@@ -380,3 +380,46 @@ class FixedHTStrategy(SubsetHTStrategy):
                 return add_token_to_the_end(PaddedBatch(x.payload, new_lengths), PaddedBatch(timestamps.payload, new_lengths), token)
         else:
             return super().insert_tokens(x, timestamps)
+
+
+class LastHTStrategy(HTStrategyBase):
+    """Insert history token to the end of each sequence.
+
+    Args:
+        apply_probability: The probability of HT usage for each real token.
+        token_selection: Either `random`, `last` or `none`.
+        predict: The type of tokens used for prediction (`input_tokens`, `history_tokens` or `all`).
+    """
+    def __init__(self, n_embd, predict="input_tokens"):
+        if predict not in {"input_tokens", "history_tokens", "all"}:
+            raise ValueError(f"Unknown prediction mode: {predict}")
+        super().__init__(n_embd)
+        self.predict = predict
+
+    def select(self, timestamps, embedding=False):
+        self.seq_lens = timestamps.seq_lens
+        self.embedding = embedding
+        self.device = timestamps.device
+
+    def clear_state(self):
+        del self.seq_lens
+        del self.embedding
+        del self.device
+
+    def insert_tokens(self, x, timestamps):
+        return add_token_to_the_end(x, timestamps, self.token.to(x.payload.dtype))
+
+    def make_attention_mask(self):
+        return None  # Simple causal mask.
+
+    def extract_outputs(self, x):
+        if self.embedding:
+            return x.payload.take_along_dim((x.seq_lens[:, None, None] - 1).clip(min=0), 1).squeeze(1)  # (B, D).
+        elif self.predict == "history_tokens":
+            payload =  x.payload.take_along_dim((x.seq_lens[:, None, None] - 1).clip(min=0), 1)  # (B, 1, D).
+            return PaddedBatch(payload, torch.ones_like(self.seq_lens))
+        elif self.predict == "input_tokens":
+            return PaddedBatch(x.payload[:, :-1], (x.seq_lens - 1).clip(min=0))
+        else:
+            assert self.predict == "all"
+            return x
