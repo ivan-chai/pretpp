@@ -38,7 +38,7 @@ class HistoryTokenTransformer(SimpleTransformer):
                         outputs = layer.norm1(outputs)
                 outputs = PaddedBatch(outputs, x.seq_lens)
             else:
-                outputs, _ = self.transform(x)
+                outputs, _ = self.transform(x, attention_mask=attention_mask)
             embeddings = strategy.extract_outputs(outputs)  # (B, D).
             assert embeddings.ndim == 2
         return embeddings
