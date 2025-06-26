@@ -144,3 +144,4 @@ trainer:
   model_selection:
     metric: val/downstream
     mode: max
+  deterministic: true
