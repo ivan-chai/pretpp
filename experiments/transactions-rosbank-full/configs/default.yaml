@@ -73,7 +73,7 @@ nohead:
 head:
   _target_: hotpp.nn.Head
   _partial_: true
-  hidden_dims: [128]
+  hidden_dims: []
   use_batch_norm: true
 
 metric_head:
