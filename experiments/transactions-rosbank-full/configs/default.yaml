@@ -28,7 +28,7 @@ transformer_cls_token:
   currency: 0
   trx_category: 0
   log_amount: -1
-transformer_history_token_frequency: 0
+transformer_history_token_frequency: 0.02
 transformer_history_token_probability: 0.5
 
 logger:
@@ -73,7 +73,7 @@ nohead:
 head:
   _target_: hotpp.nn.Head
   _partial_: true
-  hidden_dims: []
+  hidden_dims: [128]
   use_batch_norm: true
 
 metric_head:
