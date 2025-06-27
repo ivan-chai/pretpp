@@ -1,0 +1,6 @@
+defaults:
+  - rnn_ft
+  - _self_
+
+module:
+  init_state_dict: checkpoints/${base_name}-seed-${seed_everything}.ckpt
