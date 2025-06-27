@@ -12,4 +12,5 @@ module:
         frequency: ${transformer_history_token_frequency}
         apply_probability: ${transformer_history_token_probability}
         token_selection: last
+        token_sampling: uniform
   aggregator: null
