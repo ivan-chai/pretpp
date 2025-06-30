@@ -43,6 +43,7 @@ multiseed_report: results/multiseed_${name}.yaml
 data_module:
   _target_: hotpp.data.HotppDataModule
   fields:
+    - user_id
     - labels
     - types
     - title
