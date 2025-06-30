@@ -22,6 +22,8 @@ module:
   loss:
     _target_: pretpp.losses.ColesLoss
     embedding_dim: ${module.seq_encoder.rnn_partial.hidden_size}
+    min_length: 100
+    max_length: 500
     id_field: user_id
     n_splits: 5
     coles_loss:
