@@ -1,13 +1,13 @@
 data_module:
   train_params:
-    drop_nans: accuracy_group
+    drop_nans: target
   val_params:
-    drop_nans: accuracy_group
+    drop_nans: target
 
 metric:
   _target_: pretpp.metrics.DownstreamMetric
   classification_fields:
-    - accuracy_group
+    - target
 
 module:
   _target_: pretpp.modules.BaseModule
