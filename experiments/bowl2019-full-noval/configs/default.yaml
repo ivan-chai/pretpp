@@ -13,22 +13,23 @@ rnn_inference_context: 1200
 rnn_inference_context_step: 200
 rnn_min_length: 300
 
-transformer_hidden_size: 256
-transformer_inter_size: 512
+transformer_hidden_size: 128
+transformer_inter_size: 256
 transformer_heads: 4
-transformer_layers: 4
-transformer_context: 256
-transformer_positions: 1536
-transformer_dropout: 0.3
+transformer_layers: 6
+transformer_context: 800
+transformer_positions: 1000
+transformer_dropout: 0.1
 transformer_min_length: 32
 transformer_cls_token:
   timestamps: -1
   labels: ${num_classes}  # Use final label for CLS.
+  event_id: 0
   types: 0
   title: 0
   world: 0
   correct: 2
-transformer_history_token_frequency: 0.02
+transformer_history_token_frequency: 0.1
 transformer_history_token_probability: 0.5
 
 logger:
@@ -45,6 +46,7 @@ data_module:
   fields:
     - user_id
     - labels
+    - event_id
     - types
     - title
     - world
@@ -104,7 +106,10 @@ module:
       embeddings:
         labels:
           in: ${num_classes}
-          out: 32
+          out: 8
+        event_id:
+          in: 500
+          out: 16
         types:
           in: 5
           out: 8
@@ -116,7 +121,7 @@ module:
           out: 8
         correct:
           in: 3
-          out: 4
+          out: 2
       numeric_values:
         timestamps: identity
     max_time_delta: ${max_time_delta}
