@@ -174,10 +174,10 @@ class HTStrategyImpl(HTStrategyBase):
         apply_probability: The probability of HT usage for each real token.
         token_selection: Either `random`, `last` or `none`.
         predict: The type of tokens used for prediction (`input_tokens`, `history_tokens` or `all`).
-        embedding: Either `last`, `avg_ht`, or `mix_last_avg`.
+        embedding: Either `end_ht`, `avg_ht`, `avg`, `last`, or `mix_end_ht_avg`.
     """
     def __init__(self, n_embd, apply_probability=0.5, token_selection="random",
-                 predict="input_tokens", embedding="last"):
+                 predict="input_tokens", embedding="end_ht"):
         if token_selection not in {"random", "last", "none"}:
             raise ValueError(f"Unknown token selection mode: {token_selection}")
         if predict not in {"input_tokens", "history_tokens", "all"}:
@@ -188,9 +188,9 @@ class HTStrategyImpl(HTStrategyBase):
         self.predict = predict
         self.embedding_type = embedding
 
-        if embedding in {"last", "mix_last_avg"}:
+        if embedding in {"end_ht", "last", "mix_end_ht_avg"}:
             self.last_aggregator = LastAggregator()
-        if embedding in {"avg", "avg_ht", "mix_last_avg"}:
+        if embedding in {"avg", "avg_ht", "mix_end_ht_avg"}:
             self.avg_aggregator = MeanAggregator()
 
     @abstractmethod
@@ -255,7 +255,11 @@ class HTStrategyImpl(HTStrategyBase):
 
     def insert_tokens(self, x, timestamps):
         if self.embedding and (self.embedding_type != "avg_ht"):
-            return add_token_to_the_end(x, timestamps, self.token.to(x.payload.dtype))
+            if self.embedding_type in {"last", "avg"}:
+                return x, timestamps
+            else:
+                assert self.embedding_type in {"end_ht", "mix_end_ht_avg"}
+                return add_token_to_the_end(x, timestamps, self.token.to(x.payload.dtype))
         elif self.apply_to_batch:
             b, l = x.shape
             d = len(self.token)
@@ -282,21 +286,22 @@ class HTStrategyImpl(HTStrategyBase):
         if self.apply_to_batch:
             token_selection = "none" if self.embedding else self.token_selection
             return make_ht_attention_mask(self.length, self.after_positions,
-                                          active_tokens=self.token_selection,
+                                          active_tokens=token_selection,
                                           device=self.device)
         else:
             return None
 
     def extract_outputs(self, x):
         if self.embedding:
-            if self.embedding_type == "last":
+            if self.embedding_type in {"end_ht", "last"}:
+                x = PaddedBatch(x.payload, (x.seq_lens - 2).clip(min=0))
                 return self.last_aggregator(x)
             if self.embedding_type == "avg":
-                return self.avg_aggregator(PaddedBatch(x.payload, (x.seq_lens - 1).clip(min=0)))
-            elif self.embedding_type == "mix_last_avg":
+                return self.avg_aggregator(x)
+            elif self.embedding_type == "mix_end_ht_avg":
                 return self.last_aggregator(x) + self.avg_aggregator(PaddedBatch(x.payload, (x.seq_lens - 1).clip(min=0)))
             elif self.embedding_type == "avg_ht":
-                outputs = PaddedBatch(x.payload.take_along_dim(self.output_indices[None, :, None], 1), self.output_lengths)  # (B, L, D).  
+                outputs = PaddedBatch(x.payload.take_along_dim(self.output_indices[None, :, None], 1), self.output_lengths)  # (B, L, D).
                 return self.avg_aggregator(outputs)
             else:
                 raise ValueError(f"Unknown embedding type: {self.embedding_type}")
