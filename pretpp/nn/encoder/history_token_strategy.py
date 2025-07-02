@@ -499,7 +499,7 @@ class MidHTStrategy(HTStrategyImpl):
         predict: The type of tokens used for prediction (`input_tokens`, `history_tokens` or `all`).
     """
     def __init__(self, n_embd, predict="input_tokens"):
-        super().__init__(n_embd, apply_probability=1, token_selection="none", predict=predict)
+        super().__init__(n_embd, apply_probability=1, token_selection="last", predict=predict)
 
     def select_positions(self, lengths):
         """Select tokens to insert HT after.

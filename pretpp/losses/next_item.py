@@ -37,7 +37,6 @@ class NextItemLoss(BaseLoss):
         """
         if self._train_repeat:
             # Repeat each sequence twice.
-            assert self.training
             l = inputs.shape[1]
             indices = torch.arange(2 * l, device=inputs.device)[None] % inputs.seq_lens.unsqueeze(1)  # (B, 2L).
             payload = {k: v for k, v in inputs.payload.items() if k not in inputs.seq_names}
@@ -50,7 +49,7 @@ class NextItemLoss(BaseLoss):
         # Offset is applied in base loss classes.
         return inputs, inputs
 
-    def forward_impl(outputs, targets, reduction="mean"):
+    def forward_impl(self, outputs, targets, reduction="mean"):
         inputs = targets
         # Compute losses. It is assumed that predictions lengths are equal to targets lengths.
         if not isinstance(outputs, dict):
@@ -92,8 +91,8 @@ class NextItemLoss(BaseLoss):
             second_losses, second_metrics = self.forward_impl(second_outputs, second_targets)
             assert set(first_losses) == set(second_losses)
             assert set(first_metrics) == set(second_metrics)
-            losses = {0.5 * (first_losses[k] + second_losses[k]) for k in first_losses}
-            metrics = {0.5 * (first_metrics[k] + second_metrics[k]) for k in first_metrics}
+            losses = {k: 0.5 * (first_losses[k] + second_losses[k]) for k in first_losses}
+            metrics = {k: 0.5 * (first_metrics[k] + second_metrics[k]) for k in first_metrics}
             return losses, metrics
         else:
             return self.forward_impl(outputs, targets, reduction=reduction)
