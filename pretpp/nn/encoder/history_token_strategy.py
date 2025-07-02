@@ -294,7 +294,6 @@ class HTStrategyImpl(HTStrategyBase):
     def extract_outputs(self, x):
         if self.embedding:
             if self.embedding_type in {"end_ht", "last"}:
-                x = PaddedBatch(x.payload, (x.seq_lens - 2).clip(min=0))
                 return self.last_aggregator(x)
             if self.embedding_type == "avg":
                 return self.avg_aggregator(x)
@@ -319,7 +318,7 @@ class FullHTStrategy(HTStrategyImpl):
         apply_probability: The probability of HT usage for each real token.
         token_selection: Either `random`, `last` or `none`.
         predict: The type of tokens used for prediction (`input_tokens`, `history_tokens` or `all`).
-        embedding: Either `last`, `avg_ht`, or `mix_last_avg`.
+        embedding: Either `end_ht`, `avg_ht`, `avg`, `last`, or `mix_end_ht_avg`.
     """
     def select_positions(self, lengths):
         """Select tokens to insert HT after.
@@ -342,11 +341,11 @@ class SubsetHTStrategy(HTStrategyImpl):
         token_selection: Either `random`, `last`, or `none`.
         token_sampling: Either `uniform`, `bias_end`, or `bias_end_relaxed`.
         predict: The type of tokens used for prediction (`input_tokens`, `history_tokens` or `all`).
-        embedding: Either `last`, `avg_ht`, or `mix_last_avg`.
+        embedding: Either `end_ht`, `avg_ht`, `avg`, `last`, or `mix_end_ht_avg`.
     """
     def __init__(self, n_embd, frequency=0.1, apply_probability=0.5,
                  token_selection="random", token_sampling="uniform",
-                 predict="input_tokens", embedding="last"):
+                 predict="input_tokens", embedding="end_ht"):
         super().__init__(n_embd,
                          apply_probability=apply_probability,
                          token_selection=token_selection,
