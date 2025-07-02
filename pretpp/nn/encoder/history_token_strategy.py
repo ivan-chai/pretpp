@@ -488,6 +488,9 @@ class LastHTStrategy(HTStrategyImpl):
         """
         return (lengths.unsqueeze(1) - 1).clip(min=0)  # (B, 1).
 
+    def make_attention_mask(self):
+        return None
+
 
 class MidHTStrategy(HTStrategyImpl):
     """Insert history token at the end of each sequence.
