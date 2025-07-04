@@ -177,7 +177,7 @@ module:
         log_hour_diff: identity
     max_time_delta: ${max_time_delta}
   aggregator:
-    _target_: hotpp.nn.MeanAggregator
+    _target_: hotpp.nn.LastAggregator
   optimizer_partial:
     _partial_: true
     _target_: torch.optim.Adam
