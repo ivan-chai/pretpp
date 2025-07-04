@@ -1,13 +1,10 @@
 defaults:
   - default
-  - default_transformer
+  - default_hts_transformer
   - next_item_loss
   - _self_
 
-name: next_item_transformer
-
-data_module:
-  batch_size: 256
+name: next_item_hts_transformer
 
 module:
   _target_: pretpp.modules.BaseModule
