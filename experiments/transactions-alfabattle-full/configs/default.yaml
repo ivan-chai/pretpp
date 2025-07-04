@@ -7,8 +7,8 @@ max_time_delta: 30
 max_duration: 500
 num_downstream_classes: 2
 
-rnn_hidden_size: 512
-rnn_half_hidden_size: 256
+rnn_hidden_size: 1024
+rnn_half_hidden_size: 512
 rnn_inference_context: 1200
 rnn_inference_context_step: 200
 rnn_min_length: 256
@@ -18,7 +18,7 @@ transformer_inter_size: 1024
 transformer_heads: 4
 transformer_layers: 6
 transformer_context: 256
-transformer_positions: 1232
+transformer_positions: 2400
 transformer_dropout: 0.1
 transformer_min_length: 128
 transformer_cls_token:
@@ -195,7 +195,7 @@ module:
 trainer:
   accelerator: cuda
   devices: 1
-  max_epochs: 30
+  max_epochs: 60
   enable_checkpointing: true
   precision: 16-mixed
   gradient_clip_val: 1  # Increases training stability.
