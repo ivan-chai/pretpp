@@ -42,7 +42,7 @@ data_module:
   fields:
     - labels
     - types
-  batch_size: 64
+  batch_size: 32
   num_workers: 4
   train_params:
     min_required_length: 2
