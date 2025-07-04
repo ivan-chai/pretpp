@@ -3,22 +3,22 @@ num_evaluation_seeds: 5
 
 num_classes: 10002
 num_classes_plus1: 10003
-max_time_delta: 8
-max_duration: 8
+max_time_delta: 7
+max_duration: 4000
 num_downstream_classes: 2
 
 rnn_hidden_size: 256
 rnn_half_hidden_size: 128
-rnn_inference_context: 1200
-rnn_inference_context_step: 200
-rnn_min_length: 300
+rnn_inference_context: 1024
+rnn_inference_context_step: 256
+rnn_min_length: 128
 
 transformer_hidden_size: 256
 transformer_inter_size: 512
 transformer_heads: 4
 transformer_layers: 4
-transformer_context: 256
-transformer_positions: 1536
+transformer_context: 1024
+transformer_positions: 4000
 transformer_dropout: 0.3
 transformer_min_length: 32
 transformer_cls_token:
@@ -46,12 +46,12 @@ data_module:
   num_workers: 4
   train_params:
     min_required_length: 2
-    max_length: 400
+    max_length: 1024
   val_params:
-    max_length: 400
+    max_length: 1024
     position: last
   test_params:
-    max_length: 400
+    max_length: 1024
     position: last
   global_target_fields: target
   train_path: data/train.parquet
