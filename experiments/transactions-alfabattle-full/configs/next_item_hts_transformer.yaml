@@ -6,6 +6,9 @@ defaults:
 
 name: next_item_hts_transformer
 
+data_module:
+  batch_size: 256
+
 module:
   _target_: pretpp.modules.BaseModule
   loss_projection_partial: ${head}
