@@ -13,4 +13,4 @@ module:
       types:
         _target_: hotpp.losses.CrossEntropyLoss
         num_classes: 5
-        grad_scale: null
+        grad_scale: 0.9

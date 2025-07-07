@@ -9,3 +9,6 @@ name: next_item
 module:
   _target_: pretpp.modules.BaseModule
   loss_projection_partial: ${head}
+
+trainer:
+  max_epochs: 20
