@@ -1,0 +1,6 @@
+module:
+  loss:
+    _target_: pretpp.losses.NextItemLoss
+    losses:
+      bins:
+        _target_: hotpp.losses.MSELoss

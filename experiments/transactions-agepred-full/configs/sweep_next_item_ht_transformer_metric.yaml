@@ -1,0 +1,40 @@
+project: pretpp-sweep-agepred-full
+run_cap: 100
+name: next_item_ht_transformer_metric
+command:
+  - ${env}
+  - python3
+  - -m
+  - hotpp.train
+  - --config-dir
+  - configs
+  - --config-name
+  - next_item_ht_transformer_metric
+  - ~seed_everything
+  - ~model_path
+  - ~report
+  - ${args_no_hyphens}
+method: bayes
+metric:
+  name: val/downstream
+  goal: maximize
+parameters:
+  transformer_hidden_size:
+    values: [512, 1024, 1536, 2048]
+  transformer_inter_size:
+    values: [256, 512, 1024, 1536, 2048]
+  transformer_layers:
+    min: 4
+    max: 8
+  metric_head.hidden_dims:
+    values:
+      - []
+      - [128]
+      - [256]
+      - [256, 128]
+      - [512, 256]
+  transformer_history_tokens:
+    values: [16, 32, 64, 128]
+  transformer_history_token_fraction:
+    min: 0.0
+    max: 1.0

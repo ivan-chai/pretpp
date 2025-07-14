@@ -1,4 +1,4 @@
-project: hotpp-sweep-rosbank-full
+project: hotpp-sweep-rosbank-full-noval
 run_cap: 100
 name: next-item
 command:

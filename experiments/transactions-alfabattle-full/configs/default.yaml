@@ -16,7 +16,7 @@ rnn_min_length: 256
 transformer_hidden_size: 512
 transformer_inter_size: 1024
 transformer_heads: 4
-transformer_layers: 6
+transformer_layers: 10
 transformer_context: 256
 transformer_positions: 2400
 transformer_dropout: 0.1
@@ -41,6 +41,8 @@ transformer_cls_token:
   weekofyear: 0
   log_amount: -1
   log_hour_diff: -1
+transformer_history_token_frequency: 0.02
+transformer_history_token_probability: 0.5
 
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
@@ -97,26 +99,26 @@ nohead:
 head:
   _target_: hotpp.nn.Head
   _partial_: true
-  hidden_dims: [256]
+  hidden_dims: [128]  # [256].
   use_batch_norm: true
 
 metric_head:
   _target_: pretpp.nn.MetricHead
   _partial_: true
-  hidden_dims: [256]
+  hidden_dims: [128]  # [256].
   head_params:
     use_batch_norm: true
 
 conditional_head:
   _target_: hotpp.nn.ConditionalHead
   _partial_: true
-  hidden_dims: [256]
+  hidden_dims: [128]  # [256].
   use_batch_norm: true
 
 metric_conditional_head:
   _target_: pretpp.nn.MetricConditionalHead
   _partial_: true
-  hidden_dims: [256]
+  hidden_dims: [128, 128]  # [256, 256].
   head_params:
     use_batch_norm: true
 
@@ -177,7 +179,7 @@ module:
         log_hour_diff: identity
     max_time_delta: ${max_time_delta}
   aggregator:
-    _target_: hotpp.nn.MeanAggregator
+    _target_: hotpp.nn.LastAggregator
   optimizer_partial:
     _partial_: true
     _target_: torch.optim.Adam
@@ -186,7 +188,7 @@ module:
   lr_scheduler_partial:
     _partial_: true
     _target_: torch.optim.lr_scheduler.StepLR
-    step_size: 1
+    step_size: 3  # 10
     gamma: 0.8
   val_metric: ${metric}
   test_metric: ${metric}

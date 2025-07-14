@@ -1,0 +1,12 @@
+defaults:
+  - default_transformer
+  - _self_
+
+module:
+  seq_encoder:
+    model_partial:
+      _target_: pretpp.nn.HistoryTokenTransformer
+      strategy_partial:
+        _target_: pretpp.nn.LastHTStrategy
+        _partial_: true
+  aggregator: null

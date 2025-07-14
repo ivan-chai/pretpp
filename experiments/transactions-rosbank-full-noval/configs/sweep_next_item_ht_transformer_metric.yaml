@@ -1,0 +1,35 @@
+project: pretpp-sweep-rosbank-full-noval
+run_cap: 100
+name: next_item_ht_transformer_metric
+command:
+  - ${env}
+  - python3
+  - -m
+  - hotpp.train
+  - --config-dir
+  - configs
+  - --config-name
+  - next_item_ht_transformer_metric
+  - trainer.max_epochs=120
+  - ~seed_everything
+  - ~model_path
+  - ~report
+  - ${args_no_hyphens}
+method: bayes
+metric:
+  name: val/downstream
+  goal: maximize
+parameters:
+  metric_head.hidden_dims:
+    values:
+      - []
+      - [128]
+      - [256]
+      - [256, 128]
+      - [512, 256]
+  transformer_history_token_locality:
+    min: 0.0
+    max: 1.0
+  transformer_history_token_fraction:
+    min: 0.0
+    max: 1.0
