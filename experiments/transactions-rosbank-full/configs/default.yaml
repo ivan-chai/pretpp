@@ -28,7 +28,7 @@ transformer_cls_token:
   currency: 0
   trx_category: 0
   log_amount: -1
-transformer_history_token_frequency: 0
+transformer_history_token_frequency: 0.02
 transformer_history_token_probability: 0.5
 
 logger:
@@ -144,3 +144,4 @@ trainer:
   model_selection:
     metric: val/downstream
     mode: max
+  deterministic: true

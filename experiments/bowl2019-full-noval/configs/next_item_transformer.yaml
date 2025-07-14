@@ -1,0 +1,33 @@
+defaults:
+  - default
+  - default_transformer
+  - _self_
+
+name: next_item_transformer
+
+module:
+  _target_: pretpp.modules.BaseModule
+  loss_projection_partial: ${head}
+  loss:
+    _target_: pretpp.losses.NextItemLoss
+    losses:
+      timestamps:
+        _target_: hotpp.losses.TimeMAELoss
+        max_delta: ${max_time_delta}
+        smoothing: 1
+        grad_scale: 0.05
+      labels:
+        _target_: hotpp.losses.CrossEntropyLoss
+        num_classes: ${num_classes}
+      types:
+        _target_: hotpp.losses.CrossEntropyLoss
+        num_classes: 5
+        grad_scale: 0.5
+      world:
+        _target_: hotpp.losses.CrossEntropyLoss
+        num_classes: 5
+        grad_scale: 0.5
+      correct:
+        _target_: hotpp.losses.CrossEntropyLoss
+        num_classes: 3
+        grad_scale: 1

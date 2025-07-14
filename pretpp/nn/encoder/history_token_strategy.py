@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 
 import torch
 from hotpp.data import PaddedBatch
+from hotpp.nn import LastAggregator, MeanAggregator
 
 
 def batch_nonzero(x):
@@ -204,9 +205,10 @@ class HTStrategyImpl(HTStrategyBase):
         apply_probability: The probability of HT usage for each real token.
         token_selection: Either `random`, `last` or `none`.
         predict: The type of tokens used for prediction (`input_tokens`, `history_tokens` or `all`).
-        batch: Whether to apply individual strategy to each element of the batch or the same for all elements.
+        embedding: Either `end_ht`, `avg_ht`, `avg`, `last`, or `mix_end_ht_avg`.
     """
-    def __init__(self, n_embd, apply_probability=0.5, token_selection="random", predict="input_tokens"):
+    def __init__(self, n_embd, apply_probability=0.5, token_selection="random",
+                 predict="input_tokens", embedding="end_ht"):
         if token_selection not in {"random", "last", "none"}:
             raise ValueError(f"Unknown token selection mode: {token_selection}")
         if predict not in {"input_tokens", "history_tokens", "all"}:
@@ -215,6 +217,12 @@ class HTStrategyImpl(HTStrategyBase):
         self.apply_probability = apply_probability
         self.token_selection = token_selection
         self.predict = predict
+        self.embedding_type = embedding
+
+        if embedding in {"end_ht", "last", "mix_end_ht_avg"}:
+            self.last_aggregator = LastAggregator()
+        if embedding in {"avg", "avg_ht", "mix_end_ht_avg"}:
+            self.avg_aggregator = MeanAggregator()
 
     @abstractmethod
     def select_positions(self, lengths):
@@ -234,7 +242,7 @@ class HTStrategyImpl(HTStrategyBase):
         self.embedding = embedding
         self.device = timestamps.device
 
-        if not embedding:
+        if not embedding or (self.embedding_type == "avg_ht"):
             self.after_positions = self.select_positions(self.seq_lens)  # (B, R) in [0, L), sorted.
             r = self.after_positions.shape[1]
             self.positions = torch.arange(1, r + 1, device=self.device) + self.after_positions  # (B, R) in [0, L + R), sorted.
@@ -251,12 +259,12 @@ class HTStrategyImpl(HTStrategyBase):
             self.index = last_input.scatter(1, self.positions, l)  # (B, L + R).
             # Prefix length for each HT token.
             self.prev_input = last_input.take_along_dim(self.positions, 1)  # (B, R).
-            if self.predict == "input_tokens":
-                self.output_indices = batch_nonzero(self.insert_mask)  # (B, L).
-                self.output_lengths = self.seq_lens
-            elif self.predict == "history_tokens":
+            if (self.predict == "history_tokens") or embedding:
                 self.output_indices = batch_nonzero(1 - self.insert_mask)  # (B, R).
                 self.output_lengths = (self.after_positions < self.seq_lens[:, None]).sum(1)  # (B).
+            elif self.predict == "input_tokens":
+                self.output_indices = batch_nonzero(self.insert_mask)  # (B, L).
+                self.output_lengths = self.seq_lens
             else:
                 assert self.predict == "all"
 
@@ -272,15 +280,19 @@ class HTStrategyImpl(HTStrategyBase):
             del self.insert_mask
             del self.index
             del self.prev_input
-            if self.predict in {"input_tokens", "history_tokens"}:
+            if (self.predict in {"input_tokens", "history_tokens"}) or self.embedding:
                 del self.output_indices
                 del self.output_lengths
             del self.use_ht_mask
         del self.embedding
 
     def insert_tokens(self, x, timestamps):
-        if self.embedding:
-            return add_token_to_the_end(x, timestamps, self.token.to(x.payload.dtype))
+        if self.embedding and (self.embedding_type != "avg_ht"):
+            if self.embedding_type in {"last", "avg"}:
+                return x, timestamps
+            else:
+                assert self.embedding_type in {"end_ht", "mix_end_ht_avg"}
+                return add_token_to_the_end(x, timestamps, self.token.to(x.payload.dtype))
         else:
             b, l = x.shape
             d = len(self.token)
@@ -300,17 +312,28 @@ class HTStrategyImpl(HTStrategyBase):
             return PaddedBatch(new_x, new_lengths), PaddedBatch(new_timestamps, new_lengths)
 
     def make_attention_mask(self):
-        if self.embedding:
+        if self.embedding and (self.embedding_type != "avg_ht"):
             return None  # Simple causal mask.
         else:
+            token_selection = "none" if self.embedding else self.token_selection
             return make_ht_attention_mask(self.length, self.after_positions,
-                                          active_tokens=self.token_selection,
+                                          active_tokens=token_selection,
                                           use_ht_mask=self.use_ht_mask,
                                           device=self.device)
 
     def extract_outputs(self, x):
         if self.embedding:
-            return x.payload.take_along_dim((x.seq_lens[:, None, None] - 1).clip(min=0), 1).squeeze(1)  # (B, D).
+            if self.embedding_type in {"end_ht", "last"}:
+                return self.last_aggregator(x)
+            if self.embedding_type == "avg":
+                return self.avg_aggregator(x)
+            elif self.embedding_type == "mix_end_ht_avg":
+                return self.last_aggregator(x) + self.avg_aggregator(PaddedBatch(x.payload, (x.seq_lens - 1).clip(min=0)))
+            elif self.embedding_type == "avg_ht":
+                outputs = PaddedBatch(x.payload.take_along_dim(self.output_indices[None, :, None], 1), self.output_lengths)  # (B, L, D).
+                return self.avg_aggregator(outputs)
+            else:
+                raise ValueError(f"Unknown embedding type: {self.embedding_type}")
         elif self.predict == "all":
             return x
         else:
@@ -325,6 +348,7 @@ class FullHTStrategy(HTStrategyImpl):
         apply_probability: The probability of HT usage for each real token.
         token_selection: Either `random`, `last` or `none`.
         predict: The type of tokens used for prediction (`input_tokens`, `history_tokens` or `all`).
+        embedding: Either `end_ht`, `avg_ht`, `avg`, `last`, or `mix_end_ht_avg`.
     """
     def select_positions(self, lengths):
         """Select tokens to insert HT after.
@@ -345,15 +369,21 @@ class SubsetHTStrategy(HTStrategyImpl):
     Args:
         frequency: The average fraction of history tokens (use 0 to use single token).
         apply_probability: The probability of HT usage for each real token.
-        token_selection: Either `random`, `last` or `none`.
+        token_selection: Either `random`, `last`, or `none`.
+        token_sampling: Either `uniform`, `bias_end`, or `bias_end_relaxed`.
         predict: The type of tokens used for prediction (`input_tokens`, `history_tokens` or `all`).
+        embedding: Either `end_ht`, `avg_ht`, `avg`, `last`, or `mix_end_ht_avg`.
     """
-    def __init__(self, n_embd, frequency=0.1, apply_probability=0.5, token_selection="last", predict="input_tokens"):
+    def __init__(self, n_embd, frequency=0.1, apply_probability=0.5,
+                 token_selection="random", token_sampling="uniform",
+                 predict="input_tokens", embedding="end_ht"):
         super().__init__(n_embd,
                          apply_probability=apply_probability,
                          token_selection=token_selection,
-                         predict=predict)
+                         predict=predict,
+                         embedding=embedding)
         self.frequency = frequency
+        self.token_sampling = token_sampling
 
     def select_positions(self, lengths):
         """Select tokens to insert HT after.
@@ -366,7 +396,16 @@ class SubsetHTStrategy(HTStrategyImpl):
         """
         max_length = lengths.max().item()
         max_tokens = max(1, int(round(self.frequency * max_length)))
-        return batch_randperm(len(lengths), max_length, device=self.device)[:, :max_tokens].sort(dim=1)[0]  # (B, R) in [0, L), sorted.
+        if self.token_sampling == "uniform":
+            return batch_randperm(len(lengths), max_length, device=self.device)[:, :max_tokens].sort(dim=1)[0]  # (B, R) in [0, L), sorted.
+        elif self.token_sampling == "bias_end":
+            from_length = max_length // 2
+            return from_length + batch_randperm(len(lengths), max_length - from_length, device=self.device)[:, :max_tokens].sort(dim=1)[0]  # (B, R) in [L // 2, L), sorted.
+        elif self.token_sampling == "bias_end_relaxed":
+            from_length = lengths.sum().item() // (len(lengths) * 2)  # Mean / 2.
+            return from_length + batch_randperm(len(lengths), max_length - from_length, device=self.device)[:, :max_tokens].sort(dim=1)[0]  # (B, R) in [L // 2, L), sorted.
+        else:
+            raise ValueError(f"Unknown sampling type: {self.token_sampling}")
 
 
 class FixedHTStrategy(SubsetHTStrategy):

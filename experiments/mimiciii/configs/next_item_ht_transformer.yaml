@@ -1,0 +1,11 @@
+defaults:
+  - default
+  - default_ht_transformer
+  - next_item_loss
+  - _self_
+
+name: next_item_ht_transformer
+
+module:
+  _target_: pretpp.modules.BaseModule
+  loss_projection_partial: ${head}

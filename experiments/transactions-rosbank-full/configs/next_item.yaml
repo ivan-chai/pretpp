@@ -5,15 +5,6 @@ defaults:
 
 name: next_item
 
-data_module:
-  _target_: hotpp.data.HotppDataModule
-  fields:
-    - labels
-    - channel_type
-    - currency
-    - trx_category
-    - log_amount
-
 module:
   _target_: pretpp.modules.BaseModule
   loss_projection_partial: ${head}

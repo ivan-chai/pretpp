@@ -1,0 +1,70 @@
+data_splits: [train, test]  # Val is equal to test.
+workers: 2
+total_cpu_count: 15
+log_level: ERROR
+environment:
+  work_dir: _
+target:
+  file_name: _
+  cols_id:
+    - id
+  cols_id_type:
+    - int
+  col_target: target
+  drop_duplicated_ids: true
+split:
+  fit_ids: true
+  train_id:
+    file_name: _
+    drop_duplicated_ids: true
+  test_id:
+    file_name: _
+  cv_split_count: 5
+  is_stratify: true
+  random_state: 42
+models:
+  lgbm:
+    enabled: true
+    model:
+      _target_: lightgbm.LGBMClassifier
+      n_estimators: 1000
+      boosting_type: gbdt
+      objective: multiclass
+      metric: multi_error
+      learning_rate: 0.01
+      subsample: 0.75
+      subsample_freq: 1
+      colsample_bytree: 0.75
+      max_depth: 12
+      reg_lambda: 1
+      reg_alpha: 1
+      min_child_samples: 50
+      num_leaves: 21
+      random_state: 42
+      n_jobs: ${total_cpu_count}
+    cpu_count: ${total_cpu_count}
+    preprocessing:
+      - _target_: sklearn.preprocessing.MaxAbsScaler
+
+metrics:
+  accuracy:
+    enabled: true
+    score_func: sklearn.metrics.accuracy_score
+    scorer_params:
+      needs_proba: false
+report_file: _
+features:
+  embeddings:
+    enabled: true
+    read_params:
+      file_name: _
+    target_options: {}
+external_scores: {}
+report:
+  is_check_train: false
+  error_handling: fail
+  print_all_metrics: false
+  metrics:
+    accuracy:
+      float_format: "{:.3f}"
+      split_columns: true

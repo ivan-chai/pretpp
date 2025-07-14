@@ -1,0 +1,15 @@
+defaults:
+  - ht_transformer_ft
+  - _self_
+
+base_name: _
+
+name: ${base_name}_ft_avg
+
+module:
+  seq_encoder:
+    model_partial:
+      strategy_partial:
+        predict: all  # Output both HT and regular tokens. SFT is applied to all outputs.
+        token_selection: random  # Insert HTs, but don't use them for regular tokens.
+        embedding: avg_ht
