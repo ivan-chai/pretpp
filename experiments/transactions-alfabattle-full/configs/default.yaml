@@ -137,9 +137,9 @@ module:
         operation_kind:
           in: 9
           out: 2
-        card_type:
-          in: 177
-          out: 4
+#        card_type:
+#          in: 177
+#          out: 4
         operation_type:
           in: 24
           out: 4
@@ -155,12 +155,12 @@ module:
         income_flag:
           in: 5
           out: 1
-        country:
-          in: 26
-          out: 4
-        city:
-          in: 170
-          out: 4
+#        country:
+#          in: 26
+#          out: 4
+#        city:
+#          in: 170
+#          out: 4
         mcc_category:
           in: 30
           out: 16

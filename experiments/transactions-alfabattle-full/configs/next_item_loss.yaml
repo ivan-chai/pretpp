@@ -42,14 +42,14 @@ module:
         _target_: hotpp.losses.CrossEntropyLoss
         num_classes: 5
         grad_scale: null
-      country:
-        _target_: hotpp.losses.CrossEntropyLoss
-        num_classes: 26
-        grad_scale: null
-      city:
-        _target_: hotpp.losses.CrossEntropyLoss
-        num_classes: 170
-        grad_scale: null
+#      country:
+#        _target_: hotpp.losses.CrossEntropyLoss
+#        num_classes: 26
+#        grad_scale: null
+#      city:
+#        _target_: hotpp.losses.CrossEntropyLoss
+#        num_classes: 170
+#        grad_scale: null
       mcc_category:
         _target_: hotpp.losses.CrossEntropyLoss
         num_classes: 30
