@@ -41,7 +41,7 @@ transformer_cls_token:
   weekofyear: 0
   log_amount: -1
   log_hour_diff: -1
-transformer_history_token_frequency: 0.02
+transformer_history_token_frequency: 0.3
 transformer_history_token_probability: 0.5
 
 logger:
