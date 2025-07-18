@@ -99,26 +99,26 @@ nohead:
 head:
   _target_: hotpp.nn.Head
   _partial_: true
-  hidden_dims: [128]  # [256].
+  hidden_dims: [128]
   use_batch_norm: true
 
 metric_head:
   _target_: pretpp.nn.MetricHead
   _partial_: true
-  hidden_dims: [128]  # [256].
+  hidden_dims: [128]
   head_params:
     use_batch_norm: true
 
 conditional_head:
   _target_: hotpp.nn.ConditionalHead
   _partial_: true
-  hidden_dims: [128]  # [256].
+  hidden_dims: [128]
   use_batch_norm: true
 
 metric_conditional_head:
   _target_: pretpp.nn.MetricConditionalHead
   _partial_: true
-  hidden_dims: [128, 128]  # [256, 256].
+  hidden_dims: [128, 128]
   head_params:
     use_batch_norm: true
 
@@ -188,7 +188,7 @@ module:
   lr_scheduler_partial:
     _partial_: true
     _target_: torch.optim.lr_scheduler.StepLR
-    step_size: 3  # 10
+    step_size: 10
     gamma: 0.8
   val_metric: ${metric}
   test_metric: ${metric}
