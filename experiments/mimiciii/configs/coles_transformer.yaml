@@ -7,9 +7,6 @@ name: coles_transformer
 
 module:
   _target_: pretpp.modules.BaseModule
-  seq_encoder:
-    rnn_partial:
-      hidden_size: 1024
   optimizer_partial:
     lr: 0.004
   lr_scheduler_partial:
