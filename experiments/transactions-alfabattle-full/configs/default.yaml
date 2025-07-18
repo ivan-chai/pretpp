@@ -1,5 +1,5 @@
 seed_everything: 42
-num_evaluation_seeds: 5
+num_evaluation_seeds: 3
 
 num_classes: 109
 num_classes_plus1: 110
