@@ -5,8 +5,6 @@ defaults:
 
 name: coles
 
-rnn_hidden_size: 1024
-
 data_module:
   batch_size: 256
 
@@ -20,7 +18,7 @@ module:
   loss_projection_partial: ${nohead}
   loss:
     _target_: pretpp.losses.ColesLoss
-    embedding_dim: ${rnn_hidden_size}
+    embedding_dim: ${transformer_hidden_size}
     min_length: 20
     max_length: 60
     n_splits: 5

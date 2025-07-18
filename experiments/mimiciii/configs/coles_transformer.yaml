@@ -18,7 +18,7 @@ module:
   loss_projection_partial: ${nohead}
   loss:
     _target_: pretpp.losses.ColesLoss
-    embedding_dim: ${module.seq_encoder.rnn_partial.hidden_size}
+    embedding_dim: ${transformer_hidden_size}
     n_splits: 5
     coles_loss:
       _target_: ptls.frames.coles.losses.ContrastiveLoss

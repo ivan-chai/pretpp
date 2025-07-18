@@ -24,7 +24,6 @@ transformer_min_length: 128
 transformer_cls_token:
   timestamps: -1
   labels: ${num_classes}  # Use final label for CLS.
-  channel_type: 0
   currency: 0
   operation_kind: 0
   operation_type: 0
