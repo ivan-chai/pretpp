@@ -7,11 +7,6 @@ name: coles_transformer
 
 module:
   _target_: pretpp.modules.BaseModule
-  optimizer_partial:
-    lr: 0.004
-  lr_scheduler_partial:
-    gamma: 0.9025
-    step_size: 10
   head_partial:
     _target_: pretpp.nn.NormalizationHead
     _partial_: true
