@@ -3,7 +3,7 @@ defaults:
   - default_transformer
   - _self_
 
-name: coles
+name: coles_transformer
 
 data_module:
   batch_size: 64
