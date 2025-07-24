@@ -30,22 +30,22 @@ module:
         _target_: hotpp.losses.CrossEntropyLoss
         num_classes: 6
         grad_scale: null
-      ecommerce_flag:
-        _target_: hotpp.losses.CrossEntropyLoss
-        num_classes: 5
-        grad_scale: null
-      payment_system:
-        _target_: hotpp.losses.CrossEntropyLoss
-        num_classes: 9
-        grad_scale: null
+#      ecommerce_flag:
+#        _target_: hotpp.losses.CrossEntropyLoss
+#        num_classes: 5
+#        grad_scale: null
+#      payment_system:
+#        _target_: hotpp.losses.CrossEntropyLoss
+#        num_classes: 9
+#        grad_scale: null
       income_flag:
         _target_: hotpp.losses.CrossEntropyLoss
         num_classes: 5
         grad_scale: null
-#      country:
-#        _target_: hotpp.losses.CrossEntropyLoss
-#        num_classes: 26
-#        grad_scale: null
+      country:
+        _target_: hotpp.losses.CrossEntropyLoss
+        num_classes: 26
+        grad_scale: null
 #      city:
 #        _target_: hotpp.losses.CrossEntropyLoss
 #        num_classes: 170

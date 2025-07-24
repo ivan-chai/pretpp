@@ -21,8 +21,8 @@ module:
 #      dropout: 0.3
 #  loss:
 #    cls_token: ${transformer_cls_token}
-#  loss:
-#    apply_to_all_outputs: false
+  loss:
+    apply_to_all_outputs: false
   peft_adapter:
     _partial_: true
     _target_: peft.get_peft_model

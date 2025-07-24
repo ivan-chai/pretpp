@@ -1,19 +1,27 @@
 defaults:
   - default
-  - default_transformer
+  - default_rnn
   - _self_
 
-name: coles_transformer
+name: coles
 
 module:
   _target_: pretpp.modules.BaseModule
+  seq_encoder:
+    rnn_partial:
+      hidden_size: 1024
+  optimizer_partial:
+    lr: 0.004
+  lr_scheduler_partial:
+    gamma: 0.9025
+    step_size: 10
   head_partial:
     _target_: pretpp.nn.NormalizationHead
     _partial_: true
   loss_projection_partial: ${nohead}
   loss:
     _target_: pretpp.losses.ColesLoss
-    embedding_dim: ${transformer_hidden_size}
+    embedding_dim: ${module.seq_encoder.rnn_partial.hidden_size}
     n_splits: 5
     coles_loss:
       _target_: ptls.frames.coles.losses.ContrastiveLoss

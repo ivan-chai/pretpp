@@ -1,0 +1,13 @@
+defaults:
+  - default_supervised
+
+name: ${base_name}_ft
+
+module:
+  optimizer_partial:
+    lr: 0.001
+  init_state_dict: checkpoints/${base_name}.ckpt
+
+trainer:
+  max_epochs: 20
+  check_val_every_n_epoch: 1

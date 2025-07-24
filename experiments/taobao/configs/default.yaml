@@ -1,39 +1,36 @@
 seed_everything: 42
 num_evaluation_seeds: 5
 
-num_classes: 385
-num_classes_plus1: 386
-max_time_delta: 8
-max_duration: 8
+num_classes: 8612
+num_classes_plus1: 8613
+max_time_delta: 7
+max_duration: 30
 num_downstream_classes: 2
 
-rnn_hidden_size: 256
+rnn_hidden_size: 1280
 rnn_half_hidden_size: 128
-rnn_inference_context: 1200
-rnn_inference_context_step: 200
-rnn_min_length: 300
+rnn_inference_context: 1024
+rnn_inference_context_step: 256
+rnn_min_length: 128
 
-transformer_hidden_size: 256
-transformer_inter_size: 512
+transformer_hidden_size: 512
+transformer_inter_size: 1024
 transformer_heads: 4
-transformer_layers: 4
-transformer_context: 256
-transformer_positions: 1536
-transformer_dropout: 0.3
+transformer_layers: 8
+transformer_context: 1024
+transformer_positions: 4000
+transformer_dropout: 0.1
 transformer_min_length: 32
 transformer_cls_token:
   timestamps: -1
   labels: ${num_classes}  # Use final label for CLS.
-  channel_type: 0
-  currency: 0
-  trx_category: 0
-  log_amount: -1
+  types: 0
 transformer_history_token_frequency: 0.1
 transformer_history_token_probability: 0.5
 
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
-  project: pretpp-rosbank-full
+  project: pretpp-taobao
   name: ${name}
   save_dir: lightning_logs
 model_path: checkpoints/${name}.ckpt
@@ -44,22 +41,19 @@ data_module:
   _target_: hotpp.data.HotppDataModule
   fields:
     - labels
-    - channel_type
-    - currency
-    - trx_category
-    - log_amount
-  batch_size: 128
+    - types
+  batch_size: 32
   num_workers: 4
   train_params:
     min_required_length: 2
-    max_length: 400
+    max_length: 1024
   val_params:
-    max_length: 400
+    max_length: 1024
     position: last
   test_params:
-    max_length: 400
+    max_length: 1024
     position: last
-  global_target_fields: target_flag
+  global_target_fields: target
   train_path: data/train.parquet
   val_path: data/val.parquet
   test_path: data/test.parquet
@@ -104,18 +98,11 @@ module:
         labels:
           in: ${num_classes}
           out: 32
-        channel_type:
-          in: 7
-          out: 8
-        currency:
-          in: 68
-          out: 8
-        trx_category:
-          in: 11
+        types:
+          in: 5
           out: 8
       numeric_values:
         timestamps: identity
-        log_amount: identity
     max_time_delta: ${max_time_delta}
   aggregator:
     _target_: hotpp.nn.LastAggregator
@@ -127,7 +114,7 @@ module:
   lr_scheduler_partial:
     _partial_: true
     _target_: torch.optim.lr_scheduler.StepLR
-    step_size: 10
+    step_size: 5
     gamma: 0.8
   val_metric: ${metric}
   test_metric: ${metric}
@@ -136,11 +123,11 @@ module:
 trainer:
   accelerator: cuda
   devices: 1
-  max_epochs: 120
+  max_epochs: 30
   enable_checkpointing: true
   precision: 16-mixed
   gradient_clip_val: 1  # Increases training stability.
-  check_val_every_n_epoch: 10
+  check_val_every_n_epoch: 1
   model_selection:
     metric: val/downstream
     mode: max

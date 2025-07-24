@@ -5,15 +5,27 @@ defaults:
 
 name: coles_transformer
 
+data_module:
+  batch_size: 64
+
 module:
   _target_: pretpp.modules.BaseModule
+  optimizer_partial:
+    lr: 0.001
+  lr_scheduler_partial:
+    gamma: 0.9025
+    step_size: 30
   head_partial:
     _target_: pretpp.nn.NormalizationHead
     _partial_: true
+  aggregator:
+    _target_: hotpp.nn.LastAggregator
   loss_projection_partial: ${nohead}
   loss:
     _target_: pretpp.losses.ColesLoss
     embedding_dim: ${transformer_hidden_size}
+    min_length: 25
+    max_length: 200
     n_splits: 5
     coles_loss:
       _target_: ptls.frames.coles.losses.ContrastiveLoss
@@ -21,3 +33,6 @@ module:
       sampling_strategy:
         _target_: ptls.frames.coles.sampling_strategies.HardNegativePairSelector
         neg_count: 5
+trainer:
+  max_epochs: 150
+  check_val_every_n_epoch: 10
