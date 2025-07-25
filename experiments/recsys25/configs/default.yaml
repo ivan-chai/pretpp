@@ -1,0 +1,172 @@
+seed_everything: 42
+num_evaluation_seeds: 5
+
+num_classes: 6775
+num_classes_plus1: 6776
+max_time_delta: 14
+max_duration: 155
+num_downstream_classes: 2
+
+rnn_hidden_size: 1280
+rnn_half_hidden_size: 128
+rnn_inference_context: 1024
+rnn_inference_context_step: 256
+rnn_min_length: 1
+
+transformer_hidden_size: 512
+transformer_inter_size: 1024
+transformer_heads: 4
+transformer_layers: 8
+transformer_context: 1024
+transformer_positions: 4000
+transformer_dropout: 0.1
+transformer_min_length: 1
+transformer_cls_token:
+  timestamps: -1
+  labels: ${num_classes}  # Use final label for CLS.
+  types: 0
+transformer_history_token_frequency: 0.02
+transformer_history_token_probability: 0.5
+
+logger:
+  _target_: pytorch_lightning.loggers.WandbLogger
+  project: pretpp-recsys25
+  name: ${name}
+  save_dir: lightning_logs
+model_path: checkpoints/${name}.ckpt
+report: results/${name}.yaml
+multiseed_report: results/multiseed_${name}.yaml
+
+data_module:
+  _target_: hotpp.data.HotppDataModule
+  fields:
+    - labels
+    - items
+    - types
+    - price
+    - name_00
+    - name_01
+    - name_02
+    - name_03
+    - name_04
+    - name_05
+    - name_06
+    - name_07
+    - name_08
+    - name_09
+    - name_10
+    - name_11
+    - name_12
+    - name_13
+    - name_14
+    - name_15
+  batch_size: 1024
+  num_workers: 4
+  train_params:
+    min_required_length: 4
+    max_length: 64
+  val_params:
+    max_length: 64
+    position: last
+  test_params:
+    max_length: 64
+    position: last
+  global_target_fields: target_catprop
+  train_path: data/train.parquet
+  val_path: data/val.parquet
+  test_path: data/val.parquet
+
+metric: null
+
+nohead:
+  _target_: pretpp.nn.IdentityHead
+  _partial_: true
+
+head:
+  _target_: hotpp.nn.Head
+  _partial_: true
+  hidden_dims: []
+  use_batch_norm: true
+
+metric_head:
+  _target_: pretpp.nn.MetricHead
+  _partial_: true
+  hidden_dims: [128]
+  head_params:
+    use_batch_norm: true
+
+conditional_head:
+  _target_: hotpp.nn.ConditionalHead
+  _partial_: true
+  hidden_dims: [128]
+  use_batch_norm: true
+
+metric_conditional_head:
+  _target_: pretpp.nn.MetricConditionalHead
+  _partial_: true
+  hidden_dims: [256, 128]
+  head_params:
+    use_batch_norm: true
+
+module:
+  seq_encoder:
+    embedder:
+      _target_: hotpp.nn.Embedder
+      embeddings:
+        labels:
+          in: ${num_classes}
+          out: 32
+        types:
+          in: 3
+          out: 4
+#        items:
+#          in: 10001
+#          out: 64
+        name_00: {in: 256, out: 8}
+        name_01: {in: 256, out: 8}
+        name_02: {in: 256, out: 8}
+        name_03: {in: 256, out: 8}
+        name_04: {in: 256, out: 8}
+        name_05: {in: 256, out: 8}
+        name_06: {in: 256, out: 8}
+        name_07: {in: 256, out: 8}
+        name_08: {in: 256, out: 8}
+        name_09: {in: 256, out: 8}
+        name_10: {in: 256, out: 8}
+        name_11: {in: 256, out: 8}
+        name_12: {in: 256, out: 8}
+        name_13: {in: 256, out: 8}
+        name_14: {in: 256, out: 8}
+        name_15: {in: 256, out: 8}
+      numeric_values:
+        timestamps: identity
+        price: identity
+    max_time_delta: ${max_time_delta}
+  aggregator:
+    _target_: hotpp.nn.LastAggregator
+  optimizer_partial:
+    _partial_: true
+    _target_: torch.optim.Adam
+    lr: 0.001
+    weight_decay: 0.0
+  lr_scheduler_partial:
+    _partial_: true
+    _target_: torch.optim.lr_scheduler.StepLR
+    step_size: 5
+    gamma: 0.8
+  val_metric: ${metric}
+  test_metric: ${metric}
+  downstream_validation_config: configs/downstream.yaml
+
+trainer:
+  accelerator: cuda
+  devices: 1
+  max_epochs: 30
+  enable_checkpointing: true
+  precision: 16-mixed
+  gradient_clip_val: 1  # Increases training stability.
+  check_val_every_n_epoch: 1
+  model_selection:
+    metric: val/downstream
+    mode: max
+  deterministic: true
