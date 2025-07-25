@@ -25,6 +25,23 @@ transformer_cls_token:
   timestamps: -1
   labels: ${num_classes}  # Use final label for CLS.
   types: 0
+  price: 0
+  name_00: 0 
+  name_01: 0
+  name_02: 0
+  name_03: 0
+  name_04: 0
+  name_05: 0
+  name_06: 0
+  name_07: 0
+  name_08: 0
+  name_09: 0
+  name_10: 0
+  name_11: 0
+  name_12: 0
+  name_13: 0
+  name_14: 0
+  name_15: 0
 transformer_history_token_frequency: 0.02
 transformer_history_token_probability: 0.5
 
