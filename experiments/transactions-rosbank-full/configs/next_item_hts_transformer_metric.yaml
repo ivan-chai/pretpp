@@ -5,15 +5,6 @@ defaults:
 
 name: next_item_hts_transformer_metric
 
-data_module:
-  _target_: hotpp.data.HotppDataModule
-  fields:
-    - labels
-    - channel_type
-    - currency
-    - trx_category
-    - log_amount
-
 module:
   _target_: pretpp.modules.BaseModule
   head_partial:
@@ -46,7 +37,3 @@ module:
       log_amount:
         _target_: hotpp.losses.MAELoss
         grad_scale: 1
-
-trainer:
-  max_epochs: 120
-  deterministic: true
