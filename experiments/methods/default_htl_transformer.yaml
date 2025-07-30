@@ -6,6 +6,7 @@ module:
   seq_encoder:
     model_partial:
       _target_: pretpp.nn.HistoryTokenTransformer
+      embed_layer: [-2, -3]
       strategy_partial:
         _target_: pretpp.nn.LastHTStrategy
         _partial_: true
