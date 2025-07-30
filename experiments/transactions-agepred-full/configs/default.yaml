@@ -26,7 +26,7 @@ transformer_cls_token:
   labels: ${num_classes}  # Use final label for CLS.
   log_amount: -1
 transformer_history_token_frequency: 0.1
-transformer_history_token_probability: 0.15
+transformer_history_token_probability: 0.5
 
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
