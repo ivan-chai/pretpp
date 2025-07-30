@@ -1,0 +1,11 @@
+date: '2025-07-27 20:35:53'
+test/accuracy-target: 0.9724412560462952
+test/batch-accuracy-target: 0.9724412560462952
+test/downstream: 0.8159999847412109
+test/loss: 0.10589924454689026
+test/loss_target: 0.10589924454689026
+val/accuracy-target: 0.9719160795211792
+val/batch-accuracy-target: 0.9719160795211792
+val/downstream: 0.8270000219345093
+val/loss: 0.10788019746541977
+val/loss_target: 0.10788019746541977
