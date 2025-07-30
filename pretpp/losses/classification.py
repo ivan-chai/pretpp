@@ -11,9 +11,10 @@ class ClassificationLoss(BaseLoss):
     Args:
         targets: A mapping from a target name to dictionary with "num_classes" and optional "weight" and "cast" fields.
         cls_token: A dictionary with field values for a CLS token (optional, typically for transformer models).
+        overwrite_timestamp: Assign the latest timestamp to the CLS token.
         apply_to_all_outputs: Whether to compute loss for global classification targets with aggregated embedding or for each embedding.
     """
-    def __init__(self, targets, cls_token=None, apply_to_all_outputs=False):
+    def __init__(self, targets, cls_token=None, overwrite_timestamp=False, apply_to_all_outputs=False):
         super().__init__()
         for name, spec in targets.items():
             if "num_classes" not in spec:
@@ -24,6 +25,7 @@ class ClassificationLoss(BaseLoss):
         self._targets = targets
         self._order = list(sorted(targets))
         self._cls_token = cls_token
+        self._overwrite_timestamp = overwrite_timestamp
         self._apply_to_all_outputs = apply_to_all_outputs
 
     @property
@@ -52,7 +54,11 @@ class ClassificationLoss(BaseLoss):
             for k, t in self._cls_token.items():
                 v = inputs.payload[k]  # (B, L, *).
                 new_inputs[k] = torch.cat([v, v[:, -1:]], 1)  # (B, L + 1, *).
-                token = torch.full_like(v[:, :1], t)  # (B, 1, *).
+                if self._overwrite_timestamp and (k == "timestamps"):
+                    assert v.ndim == 2  # (B, L).
+                    token = v.take_along_dim((last_indices - 1).clip(min=0)[:, None], 1)  # (B, 1).
+                else:
+                    token = torch.full_like(v[:, :1], t)  # (B, 1, *).
                 last_indices_expanded = last_indices.reshape(*([b] + [1] * (v.ndim - 1)))  # (B, 1, ..., 1).
                 last_indices_expanded = last_indices_expanded.expand(*([b, 1] + list(v.shape[2:])))  # (B, 1, *).
                 new_inputs[k].scatter_(1, last_indices_expanded, token)
