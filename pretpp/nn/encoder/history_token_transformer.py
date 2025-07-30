@@ -30,12 +30,21 @@ class HistoryTokenTransformer(SimpleTransformer):
             x = PaddedBatch(self.positional(x.payload, timestamps.payload), x.seq_lens)
             if self.embed_layer is not None:
                 _, states = self.transform(x, return_states="full", attention_mask=attention_mask)  # N * (B, L, D).
-                outputs = states[self.embed_layer]
-                is_last_layer = self.embed_layer == len(states) - 1
-                if not is_last_layer:
-                    layer = self.encoder.layers[self.embed_layer + 1]
-                    if layer.norm_first:
-                        outputs = layer.norm1(outputs)
+                try:
+                    embed_layers = list(self.embed_layer)
+                except TypeError:
+                    embed_layers = [self.embed_layer]
+                all_outputs = []
+                for embed_layer in embed_layers:
+                    embed_layer = embed_layer % self.n_layer
+                    outputs = states[embed_layer]
+                    is_last_layer = embed_layer == len(states) - 1
+                    if not is_last_layer:
+                        layer = self.encoder.layers[embed_layer + 1]
+                        if layer.norm_first:
+                            outputs = layer.norm1(outputs)
+                    all_outputs.append(outputs)
+                outputs = torch.stack(all_outputs, 0).sum(0)
                 outputs = PaddedBatch(outputs, x.seq_lens)
             else:
                 outputs, _ = self.transform(x, attention_mask=attention_mask)
