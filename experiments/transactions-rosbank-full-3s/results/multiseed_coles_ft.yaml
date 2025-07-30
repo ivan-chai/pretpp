@@ -1,0 +1,22 @@
+date: '2025-07-22 14:26:00'
+num_seeds: 5
+test/accuracy-target_flag: 0.6588000178337097
+test/accuracy-target_flag-std: 0.008818159855512242
+test/batch-accuracy-target_flag: 0.6588000178337097
+test/batch-accuracy-target_flag-std: 0.008818159855512242
+test/downstream: 0.8203999996185303
+test/downstream-std: 0.006343497116998734
+test/loss: 0.7283537745475769
+test/loss-std: 0.06807104938100837
+test/loss_target_flag: 0.7283537745475769
+test/loss_target_flag-std: 0.06807104938100837
+val/accuracy-target_flag: 0.6999111175537109
+val/accuracy-target_flag-std: 0.0035265379279045064
+val/batch-accuracy-target_flag: 0.6999111175537109
+val/batch-accuracy-target_flag-std: 0.0035265379279045064
+val/downstream: 0.8205999970436096
+val/downstream-std: 0.0024166195183808617
+val/loss: 0.7156580924987793
+val/loss-std: 0.05128068837673343
+val/loss_target_flag: 0.7156580924987793
+val/loss_target_flag-std: 0.05128068837673343

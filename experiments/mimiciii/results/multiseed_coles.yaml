@@ -1,0 +1,14 @@
+date: '2025-07-18 20:01:09'
+num_seeds: 5
+test/downstream: 0.874399995803833
+test/downstream-std: 0.001959587248765683
+test/loss: 47.282763671875
+test/loss-std: 0.8669582095877799
+test/loss_coles: 47.282763671875
+test/loss_coles-std: 0.8669582095877799
+val/downstream: 0.8781999945640564
+val/downstream-std: 0.002135412720775744
+val/loss: 47.3524169921875
+val/loss-std: 0.8362268489499305
+val/loss_coles: 47.3524169921875
+val/loss_coles-std: 0.8362268489499305
