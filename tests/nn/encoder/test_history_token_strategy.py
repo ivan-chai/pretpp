@@ -10,7 +10,7 @@ from unittest import TestCase, main, mock
 import torch
 
 from hotpp.data import PaddedBatch
-from pretpp.nn.encoder import FullHTStrategy, SubsetHTStrategy, FixedHTStrategy, LastHTStrategy
+from pretpp.nn.encoder import FullHTStrategy, SubsetHTStrategy, FixedHTStrategy, LastHTStrategy, NoHTStrategy
 from pretpp.nn.encoder.history_token_strategy import make_ht_attention_mask
 
 
@@ -383,6 +383,39 @@ class TestHTStrategy(TestCase):
 
             reverted_embeddings = s.extract_outputs(new_embeddings)
             self.assertTrue((reverted_embeddings - (-1)).abs().max() < 1e-6)
+
+    def test_no_strategy(self):
+        strategy = NoHTStrategy(1)
+
+        gt_embeddings = torch.tensor([
+            [3],
+            [6],
+            [11]
+        ]).reshape(3, 1)
+
+        # Case 1: apply.
+        with strategy(self.timestamps) as s:
+            new_embeddings, new_timestamps, attention_mask = s.apply(self.embeddings, self.timestamps)
+            self.assertEqual(new_embeddings.seq_lens.tolist(), self.embeddings.seq_lens.tolist())
+            self.assertAlmostEqual((new_embeddings.payload - self.embeddings.payload).abs().max().item(), 0)
+            self.assertAlmostEqual((new_timestamps.payload - self.timestamps.payload).abs().max().item(), 0)
+
+            self.assertTrue(attention_mask is None)
+
+            reverted_embeddings = s.extract_outputs(new_embeddings)
+            self.assertAlmostEqual((reverted_embeddings.payload - self.embeddings.payload).abs().max().item(), 0)
+
+        # Case 2: embedding.
+        with strategy(self.timestamps, embedding=True) as s:
+            new_embeddings, new_timestamps, attention_mask = s.apply(self.embeddings, self.timestamps)
+            self.assertEqual(new_embeddings.seq_lens.tolist(), self.embeddings.seq_lens.tolist())
+            self.assertAlmostEqual((new_embeddings.payload - self.embeddings.payload).abs().max().item(), 0)
+            self.assertAlmostEqual((new_timestamps.payload - self.timestamps.payload).abs().max().item(), 0)
+
+            self.assertTrue(attention_mask is None)
+
+            reverted_embeddings = s.extract_outputs(new_embeddings)
+            self.assertAlmostEqual((reverted_embeddings - gt_embeddings).abs().max().item(), 0)
 
 
 if __name__ == "__main__":

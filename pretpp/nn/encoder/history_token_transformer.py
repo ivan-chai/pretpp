@@ -37,14 +37,14 @@ class HistoryTokenTransformer(SimpleTransformer):
                 all_outputs = []
                 for embed_layer in embed_layers:
                     embed_layer = embed_layer % self.n_layer
-                    outputs = states[embed_layer]
+                    outputs = states[embed_layer]  # (B, L, D).
                     is_last_layer = embed_layer == len(states) - 1
                     if not is_last_layer:
                         layer = self.encoder.layers[embed_layer + 1]
                         if layer.norm_first:
                             outputs = layer.norm1(outputs)
                     all_outputs.append(outputs)
-                outputs = torch.stack(all_outputs, 0).sum(0)
+                outputs = torch.stack(all_outputs, 0).sum(0)  # (B, L, D).
                 outputs = PaddedBatch(outputs, x.seq_lens)
             else:
                 outputs, _ = self.transform(x, attention_mask=attention_mask)

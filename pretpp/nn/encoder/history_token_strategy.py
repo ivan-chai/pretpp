@@ -430,8 +430,6 @@ class LastHTStrategy(HTStrategyBase):
     """Insert history token to the end of each sequence.
 
     Args:
-        apply_probability: The probability of HT usage for each real token.
-        token_selection: Either `random`, `last` or `none`.
         predict: The type of tokens used for prediction (`input_tokens`, `history_tokens` or `all`).
     """
     def __init__(self, n_embd, predict="input_tokens"):
@@ -466,4 +464,33 @@ class LastHTStrategy(HTStrategyBase):
             return PaddedBatch(x.payload[:, :-1], (x.seq_lens - 1).clip(min=0))
         else:
             assert self.predict == "all"
+            return x
+
+
+class NoHTStrategy(HTStrategyBase):
+    """Don't use history tokens, extract last token embedding."""
+    def __init__(self, n_embd):
+        super().__init__(n_embd)
+
+    def init_token(self, n_embd):
+        pass
+
+    def select(self, timestamps, embedding=False):
+        self.embedding = embedding
+        self.device = timestamps.device
+
+    def clear_state(self):
+        del self.embedding
+        del self.device
+
+    def insert_tokens(self, x, timestamps):
+        return x, timestamps
+
+    def make_attention_mask(self):
+        return None  # Simple causal mask.
+
+    def extract_outputs(self, x):
+        if self.embedding:
+            return x.payload.take_along_dim((x.seq_lens[:, None, None] - 1).clip(min=0), 1).squeeze(1)  # (B, D).
+        else:
             return x
