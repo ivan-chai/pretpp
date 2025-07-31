@@ -14,7 +14,7 @@ module:
   loss_projection_partial: ${head}
   loss:
     _target_: pretpp.losses.ClassificationLoss
-    apply_to_all_outputs: true
+    apply_to_all_outputs: false
     targets:
       target:
         num_classes: ${num_downstream_classes}

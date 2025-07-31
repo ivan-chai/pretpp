@@ -11,13 +11,16 @@ class HistoryTokenTransformer(SimpleTransformer):
         history_token_fraction: The average fraction of batches to apply history token to.
         history_token_locality: The value between 0 and 1 with 0 meaning uniform history token selection
             and 1 for using the last available token.
-        embed_layer: The layer to extract HT embeddings from.
+        embed_layer: The layer to extract HT embeddings from, a list of indices, or `all`. By default, extract
+            the output of the final layer.
     """
     def __init__(self, input_size, strategy_partial, embed_layer=None, **kwargs):
         super().__init__(input_size, **kwargs)
         if not self.causal:
             raise NotImplementedError("A history-token transformer must be causal.")
         self.strategy = strategy_partial(self.n_embd)
+        if embed_layer == "all":
+            embed_layer = list(range(self.n_layer))
         self.embed_layer = embed_layer
 
     def embed(self, x, timestamps):
@@ -38,11 +41,6 @@ class HistoryTokenTransformer(SimpleTransformer):
                 for embed_layer in embed_layers:
                     embed_layer = embed_layer % self.n_layer
                     outputs = states[embed_layer]  # (B, L, D).
-                    is_last_layer = embed_layer == len(states) - 1
-                    if not is_last_layer:
-                        layer = self.encoder.layers[embed_layer + 1]
-                        if layer.norm_first:
-                            outputs = layer.norm1(outputs)
                     all_outputs.append(outputs)
                 outputs = torch.stack(all_outputs, 0).sum(0)  # (B, L, D).
                 outputs = PaddedBatch(outputs, x.seq_lens)

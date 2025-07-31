@@ -18,7 +18,7 @@ module:
       target:
         num_classes: ${num_downstream_classes}
         cast: true
-    apply_to_all_outputs: true
+    apply_to_all_outputs: false
   val_metric: ${metric}
   test_metric: ${metric}
 
