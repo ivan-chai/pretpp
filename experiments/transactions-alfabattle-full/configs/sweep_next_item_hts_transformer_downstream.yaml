@@ -1,0 +1,29 @@
+project: pretpp-sweep-alfabattle
+run_cap: 100
+name: next_item_hts_transformer
+command:
+  - ${env}
+  - python3
+  - -m
+  - hotpp.train
+  - --config-dir
+  - configs
+  - --config-name
+  - next_item_hts_transformer
+  - ~seed_everything
+  - ~model_path
+  - ~report
+  - ~trainer.model_selection
+  - trainer.max_epochs=15
+  - ${args_no_hyphens}
+method: bayes
+metric:
+  name: val/downstream
+  goal: maximize
+parameters:
+  transformer_history_token_frequency:
+    min: 0.0
+    max: 1.0
+  transformer_history_token_probability:
+    min: 0.0
+    max: 1.0

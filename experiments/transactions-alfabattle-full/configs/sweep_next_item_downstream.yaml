@@ -1,0 +1,57 @@
+project: pretpp-sweep-alfabattle
+run_cap: 100
+name: next_item
+command:
+  - ${env}
+  - python3
+  - -m
+  - hotpp.train
+  - --config-dir
+  - configs
+  - --config-name
+  - next_item
+  - ~seed_everything
+  - ~model_path
+  - ~report
+  - ~trainer.model_selection
+  - trainer.max_epochs=15
+  - ${args_no_hyphens}
+method: bayes
+metric:
+  name: val/downstream
+  goal: maximize
+parameters:
+  module.loss.losses.timestamps.grad_scale:
+    values: [0, 1]
+  module.loss.losses.currency.grad_scale:
+    values: [0, 1]
+  module.loss.losses.operation_kind.grad_scale:
+    values: [0, 1]
+  module.loss.losses.card_type.grad_scale:
+    values: [0, 1]
+  module.loss.losses.operation_type.grad_scale:
+    values: [0, 1]
+  module.loss.losses.operation_type_group.grad_scale:
+    values: [0, 1]
+  module.loss.losses.ecommerce_flag.grad_scale:
+    values: [0, 1]
+  module.loss.losses.payment_system.grad_scale:
+    values: [0, 1]
+  module.loss.losses.income_flag.grad_scale:
+    values: [0, 1]
+  module.loss.losses.country.grad_scale:
+    values: [0, 1]
+  module.loss.losses.city.grad_scale:
+    values: [0, 1]
+  module.loss.losses.mcc_category.grad_scale:
+    values: [0, 1]
+  module.loss.losses.day_of_week.grad_scale:
+    values: [0, 1]
+  module.loss.losses.hour.grad_scale:
+    values: [0, 1]
+  module.loss.losses.weekofyear.grad_scale:
+    values: [0, 1]
+  module.loss.losses.log_amount.grad_scale:
+    values: [0, 1]
+  module.loss.losses.log_hour_diff.grad_scale:
+    values: [0, 1]

@@ -1,0 +1,38 @@
+project: pretpp-sweep-alfabattle
+run_cap: 100
+name: next_item_transformer
+command:
+  - ${env}
+  - python3
+  - -m
+  - hotpp.train
+  - --config-dir
+  - configs
+  - --config-name
+  - next_item_transformer
+  - ~seed_everything
+  - ~model_path
+  - ~report
+  - ~trainer.model_selection
+  - data_module.batch_size=64
+  - trainer.max_epochs=15
+  - ${args_no_hyphens}
+method: bayes
+metric:
+  name: val/downstream
+  goal: maximize
+parameters:
+  transformer_hidden_size:
+    values: [128, 256, 512, 1024, 1536, 2048]
+  transformer_inter_size:
+    values: [128, 256, 512, 1024, 1536, 2048]
+  transformer_layers:
+    min: 6
+    max: 20
+  module.lr_scheduler_partial.step_size:
+    min: 1
+    max: 20
+  module.optimizer_partial.lr:
+    distribution: log_uniform_values
+    min: 0.0001
+    max: 0.01

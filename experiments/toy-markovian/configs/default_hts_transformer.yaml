@@ -1,1 +1,8 @@
-../../methods/default_hts_transformer.yaml
+defaults:
+  - default_hts_transformer_base
+  - _self_
+
+module:
+  seq_encoder:
+    model_partial:
+      embed_layer: null

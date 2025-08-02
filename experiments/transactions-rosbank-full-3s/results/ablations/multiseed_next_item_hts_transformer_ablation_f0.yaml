@@ -1,4 +1,34 @@
-date: '2025-07-30 21:34:42'
+date: '2025-08-01 08:25:17'
 num_seeds: 3
-test/downstream: 0.8341000080108643
-test/downstream-std: 0.006174668326091373
+test/downstream: 0.8330666621526083
+test/downstream-std: 0.005892578988207101
+test/loss: 5.044513702392578
+test/loss-std: 0.006741195567652458
+test/loss_channel_type: 4.813875360317373e-05
+test/loss_channel_type-std: 1.5558825531774436e-05
+test/loss_currency: 0.07811411966880162
+test/loss_currency-std: 0.0006930851346093491
+test/loss_labels: 2.5858278274536133
+test/loss_labels-std: 0.005152286847361365
+test/loss_log_amount: 1.2351513306299846
+test/loss_log_amount-std: 0.0015954123428037646
+test/loss_timestamps: 0.6177074511845907
+test/loss_timestamps-std: 0.0010595147072998937
+test/loss_trx_category: 0.5276650786399841
+test/loss_trx_category-std: 0.0012115625598404756
+val/downstream: 0.8337999979654948
+val/downstream-std: 0.0027276213261157554
+val/loss: 4.8980763753255205
+val/loss-std: 0.008770829404371015
+val/loss_channel_type: 5.8423725325458996e-05
+val/loss_channel_type-std: 8.525058707797803e-06
+val/loss_currency: 0.057140808552503586
+val/loss_currency-std: 0.00037641900745224424
+val/loss_labels: 2.5418418248494468
+val/loss_labels-std: 0.00623048223721662
+val/loss_log_amount: 1.2051235437393188
+val/loss_log_amount-std: 0.0007088383437016053
+val/loss_timestamps: 0.6027116775512695
+val/loss_timestamps-std: 0.0007890476878257944
+val/loss_trx_category: 0.4911998411019643
+val/loss_trx_category-std: 0.0008211751979111583

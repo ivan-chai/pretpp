@@ -1,7 +1,7 @@
-date: '2025-07-30 16:40:13'
+date: '2025-07-31 17:40:21'
 num_seeds: 3
-test/downstream: 0.8310333490371704
-test/downstream-std: 0.013694848035983646
+test/downstream: 0.8323666652043661
+test/downstream-std: 0.00502416972423128
 test/loss: 2.566545565923055
 test/loss-std: 0.05530588292182246
 test/loss_labels: 2.1883747577667236
@@ -10,8 +10,8 @@ test/loss_timestamps: 0.14444057643413544
 test/loss_timestamps-std: 0.0002444622687478156
 test/loss_types: 0.23373022178808847
 test/loss_types-std: 0.0029791299825095473
-val/downstream: 0.8439666628837585
-val/downstream-std: 0.0009285578195732337
+val/downstream: 0.8485666712125143
+val/downstream-std: 0.0028335323776901146
 val/loss: 2.525413990020752
 val/loss-std: 0.0527853069024469
 val/loss_labels: 2.153478225072225
