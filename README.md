@@ -28,7 +28,7 @@ pip install --no-build-isolation .
 ```
 
 # HT-Transformer
-The code for HT-Transformer can be found at:
+The code for [HT-Transformer](https://arxiv.org/pdf/2508.01474v1) can be found at:
 ```
 pretpp/nn/encoder/history_token_transformer.py
 pretpp/nn/encoder/history_token_strategy.py
