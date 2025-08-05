@@ -75,7 +75,7 @@ CUDA_VISIBLE_DEVICES=0 python3 -m hotpp.train_multiseed --config-dir configs --c
   title={HT-Transformer: Event Sequences Classification by Accumulating Prefix Information with History Tokens},
   author={Karpukhin, Ivan and Savchenko, Andrey},
   journal={arXiv preprint arXiv:2508.01474v1},
-  year={2024},
+  year={2025},
   url ={https://arxiv.org/abs/2508.01474v1}
 }
 ```
