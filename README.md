@@ -10,6 +10,7 @@
 <h4 align="center">
     <p>
         <a href="#Installation">Installation</a> |
+        <a href="#HT-Transformer">HT-Transformer</a> |
         <a href="#Data-preparation">Data preparation</a> |
         <a href="#Usage">Usage</a> |
         <a href="https://arxiv.org/pdf/2508.01474v1">Paper HT-Transformer</a> |
@@ -24,6 +25,13 @@ The code is highly dependent on and compatible with [HoTPP](https://github.com/i
 
 ```bash
 pip install --no-build-isolation .
+```
+
+# HT-Transformer
+The code for HT-Transformer can be found at:
+```
+pretpp/nn/encoder/history_token_transformer.py
+pretpp/nn/encoder/history_token_strategy.py
 ```
 
 # Data preparation
