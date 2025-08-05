@@ -10,10 +10,10 @@
 <h4 align="center">
     <p>
         <a href="#Installation">Installation</a> |
-        <a href="#HT-Transformer">HT-Transformer</a> |
         <a href="#Data-preparation">Data preparation</a> |
         <a href="#Usage">Usage</a> |
-        <a href="https://arxiv.org/pdf/2508.01474v1">Paper HT-Transformer</a> |
+        <a href="#HT-Transformer">HT-Transformer</a> |
+        <a href="https://arxiv.org/pdf/2508.01474v1">HT-Transformer (paper)</a> |
         <a href="#Citation">Citing</a>
     <p>
 </h4>
