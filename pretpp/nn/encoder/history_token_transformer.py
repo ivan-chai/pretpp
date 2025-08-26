@@ -1,6 +1,17 @@
 import torch
 from hotpp.data import PaddedBatch
-from hotpp.nn import SimpleTransformer
+from hotpp.nn import SimpleTransformer, MeanAggregator
+
+
+def add_avg_to_the_beginning(x, timestamps):
+    agg = MeanAggregator()(x).unsqueeze(1)  # (B, 1, D).
+    new_lengths = x.seq_lens + 1
+
+    new_x = torch.cat([agg, x.payload], 1)  # (B, L + 1, D).
+    new_x = PaddedBatch(new_x, new_lengths)
+    new_timestamps = torch.cat([timestamps.payload[:, :1], timestamps.payload], 1)  # (B, L + 1).
+    new_timestamps = PaddedBatch(new_timestamps, new_lengths)
+    return new_x, new_timestamps
 
 
 class HistoryTokenTransformer(SimpleTransformer):
@@ -13,8 +24,9 @@ class HistoryTokenTransformer(SimpleTransformer):
             and 1 for using the last available token.
         embed_layer: The layer to extract HT embeddings from, a list of indices, or `all`. By default, extract
             the output of the final layer.
+        add_avg: Add average input to the beginning.
     """
-    def __init__(self, input_size, strategy_partial, embed_layer=None, **kwargs):
+    def __init__(self, input_size, strategy_partial, embed_layer=None, add_avg=False, **kwargs):
         super().__init__(input_size, **kwargs)
         if not self.causal:
             raise NotImplementedError("A history-token transformer must be causal.")
@@ -22,9 +34,12 @@ class HistoryTokenTransformer(SimpleTransformer):
         if embed_layer == "all":
             embed_layer = list(range(self.n_layer))
         self.embed_layer = embed_layer
+        self.add_avg = add_avg
 
     def embed(self, x, timestamps):
         x = PaddedBatch(self.input_projection(x.payload), x.seq_lens)  # (B, L, D).
+        if self.add_avg:
+            x, timestamps = add_avg_to_the_beginning(x, timestamps)
 
         with self.strategy(timestamps, embedding=True) as strategy:
             x, timestamps, attention_mask = strategy.apply(x, timestamps)
@@ -50,22 +65,38 @@ class HistoryTokenTransformer(SimpleTransformer):
             assert embeddings.ndim == 2
         return embeddings
 
-    def forward(self, x, timestamps, states=None, return_states=False):
-        if not self.training:
-            # Don't insert history tokens.
-            return super().forward(x, timestamps, states=states, return_states=return_states)
+    def forward_impl(self, x, timestamps, states=None, return_states=False):
+        """Apply positional encoding and transform."""
         if return_states:
             raise NotImplementedError("HistoryTokenTransformer doesn't support states return.")
         b, l = x.shape
         device = x.device
-        x = PaddedBatch(self.input_projection(x.payload), x.seq_lens)  # (B, L, D).
 
-        with self.strategy(timestamps) as strategy:
-            x, timestamps, attention_mask = strategy.apply(x, timestamps)  # (B, L', D).
+        if self.training:
+            with self.strategy(timestamps) as strategy:
+                x, timestamps, attention_mask = strategy.apply(x, timestamps)  # (B, L', D).
 
+                # Apply transformer.
+                x = PaddedBatch(self.positional(x.payload, timestamps.payload), x.seq_lens)  # (B, L', D).
+                outputs, _ = self.transform(x, attention_mask=attention_mask)  # (B, L', D).
+                outputs = strategy.extract_outputs(outputs)
+            states = None
+        else:
             # Apply transformer.
-            x = PaddedBatch(self.positional(x.payload, timestamps.payload), x.seq_lens)  # (B, L', D).
-            outputs, _ = self.transform(x, attention_mask=attention_mask)  # (B, L', D).
-            outputs = strategy.extract_outputs(outputs)
-        states = None
+            x = PaddedBatch(self.positional(x.payload, timestamps.payload), x.seq_lens)  # (B, L, D).
+            outputs, states = self.transform(x)  # (B, L, D).
+        return outputs, states
+
+    def forward(self, x, timestamps, states=None, return_states=False):
+        x = PaddedBatch(self.input_projection(x.payload), x.seq_lens)  # (B, L, D).
+        if self.add_avg:
+            x, timestamps = add_avg_to_the_beginning(x, timestamps)
+        outputs, states = self.forward_impl(x, timestamps, states=states, return_states=return_states)
+        if self.add_avg:
+            # TODO: check strategy predicts real tokens.
+            if (outputs.seq_lens != x.seq_lens).any():
+                raise RuntimeError("Strategy returned incompatible length.")
+            outputs = PaddedBatch(outputs.payload[:, 1:], (outputs.seq_lens - 1).clip(min=0))
+            if states is not None:
+                states = [s[:, 1:] for s in states]
         return outputs, states
