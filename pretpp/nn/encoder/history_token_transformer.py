@@ -3,13 +3,13 @@ from hotpp.data import PaddedBatch
 from hotpp.nn import SimpleTransformer, MeanAggregator
 
 
-def add_avg_to_the_beginning(x, timestamps):
-    agg = MeanAggregator()(x).unsqueeze(1)  # (B, 1, D).
-    new_lengths = x.seq_lens + 1
+def add_stats_to_the_beginning(x, timestamps, stats):
+    assert stats.ndim == 3  # (B, L', D).
+    new_lengths = x.seq_lens + stats.shape[1]
 
-    new_x = torch.cat([agg, x.payload], 1)  # (B, L + 1, D).
+    new_x = torch.cat([stats, x.payload], 1)  # (B, L' + L, D).
     new_x = PaddedBatch(new_x, new_lengths)
-    new_timestamps = torch.cat([timestamps.payload[:, :1], timestamps.payload], 1)  # (B, L + 1).
+    new_timestamps = torch.cat([timestamps.payload[:, :1].repeat(1, stats.shape[1]), timestamps.payload], 1)  # (B, L' + L).
     new_timestamps = PaddedBatch(new_timestamps, new_lengths)
     return new_x, new_timestamps
 
@@ -24,9 +24,8 @@ class HistoryTokenTransformer(SimpleTransformer):
             and 1 for using the last available token.
         embed_layer: The layer to extract HT embeddings from, a list of indices, or `all`. By default, extract
             the output of the final layer.
-        add_avg: Add average input to the beginning.
     """
-    def __init__(self, input_size, strategy_partial, embed_layer=None, add_avg=False, **kwargs):
+    def __init__(self, input_size, strategy_partial, embed_layer=None, stats_dim=None, n_stats=None, **kwargs):
         super().__init__(input_size, **kwargs)
         if not self.causal:
             raise NotImplementedError("A history-token transformer must be causal.")
@@ -34,12 +33,22 @@ class HistoryTokenTransformer(SimpleTransformer):
         if embed_layer == "all":
             embed_layer = list(range(self.n_layer))
         self.embed_layer = embed_layer
-        self.add_avg = add_avg
-
-    def embed(self, x, timestamps):
+        self.stats_dim = stats_dim
+        if stats_dim is not None:
+            assert isinstance(n_stats, int)
+            self.stats_projection = torch.nn.ModuleList([torch.nn.Linear(stats_dim, self.n_embd)
+                                                         for _ in range(n_stats)])
+    def preprocess(self, x, timestamps, stats=None):
         x = PaddedBatch(self.input_projection(x.payload), x.seq_lens)  # (B, L, D).
-        if self.add_avg:
-            x, timestamps = add_avg_to_the_beginning(x, timestamps)
+        if self.stats_dim is not None:
+            assert stats is not None
+            assert stats.ndim == 3  # (B, L, D).
+            stats = torch.stack([layer(stats[:, i]) for i, layer in enumerate(self.stats_projection)], 1)
+            x, timestamps = add_stats_to_the_beginning(x, timestamps, stats)  # (B, L + 1, D).
+        return x, timestamps
+
+    def embed(self, x, timestamps, stats=None):
+        x, timestamps = self.preprocess(x, timestamps, stats=stats)
 
         with self.strategy(timestamps, embedding=True) as strategy:
             x, timestamps, attention_mask = strategy.apply(x, timestamps)
@@ -87,16 +96,16 @@ class HistoryTokenTransformer(SimpleTransformer):
             outputs, states = self.transform(x)  # (B, L, D).
         return outputs, states
 
-    def forward(self, x, timestamps, states=None, return_states=False):
-        x = PaddedBatch(self.input_projection(x.payload), x.seq_lens)  # (B, L, D).
-        if self.add_avg:
-            x, timestamps = add_avg_to_the_beginning(x, timestamps)
+    def forward(self, x, timestamps, states=None, return_states=False, stats=None):
+        x, timestamps = self.preprocess(x, timestamps, stats=stats)
+
         outputs, states = self.forward_impl(x, timestamps, states=states, return_states=return_states)
-        if self.add_avg:
+        if self.stats_dim is not None:
             # TODO: check strategy predicts real tokens.
             if (outputs.seq_lens != x.seq_lens).any():
                 raise RuntimeError("Strategy returned incompatible length.")
-            outputs = PaddedBatch(outputs.payload[:, 1:], (outputs.seq_lens - 1).clip(min=0))
+            n_stats = stats.shape[1]
+            outputs = PaddedBatch(outputs.payload[:, n_stats:], (outputs.seq_lens - n_stats).clip(min=0))
             if states is not None:
-                states = [s[:, 1:] for s in states]
+                states = [s[:, n_stats:] for s in states]
         return outputs, states

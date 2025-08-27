@@ -1,0 +1,7 @@
+defaults:
+  - default_hts_transformer
+  - _self_
+
+module:
+  seq_encoder:
+    _target_: pretpp.nn.encoder.StatsEncoder
