@@ -40,8 +40,7 @@ class HistoryTokenTransformer(SimpleTransformer):
                                                          for _ in range(n_stats)])
     def preprocess(self, x, timestamps, stats=None):
         x = PaddedBatch(self.input_projection(x.payload), x.seq_lens)  # (B, L, D).
-        if self.stats_dim is not None:
-            assert stats is not None
+        if (self.stats_dim is not None) and (stats is not None):
             assert stats.ndim == 3  # (B, L, D).
             stats = torch.stack([layer(stats[:, i]) for i, layer in enumerate(self.stats_projection)], 1)
             x, timestamps = add_stats_to_the_beginning(x, timestamps, stats)  # (B, L + 1, D).
@@ -100,7 +99,7 @@ class HistoryTokenTransformer(SimpleTransformer):
         x, timestamps = self.preprocess(x, timestamps, stats=stats)
 
         outputs, states = self.forward_impl(x, timestamps, states=states, return_states=return_states)
-        if self.stats_dim is not None:
+        if (self.stats_dim is not None) and (stats is not None):
             # TODO: check strategy predicts real tokens.
             if (outputs.seq_lens != x.seq_lens).any():
                 raise RuntimeError("Strategy returned incompatible length.")

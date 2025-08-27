@@ -5,9 +5,10 @@ from functools import partial
 
 
 class StatsEncoder(Encoder):
-    def __init__(self, embedder, model_partial, *args, **kwargs):
+    def __init__(self, embedder, model_partial, stats_prob=0.5, *args, **kwargs):
         model_partial = partial(model_partial, stats_dim=self.get_stats_dim(embedder), n_stats=self.get_n_stats())
         super().__init__(embedder, model_partial, *args, **kwargs)
+        self.stats_prob = stats_prob
 
     def embed(self, x):
         """Extract embeddings with shape (B, D)."""
@@ -30,7 +31,7 @@ class StatsEncoder(Encoder):
             Outputs is with shape (B, T, D) and states with shape (N, B, D) or (N, B, T, D).
         """
         times = (self.compute_time_deltas(x) if self.model.delta_time else x)[self._timestamps_field]  # (B, L).
-        stats = self.extract_stats(x)
+        stats = self.extract_stats(x) if (not self.training) or (torch.rand([]) < self.stats_prob) else None
         embeddings = self.apply_embedder(x)
         outputs, states = self.model(embeddings, times, return_states=return_states, stats=stats)   # (B, L, D), (N, B, L, D).
         return outputs, states
