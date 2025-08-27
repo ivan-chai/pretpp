@@ -9,11 +9,15 @@ class NextItemLoss(BaseLoss):
 
     Args:
         losses: Mapping from the feature name to the loss function.
+        mask_fields: A mapping from the field name to masking probability (disable by default).
+        mask_token: Values used for masking.
     """
-    def __init__(self, losses):
+    def __init__(self, losses, mask_fields=None, mask_token=None):
         super().__init__()
         self._losses = torch.nn.ModuleDict(losses)
         self._order = list(sorted(losses))
+        self._mask_fields = mask_fields
+        self._mask_token = mask_token
 
     @property
     def aggregate(self):
@@ -33,6 +37,13 @@ class NextItemLoss(BaseLoss):
         Returns:
             Model inputs with shape (B, L', *) and targets with shape (B, L', *).
         """
+        if self._mask_fields:
+            # TODO: exclude masked fields from targets.
+            payload = dict(inputs.payload)
+            for name, p in self._mask_fields.items():
+                if torch.rand([]) < p:
+                    payload[name] = torch.full_like(inputs.payload[name], self._mask_token[name])
+            inputs = PaddedBatch(payload, inputs.seq_lens, seq_names=inputs.seq_names)
         # For the next-item loss inputs and targets are the same.
         # Offset is applied in base loss classes.
         return inputs, inputs

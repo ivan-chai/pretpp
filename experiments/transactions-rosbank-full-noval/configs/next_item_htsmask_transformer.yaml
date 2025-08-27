@@ -1,0 +1,14 @@
+defaults:
+  - next_item_hts_transformer
+  - _self_
+
+name: next_item_htsmask_transformer
+
+module:
+  loss:
+    mask_fields:
+      currency: 0.5
+      channel_type: 0.5
+      trx_category: 0.5
+      log_amount: 0.5
+    mask_token: ${transformer_cls_token}
