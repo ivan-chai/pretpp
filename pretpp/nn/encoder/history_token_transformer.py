@@ -31,14 +31,15 @@ class HistoryTokenTransformer(SimpleTransformer):
 
             # Extract history token embedding.
             x = PaddedBatch(self.positional(x.payload, timestamps.payload), x.seq_lens)
+            return_states = "full" if self.embed_layer is not None else False
             if self.rope is not None:
                 with self.rope.cache(timestamps.payload):
                     outputs, states = self.transform(x,
-                                                     return_states=self.embed_layer is not None,
+                                                     return_states=return_states,
                                                      attention_mask=attention_mask)
             else:
                 outputs, states = self.transform(x,
-                                                 return_states=self.embed_layer is not None,
+                                                 return_states=return_states,
                                                  attention_mask=attention_mask)
             if self.embed_layer is not None:
                 # states: N * (B, L, D).
