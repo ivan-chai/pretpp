@@ -31,8 +31,17 @@ class HistoryTokenTransformer(SimpleTransformer):
 
             # Extract history token embedding.
             x = PaddedBatch(self.positional(x.payload, timestamps.payload), x.seq_lens)
+            if self.rope is not None:
+                with self.rope.cache(timestamps.payload):
+                    outputs, states = self.transform(x,
+                                                     return_states=self.embed_layer is not None,
+                                                     attention_mask=attention_mask)
+            else:
+                outputs, states = self.transform(x,
+                                                 return_states=self.embed_layer is not None,
+                                                 attention_mask=attention_mask)
             if self.embed_layer is not None:
-                _, states = self.transform(x, return_states="full", attention_mask=attention_mask)  # N * (B, L, D).
+                # states: N * (B, L, D).
                 try:
                     embed_layers = list(self.embed_layer)
                 except TypeError:
@@ -44,8 +53,6 @@ class HistoryTokenTransformer(SimpleTransformer):
                     all_outputs.append(outputs)
                 outputs = torch.stack(all_outputs, 0).sum(0)  # (B, L, D).
                 outputs = PaddedBatch(outputs, x.seq_lens)
-            else:
-                outputs, _ = self.transform(x, attention_mask=attention_mask)
             embeddings = strategy.extract_outputs(outputs)  # (B, D).
             assert embeddings.ndim == 2
         return embeddings
@@ -65,7 +72,11 @@ class HistoryTokenTransformer(SimpleTransformer):
 
             # Apply transformer.
             x = PaddedBatch(self.positional(x.payload, timestamps.payload), x.seq_lens)  # (B, L', D).
-            outputs, _ = self.transform(x, attention_mask=attention_mask)  # (B, L', D).
+            if self.rope is not None:
+                with self.rope.cache(timestamps.payload):
+                    outputs, _ = self.transform(x, attention_mask=attention_mask)  # (B, L', D).
+            else:
+                outputs, _ = self.transform(x, attention_mask=attention_mask)  # (B, L', D).
             outputs = strategy.extract_outputs(outputs)
         states = None
         return outputs, states

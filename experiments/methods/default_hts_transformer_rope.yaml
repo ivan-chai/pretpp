@@ -1,0 +1,17 @@
+defaults:
+  - default_transformer_rope
+  - _self_
+
+module:
+  seq_encoder:
+    model_partial:
+      _target_: pretpp.nn.HistoryTokenTransformer
+      embed_layer: all
+      strategy_partial:
+        _target_: pretpp.nn.SubsetHTStrategy
+        _partial_: true
+        frequency: ${transformer_history_token_frequency}
+        apply_probability: ${transformer_history_token_probability}
+        token_selection: random
+        token_sampling: bias_end_relaxed
+  aggregator: null
