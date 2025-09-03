@@ -4,7 +4,7 @@ num_evaluation_seeds: 5
 num_classes: 385
 num_classes_plus1: 386
 max_time_delta: 8
-max_duration: 8
+max_duration: 6500
 num_downstream_classes: 2
 
 rnn_hidden_size: 256

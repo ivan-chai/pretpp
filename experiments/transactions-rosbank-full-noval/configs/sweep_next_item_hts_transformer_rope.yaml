@@ -1,0 +1,33 @@
+project: pretpp-rosbank-full-noval
+run_cap: 100
+name: next-item-hts-transformer-rope
+command:
+  - ${env}
+  - python3
+  - -m
+  - hotpp.train
+  - --config-dir
+  - configs
+  - --config-name
+  - next_item_hts_transformer_rope
+  - ~seed_everything
+  - ~model_path
+  - ~report
+  - ~trainer.model_selection
+  - ${args_no_hyphens}
+method: bayes
+metric:
+  name: val/downstream
+  goal: maximize
+parameters:
+  module.seq_encoder.model_partial.rope:
+    values: [time, time-train]
+  module.seq_encoder.model_partial.pos_type:
+    values: [none, time-angular-rel, pos-angular]
+  max_duration:
+    distribution: log_uniform_values
+    min: 1.0
+    max: 100000.0
+  trainer.max_epochs:
+    min: 10
+    max: 120
