@@ -136,6 +136,7 @@ module:
         labels:  # dummy.
           in: 1
           out: 0
+          clip: true
         level_3:
           in: 203
           out: 16
