@@ -1,0 +1,39 @@
+project: pretpp-alfabattle-full
+run_cap: 100
+name: next-item-hts-transformer-rope-gqa-e0
+command:
+  - ${env}
+  - python3
+  - -m
+  - hotpp.train
+  - --config-dir
+  - configs
+  - --config-name
+  - next_item_hts_transformer_rope
+  - name=next_item_hts_transformer_rope_gqa_e0
+  - ~model_path
+  - ~report
+  - ~trainer.model_selection
+  - trainer.max_epochs=0
+  - ${args_no_hyphens}
+method: bayes
+metric:
+  name: test/downstream
+  goal: maximize
+parameters:
+  module.seq_encoder.model_partial.rope:
+    values:
+      - null
+      - time
+      - time-train
+  module.seq_encoder.model_partial.pos_type:
+    values: [none, time-angular-rel, pos-angular]
+  seed_everything:
+    min: 0
+    max: 10000
+  max_duration:
+    distribution: log_uniform_values
+    min: 1.0
+    max: 100000.0
+  module.seq_encoder.model_partial.group_size:
+    values: [1, 2, 4]

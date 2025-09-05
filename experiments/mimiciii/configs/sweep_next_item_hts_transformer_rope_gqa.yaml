@@ -1,0 +1,25 @@
+project: pretpp-mimiciii
+run_cap: 100
+name: next-item-hts-transformer-rope-gqa
+command:
+  - ${env}
+  - python3
+  - -m
+  - hotpp.train
+  - --config-dir
+  - configs
+  - --config-name
+  - next_item_hts_transformer_rope
+  - name=next_item_hts_transformer_rope_gqa
+  - ~seed_everything
+  - ~model_path
+  - ~report
+  - ~trainer.model_selection
+  - ${args_no_hyphens}
+method: bayes
+metric:
+  name: val/downstream
+  goal: maximize
+parameters:
+  module.seq_encoder.model_partial.group_size:
+    values: [1, 2, 4]

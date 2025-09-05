@@ -1,0 +1,14 @@
+defaults:
+  - default
+  - default_transformer_rope
+  - next_item_loss
+  - _self_
+
+name: next_item_transformer_rope
+
+data_module:
+  batch_size: 256
+
+module:
+  _target_: pretpp.modules.BaseModule
+  loss_projection_partial: ${head}
