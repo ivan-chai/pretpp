@@ -37,7 +37,7 @@ def load_clients_mapping(root):
 
 def log_scale(column):
     c = F.col(column).cast("float")
-    return (F.sign(c) * F.log(F.abs(c) + 1)).alias(column)
+    return (F.when(c >= 0, F.lit(1)).otherwise(F.lit(-1)) * F.log(F.abs(c) + 1)).alias(column)
 
 
 def load_transactions(root, products):
