@@ -1,6 +1,8 @@
 # Description
 The dataset includes purchases and client/products meta-data. The goal is to predict reaction to advertising.
 
+NOTE: the treatment flag is attached to an embedding before training a boosting model.
+
 # Data preparation
 
 Get data:
