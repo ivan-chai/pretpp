@@ -50,7 +50,7 @@ def load_transactions(root, products):
         "client_id", "transaction_datetime", "product_id", "store_id",
         "regular_points_received", "express_points_received", "regular_points_spent", "express_points_spent",
         "purchase_sum", "product_quantity", "trn_sum_from_iss", "trn_sum_from_red"
-    )
+    ).fillna(-1)
     base_timestamp = F.unix_timestamp(F.lit("2018-11-21"), format="yyyy-MM-dd")
     transactions = transactions.select(
         F.col("client_id"),
