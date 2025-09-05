@@ -13,6 +13,7 @@ module:
       level_4:
         _target_: hotpp.losses.CrossEntropyLoss
         num_classes: 790
+        grad_scale: 0.5
       trn_sum_from_iss:
         _target_: hotpp.losses.MAELoss
         grad_scale: 0.5
