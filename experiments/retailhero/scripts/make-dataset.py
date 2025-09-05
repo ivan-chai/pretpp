@@ -151,7 +151,7 @@ def main(args):
     transactions = preprocessor.fit_transform(transactions).drop("order", "event_time")
     transactions = transactions.join(clients.select(["client_id", "id"]), on="client_id", how="inner")
     transactions = transactions.join(targets.select(["client_id", "treatment", "target"]), on="client_id", how="left")
-    transactions = transactions.fillna(-1, subset=["target"]).cache()
+    transactions = transactions.cache()
     print("N clients:", transactions.count())
 
     print("Split")
