@@ -86,7 +86,7 @@ def load_products(root):
         "is_own_trademark",
         "is_alcohol",
         log_scale("netto")
-    ).fillna(-1, subset=int_cols)
+    ).fillna(-1, subset=int_cols).fillna(-1.0, subset=["netto"])
     for col in int_cols:
         products = products.withColumn(col, F.col(col).cast("int"))
     return products.cache()
