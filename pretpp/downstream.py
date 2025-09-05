@@ -263,7 +263,7 @@ class EmbedderModule(pl.LightningModule):
         for name in self.extra_features or []:
             if x.payload[name].shape != (len(embeddings),):
                 raise ValueError("Extra features must be of shape (B).")
-            extra_features = x.payload[name].to(embeddings.dtype)
+            extra_features.append(x.payload[name].to(embeddings.dtype).unsqueeze(1))
         if extra_features:
             embeddings = torch.cat([embeddings] + extra_features, -1)  # (B, D').
         return embeddings
