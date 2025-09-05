@@ -174,7 +174,7 @@ trainer:
   enable_checkpointing: true
   precision: 16-mixed
   gradient_clip_val: 1  # Increases training stability.
-  check_val_every_n_epoch: 1
+  check_val_every_n_epoch: 5
   model_selection:
     metric: val/downstream
     mode: max
