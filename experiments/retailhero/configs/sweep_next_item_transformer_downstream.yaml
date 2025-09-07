@@ -1,0 +1,50 @@
+project: pretpp-sweep-retailhero
+run_cap: 200
+name: next-item-transformer
+command:
+  - ${env}
+  - python3
+  - -m
+  - hotpp.train
+  - --config-dir
+  - configs
+  - --config-name
+  - next_item_transformer
+  - ~seed_everything
+  - ~model_path
+  - ~report
+  - ${args_no_hyphens}
+method: bayes
+metric:
+  name: val/downstream
+  goal: maximize
+parameters:
+  trainer.max_epochs:
+    min: 30
+    max: 60
+  module.optimizer_partial.lr:
+    distribution: log_uniform_values
+    min: 0.0001
+    max: 0.01
+  module.lr_scheduler_partial.gamma:
+    min: 0.1
+    max: 1.0
+  transformer_hidden_size:
+    values: [128, 256, 512, 1024, 1536, 2048]
+  transformer_layers:
+    min: 2
+    max: 8
+  transformer_heads:
+    values: [4, 8, 16, 32]
+  module.seq_encoder.model_partial.group_size:
+    values: [1, 2, 4]
+  module.seq_encoder.model_partial.rope:
+    values: [none, time, time-train]
+  module.seq_encoder.model_partial.pos_type:
+    values: [none, time-angular-rel, pos-angular]
+  module.seq_encoder.model_partial.mlp:
+    values: [default, gated]
+  max_duration:
+    distribution: log_uniform_values
+    min: 1.0
+    max: 100000.0
