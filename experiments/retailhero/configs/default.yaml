@@ -7,8 +7,8 @@ max_time_delta: 14
 max_duration: 120
 num_downstream_classes: 2
 
-rnn_hidden_size: 1280
-rnn_half_hidden_size: 128
+rnn_hidden_size: 1536
+rnn_half_hidden_size: 768
 rnn_inference_context: 1024
 rnn_inference_context_step: 256
 rnn_min_length: 1
@@ -105,26 +105,26 @@ nohead:
 head:
   _target_: hotpp.nn.Head
   _partial_: true
-  hidden_dims: []
+  hidden_dims: [512]
   use_batch_norm: true
 
 metric_head:
   _target_: pretpp.nn.MetricHead
   _partial_: true
-  hidden_dims: [256]
+  hidden_dims: [512]
   head_params:
     use_batch_norm: true
 
 conditional_head:
   _target_: hotpp.nn.ConditionalHead
   _partial_: true
-  hidden_dims: [256]
+  hidden_dims: [512]
   use_batch_norm: true
 
 metric_conditional_head:
   _target_: pretpp.nn.MetricConditionalHead
   _partial_: true
-  hidden_dims: [256, 128]
+  hidden_dims: [512, 256]
   head_params:
     use_batch_norm: true
 
@@ -163,7 +163,7 @@ module:
     _partial_: true
     _target_: torch.optim.lr_scheduler.StepLR
     step_size: 5
-    gamma: 0.8
+    gamma: 0.5
   val_metric: ${metric}
   test_metric: ${metric}
   downstream_validation_config: configs/downstream.yaml
