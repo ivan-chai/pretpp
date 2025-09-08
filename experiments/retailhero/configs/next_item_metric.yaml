@@ -1,0 +1,14 @@
+defaults:
+  - default
+  - default_rnn
+  - next_item_loss
+  - _self_
+
+name: next_item_metric
+
+module:
+  _target_: pretpp.modules.BaseModule
+  head_partial:
+    _target_: pretpp.nn.NormalizationHead
+    _partial_: true
+  loss_projection_partial: ${metric_head}

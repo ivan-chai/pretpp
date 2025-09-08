@@ -13,9 +13,9 @@ rnn_inference_context: 1024
 rnn_inference_context_step: 256
 rnn_min_length: 1
 
-transformer_hidden_size: 512
-transformer_inter_size: null
-transformer_heads: 4
+transformer_hidden_size: 1024
+transformer_inter_size: 2048
+transformer_heads: 8
 transformer_layers: 4
 transformer_context: 1024
 transformer_positions: 5000
