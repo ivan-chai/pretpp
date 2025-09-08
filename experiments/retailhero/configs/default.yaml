@@ -163,7 +163,7 @@ module:
     _partial_: true
     _target_: torch.optim.lr_scheduler.StepLR
     step_size: 5
-    gamma: 0.5
+    gamma: 0.8
   val_metric: ${metric}
   test_metric: ${metric}
   downstream_validation_config: configs/downstream.yaml
