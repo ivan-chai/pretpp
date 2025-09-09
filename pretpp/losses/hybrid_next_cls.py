@@ -8,11 +8,15 @@ from .next_item import NextItemLoss
 
 
 class HybridNextClsLoss(BaseLoss):
-    """Combines next-item loss with superwised training."""
-    def __init__(self, losses, targets, aggregator):
+    """Combines next-item loss with superwised training.
+
+    Args:
+        drop_nans: Exclude nan targets from classification.
+    """
+    def __init__(self, losses, targets, aggregator, drop_nans=False):
         super().__init__()
         self._next_item = NextItemLoss(losses=losses)
-        self._cls = ClassificationLoss(targets=targets)
+        self._cls = ClassificationLoss(targets=targets, drop_nans=drop_nans)
         self._aggregator = aggregator
 
     @property
