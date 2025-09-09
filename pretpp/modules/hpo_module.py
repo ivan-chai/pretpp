@@ -73,8 +73,12 @@ class HPOModule(BaseModule):
             assert len(weights) == len(self.hpo_losses)
             loss = sum([w * losses[k] for k, w in zip(self.hpo_losses, weights)], down * losses[self.down_loss])
             self.manual_backward(loss)
-            if is_final and (self.gradient_clip_val is not None):
-                self.clip_gradients(opt, gradient_clip_val=self.gradient_clip_val, gradient_clip_algorithm=self.trainer.gradient_clip_algorithm)
+            if is_final:
+                logits = torch.stack(list(self.loss_weights.values()))
+                hpo_grad_norm = (torch.sigmoid(logits) ** 2).sum().sqrt()
+                self.log("train/hpo_grad_norm", hpo_grad_norm, sync_dist=True)
+                if self.gradient_clip_val is not None:
+                    self.clip_gradients(opt, gradient_clip_val=self.gradient_clip_val, gradient_clip_algorithm=self.trainer.gradient_clip_algorithm)
         opt.hpo_step(closure=closure)
 
     def configure_optimizers(self):
