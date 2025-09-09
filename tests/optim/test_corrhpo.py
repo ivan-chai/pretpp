@@ -42,7 +42,7 @@ class TestCorrHPOptimizer(TestCase):
                 if alpha > 0 or beta > 0:
                     v = v + loss(x, alpha, beta)
                 v.backward()
-            optimizer.step(closure)
+            optimizer.hpo_step(closure)
         final_downstream_loss = downstream(x).item()
         self.assertAlmostEqual(final_downstream_loss, 14.4, places=5)
 

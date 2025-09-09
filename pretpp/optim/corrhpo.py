@@ -24,8 +24,13 @@ class CorrHPOptimizer(torch.optim.Optimizer):
             raise ValueError("No hyper-parameters to optimize.")
         self.downstream_weight = downstream_weight
 
+    def step(self, closure, inner=False):
+        if not inner:
+            raise ValueError("Please, use 'hpo_step' function.")
+        return self.base_optimizer.step(closure)
+
     @torch.no_grad()
-    def step(self, closure=None):
+    def hpo_step(self, closure=None):
         """Make a single step.
 
         The closure is used like this: closure(target_loss_weight, *loss_weights).
@@ -59,7 +64,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
             # Set weights grads.
             for w, g in zip(self.param_groups[0]["params"], weight_grads):
                 w.grad = g
-        self.base_optimizer.step(inner_closure)
+        return self.step(inner_closure, inner=True)
 
     def load_state_dict(self, state_dict):
         super().load_state_dict(state_dict)
