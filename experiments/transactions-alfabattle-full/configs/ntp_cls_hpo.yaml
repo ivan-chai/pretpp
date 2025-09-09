@@ -13,6 +13,19 @@ module:
   hpo_losses:
     - next_item_timestamps
     - next_item_labels
+    - next_item_currency
+    - next_item_operation_kind
+    - next_item_operation_type
+    - next_item_operation_type_group
+    - next_item_ecommerce_flag
+    - next_item_payment_system
+    - next_item_income_flag
+    - next_item_mcc_category
+    - next_item_day_of_week
+    - next_item_hour
+    - next_item_weekofyear
+    - next_item_log_amount
+    - next_item_log_hour_diff
   hpo_lr: 0.01
   down_loss: cls_target
   loss_projection_partial: ${head}
