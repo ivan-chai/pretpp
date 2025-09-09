@@ -28,13 +28,15 @@ def to_logit(x, eps=1e-3):
 
 class HPOModule(BaseModule):
     """Tune loss weights using SGD."""
-    def __init__(self, seq_encoder, loss, hpo_losses, down_loss, down_weight=1, **kwargs):
+    def __init__(self, seq_encoder, loss, hpo_losses, down_loss,
+                 down_weight=1, normalize_weights=False, **kwargs):
         super().__init__(seq_encoder, loss, **kwargs)
         self.automatic_optimization = False
         # Register loss parameters.
         self.hpo_losses = hpo_losses
         self.down_loss = down_loss
         self.down_weight = down_weight
+        self.normalize_weights = normalize_weights
         self.loss_weights = torch.nn.ParameterDict({
             k: torch.nn.Parameter(torch.zeros([]))
             for k in self.hpo_losses
@@ -74,7 +76,9 @@ class HPOModule(BaseModule):
             {"params": [self.loss_weights[k] for k in self.hpo_losses]},
             {"params": model_params}
         ]
-        optimizer = CorrHPOptimizer(params, self._optimizer_partial, downstream_weight=self.down_weight)
+        optimizer = CorrHPOptimizer(params, self._optimizer_partial,
+                                    downstream_weight=self.down_weight,
+                                    normalize_weights=self.normalize_weights)
         if self._lr_scheduler_partial is None:
             return optimizer
         else:
