@@ -27,16 +27,23 @@ def to_logit(x, eps=1e-3):
 
 
 class HPOModule(BaseModule):
-    """Tune loss weights using SGD."""
+    """Tune loss weights using SGD.
+
+    Args:
+        hpo_losses: A list of losses to tune hyperparameters for.
+        down_loss: The name of the downstream loss.
+        hpo_lr: A custom LR for hyperparameters.
+        hpo_params: Parameters of the HP optimizer.
+    """
     def __init__(self, seq_encoder, loss, hpo_losses, down_loss,
-                 down_weight=1, normalize_weights=False, **kwargs):
+                 hpo_lr=None, hpo_params=None, **kwargs):
         super().__init__(seq_encoder, loss, **kwargs)
         self.automatic_optimization = False
         # Register loss parameters.
         self.hpo_losses = hpo_losses
         self.down_loss = down_loss
-        self.down_weight = down_weight
-        self.normalize_weights = normalize_weights
+        self.hpo_lr = hpo_lr
+        self.hpo_params = hpo_params
         self.loss_weights = torch.nn.ParameterDict({
             k: torch.nn.Parameter(torch.zeros([]))
             for k in self.hpo_losses
@@ -76,9 +83,10 @@ class HPOModule(BaseModule):
             {"params": [self.loss_weights[k] for k in self.hpo_losses]},
             {"params": model_params}
         ]
+        if self.hpo_lr is not None:
+            params[0]["lr"] = self.hpo_lr
         optimizer = CorrHPOptimizer(params, self._optimizer_partial,
-                                    downstream_weight=self.down_weight,
-                                    normalize_weights=self.normalize_weights)
+                                    **(self.hpo_params or {}))
         if self._lr_scheduler_partial is None:
             return optimizer
         else:

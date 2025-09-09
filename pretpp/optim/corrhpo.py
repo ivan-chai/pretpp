@@ -11,7 +11,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
         normalize_weights: If true, normalize loss weights by their sum.
         kwargs: Base optimizer parameters.
     """
-    def __init__(self, params, base_optimizer_cls, downstream_weight=0, normalize_weights=False, eps=1e-6, **kwargs):
+    def __init__(self, params, base_optimizer_cls, downstream_weight=1, normalize_weights=True, eps=1e-6, **kwargs):
         params = list(params)
         if len(params) < 2 or not isinstance(params[0], dict):
             raise ValueError("Expected at least two param groups with the first group being loss weights.")
