@@ -61,11 +61,10 @@ class HPOModule(BaseModule):
         inputs, targets = self._loss.prepare_batch(x, y)
 
         opt = self.optimizers()
-        def closure(down, *weights):
-            is_final = isinstance(weights[0], torch.Tensor)
+        def closure(down, *weights, final=False):
             opt.zero_grad()
             outputs, losses, metrics = self._compute_loss(inputs, targets)
-            if is_final:
+            if final:
                 # Final call with actual parameters.
                 report_loss = sum([l.detach().item() for l in losses.values()])
                 metrics = metrics | {f"hpo_{k}": w.item() for k, w in zip(self.hpo_losses, weights)}
@@ -73,7 +72,7 @@ class HPOModule(BaseModule):
             assert len(weights) == len(self.hpo_losses)
             loss = sum([w * losses[k] for k, w in zip(self.hpo_losses, weights)], down * losses[self.down_loss])
             self.manual_backward(loss)
-            if is_final:
+            if final:
                 logits = torch.stack(list(self.loss_weights.values()))
                 hpo_grad_norm = (torch.sigmoid(logits) ** 2).sum().sqrt()
                 self.log("train/hpo_grad_norm", hpo_grad_norm, sync_dist=True)
