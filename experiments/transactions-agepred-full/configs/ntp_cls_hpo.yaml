@@ -1,6 +1,6 @@
 defaults:
   - default
-  - default_rnn
+  - default_transformer
   - _self_
 
 name: ntp_cls_hpo
@@ -10,9 +10,8 @@ module:
   hpo_losses:
     - next_item_timestamps
     - next_item_labels
+    - next_item_log_amount
   downstream_loss: cls_target
-  hpo_params:
-    downstream_weight: 1
   loss_projection_partial:
     _target_: pretpp.nn.CatHead
     _partial_: true
@@ -26,13 +25,20 @@ module:
         use_batch_norm: true
   loss:
     _target_: pretpp.losses.HybridNextClsLoss
+    drop_nans: true
     losses:
       timestamps:
         _target_: hotpp.losses.TimeMAELoss
         max_delta: ${max_time_delta}
+        smoothing: 1
+        grad_scale: null
       labels:
         _target_: hotpp.losses.CrossEntropyLoss
         num_classes: ${num_classes}
+        grad_scale: null
+      log_amount:
+        _target_: hotpp.losses.MAELoss
+        grad_scale: null
     targets:
       target:
         num_classes: ${num_downstream_classes}

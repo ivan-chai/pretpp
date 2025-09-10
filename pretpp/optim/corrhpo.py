@@ -110,7 +110,10 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                 i = 0
                 for group in self.param_groups[1:]:
                     for p in group["params"]:
-                        p.grad = torch.where(p.grad.abs() > 0, p.grad, down_grads[i].reshape(p.shape))
+                        if p.grad is None:
+                            p.grad = down_grads[i].reshape(p.shape)
+                        else:
+                            p.grad = torch.where(p.grad.abs() > 0, p.grad, down_grads[i].reshape(p.shape))
                         i += 1
                 assert i == len(down_grads)
 

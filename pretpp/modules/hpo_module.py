@@ -31,17 +31,17 @@ class HPOModule(BaseModule):
 
     Args:
         hpo_losses: A list of losses to tune hyperparameters for.
-        down_loss: The name of the downstream loss.
+        downstream_loss: The name of the downstream loss.
         hpo_lr: A custom LR for hyperparameters.
         hpo_params: Parameters of the HP optimizer.
     """
-    def __init__(self, seq_encoder, loss, hpo_losses, down_loss,
+    def __init__(self, seq_encoder, loss, hpo_losses, downstream_loss,
                  hpo_lr=None, hpo_params=None, **kwargs):
         super().__init__(seq_encoder, loss, **kwargs)
         self.automatic_optimization = False
         # Register loss parameters.
         self.hpo_losses = hpo_losses
-        self.down_loss = down_loss
+        self.downstream_loss = downstream_loss
         self.hpo_lr = hpo_lr
         self.hpo_params = hpo_params
         self.loss_weights = torch.nn.ParameterDict({
@@ -70,7 +70,7 @@ class HPOModule(BaseModule):
                 metrics = metrics | {f"hpo_{k}": w.item() for k, w in zip(self.hpo_losses, weights)}
                 self._log_metrics("train", len(x), report_loss, losses, metrics, single_batch_metrics=None)
             assert len(weights) == len(self.hpo_losses)
-            loss = sum([w * losses[k] for k, w in zip(self.hpo_losses, weights)], down * losses[self.down_loss])
+            loss = sum([w * losses[k] for k, w in zip(self.hpo_losses, weights)], down * losses[self.downstream_loss])
             self.manual_backward(loss)
             if final:
                 logits = torch.stack(list(self.loss_weights.values()))
