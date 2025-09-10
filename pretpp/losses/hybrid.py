@@ -10,18 +10,14 @@ class HybridLoss(BaseLoss):
     NOTE: Losses must not affect input sequence (masking etc.).
 
     Args:
-        losses: A mapping from the loss name to the loss object.
-        prediction_loss: A name of the loss for prediction.
-        drop_nans: Exclude nan targets from classification.
+        losses: A list of losses.
+        prediction_loss: An index of the prediction loss.
     """
     def __init__(self, losses, prediction_loss=None, aggregator=None):
-        if any([loss.aggregate for loss in losses.values()]) and (not aggregator):
+        if any([loss.aggregate for loss in losses]) and (not aggregator):
             raise ValueError("Need aggregator")
-        if (prediction_loss is not None) and (prediction_loss not in losses):
-            raise ValueError(f"Unknown prediction loss: {prediction_loss}")
         super().__init__()
-        self._order = list(sorted(losses))
-        self._losses = torch.nn.ModuleDict(losses)
+        self._losses = torch.nn.ModuleList(losses)
         self._prediction_loss = prediction_loss
         self._aggregator = aggregator
 
@@ -31,10 +27,10 @@ class HybridLoss(BaseLoss):
 
     @property
     def input_size(self):
-        return sum([loss.input_size for loss in self._losses.values()])
+        return sum([loss.input_size for loss in self._losses])
 
     def prepare_inference_batch(self, inputs):
-        for loss in self._losses.values():
+        for loss in self._losses:
             loss_inputs = loss.prepare_inference_batch(inputs)
             if loss_inputs is not inputs:
                 raise RuntimeError("Base losses must not change inputs.")
@@ -51,11 +47,11 @@ class HybridLoss(BaseLoss):
             Model inputs with shape (B, L', *) and targets with shape (B, L', *).
         """
         new_targets = {}
-        for i, (name, loss) in enumerate(self._losses.items()):
+        for i, loss in enumerate(self._losses):
             loss_inputs, loss_targets = loss.prepare_batch(inputs, targets)
             if loss_inputs is not inputs:
                 raise RuntimeError("Base losses must not change inputs.")
-            new_targets[name] = loss_targets
+            new_targets[i] = loss_targets
         return inputs, new_targets
 
     def forward(self, outputs, targets):
@@ -73,15 +69,14 @@ class HybridLoss(BaseLoss):
         losses = {}
         metrics = {}
         offset = 0
-        for name in self._order:
-            loss = self._losses[name]
+        for i, loss in enumerate(self._losses):
             loss_outputs = PaddedBatch(outputs.payload[..., offset:offset + loss.input_size], outputs.seq_lens)
             if loss.aggregate:
                 loss_outputs = PaddedBatch(self._aggregator(loss_outputs).unsqueeze(1),
                                            torch.ones_like(loss_outputs.seq_lens))  # (B, 1, D).
-            current_losses, current_metrics = loss(loss_outputs, targets[name])
-            losses |= {name + "_" + k: v for k, v in current_losses.items()}
-            metrics |= {name + "_" + k: v for k, v in current_metrics.items()}
+            current_losses, current_metrics = loss(loss_outputs, targets[i])
+            losses |= {f"loss_{i}_" + k: v for k, v in current_losses.items()}
+            metrics |= {f"loss_{i}_" + k: v for k, v in current_metrics.items()}
             offset += loss.input_size
         if offset != outputs.payload.shape[-1]:
             raise RuntimeError("Failed to parse model outputs: dimension mismatch.")
@@ -89,14 +84,13 @@ class HybridLoss(BaseLoss):
 
     def predict(self, outputs):
         offset = 0
-        for name in self._order:
-            if name == self._prediction_loss:
+        for i, loss in enumerate(self._losses):
+            if i == self._prediction_loss:
                 loss_outputs = PaddedBatch(outputs.payload[..., offset:offset + loss.input_size], outputs.seq_lens)
                 break
-            loss = self._losses[name]
             offset += loss.input_size
         else:
-            assert False
+            raise RuntimeError(f"Wrong prediction loss index: {self._prediction_loss}")
         loss = self._losses[self._prediction_loss]
         if loss.aggregate:
             loss_outputs = PaddedBatch(self._aggregator(loss_outputs).unsqueeze(1),

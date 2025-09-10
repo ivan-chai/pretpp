@@ -10,10 +10,9 @@ module:
   loss_projection_partial: ${head}
   loss:
     _target_: pretpp.losses.HybridLoss
-    prediction_loss: cls
+    prediction_loss: 1
     losses:
-      next_item:
-        _target_: pretpp.losses.NextItemLoss
+      - _target_: pretpp.losses.NextItemLoss
         losses:
           timestamps:
             _target_: hotpp.losses.TimeMAELoss
@@ -21,8 +20,7 @@ module:
           labels:
             _target_: hotpp.losses.CrossEntropyLoss
             num_classes: ${num_classes}
-      cls:
-        _target_: pretpp.losses.ClassificationLoss
+      - _target_: pretpp.losses.ClassificationLoss
         targets:
           target:
             num_classes: ${num_downstream_classes}

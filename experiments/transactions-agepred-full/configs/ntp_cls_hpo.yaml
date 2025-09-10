@@ -8,11 +8,11 @@ name: ntp_cls_hpo
 module:
   _target_: pretpp.modules.HPOModule
   hpo_losses:
-    - next_item_timestamps
-    - next_item_labels
-    - next_item_log_amount
+    - loss_0_timestamps
+    - loss_0_labels
+    - loss_0_log_amount
   hpo_lr: 0.01
-  downstream_loss: cls_target
+  downstream_loss: loss_1_target
   loss_projection_partial:
     _target_: pretpp.nn.CatHead
     _partial_: true
@@ -26,10 +26,9 @@ module:
         use_batch_norm: true
   loss:
     _target_: pretpp.losses.HybridLoss
-    prediction_loss: cls
+    prediction_loss: 1
     losses:
-      next_item:
-        _target_: pretpp.losses.NextItemLoss
+      - _target_: pretpp.losses.NextItemLoss
         losses:
           timestamps:
             _target_: hotpp.losses.TimeMAELoss
@@ -43,8 +42,7 @@ module:
           log_amount:
             _target_: hotpp.losses.MAELoss
             grad_scale: null
-      cls:
-        _target_: pretpp.losses.ClassificationLoss
+      - _target_: pretpp.losses.ClassificationLoss
         drop_nans: true
         targets:
           target:
