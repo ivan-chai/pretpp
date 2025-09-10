@@ -314,13 +314,14 @@ class BaseModule(pl.LightningModule):
         return self._loss.compute_metrics(inputs, outputs, targets)
 
     @torch.no_grad()
-    def _get_grad_norm(self):
+    def _get_grad_norm(self, warn_empty_grads=True):
         names, parameters = zip(*[pair for pair in self.named_parameters()
                                   if pair[1].requires_grad])
         norms = torch.zeros(len(parameters), device=parameters[0].device)
         for i, (name, p) in enumerate(zip(names, parameters)):
             if p.grad is None:
-                warnings.warn(f"No grad for {name}")
+                if warn_empty_grads:
+                    warnings.warn(f"No grad for {name}")
                 continue
             norms[i] = p.grad.data.norm(2)
         return norms.square().sum().item() ** 0.5

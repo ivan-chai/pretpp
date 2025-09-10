@@ -28,7 +28,7 @@ class TestCorrHPOptimizer(TestCase):
         alpha = torch.nn.Parameter(torch.rand([]))
         beta = torch.nn.Parameter(torch.rand([]))
 
-        def closure(down, alpha, beta, final=False):
+        def closure(down, alpha, beta, stage=None):
             optimizer.zero_grad()
             if down > 0:
                 v = down * downstream(x)
@@ -93,7 +93,7 @@ class TestCorrHPOptimizer(TestCase):
                                             lr=0.01)
 
                 for step in range(1000):
-                    def closure(down, alpha, beta, final=False):
+                    def closure(down, alpha, beta, stage=None):
                         optimizer.zero_grad()
                         if down > 0:
                             v = down * downstream(x)

@@ -11,7 +11,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from hotpp.data import PaddedBatch
 from pretpp.nn import IdentityHead
 from ..losses import HybridNextClsLoss
-from ..optim import CorrHPOptimizer
+from ..optim import CorrHPOptimizer, HPO_STAGE_DOWNSTREAM, HPO_STAGE_FINAL
 from .base_module import BaseModule
 
 
@@ -63,16 +63,21 @@ class HPOModule(BaseModule):
         final_loss = next(iter(losses.values())).clone()
 
         opt = self.optimizers()
-        def closure(down, *weights, final=False):
+        def closure(down, *weights, stage=None):
             opt.zero_grad()
             assert len(weights) == len(self.hpo_losses)
             loss = sum([w * losses[k] for k, w in zip(self.hpo_losses, weights)], down * losses[self.downstream_loss])
-            self.manual_backward(loss, retain_graph=not final)
-            if final:
+            self.manual_backward(loss, retain_graph=stage != HPO_STAGE_FINAL)
+            if stage == HPO_STAGE_DOWNSTREAM:
+                metrics["hpo_grad_norm_downstream"] = self._get_grad_norm(warn_empty_grads=False)
+            elif stage == HPO_STAGE_FINAL:
                 final_loss.copy_(loss)
                 metrics.update({f"hpo_{name}": w.item() for name, w in zip(self.hpo_losses, weights)})
                 if self.gradient_clip_val is not None:
                     self.clip_gradients(opt, gradient_clip_val=self.gradient_clip_val, gradient_clip_algorithm=self.trainer.gradient_clip_algorithm)
+            else:
+                assert isinstance(stage, int)
+                metrics[f"hpo_grad_norm_weight_{stage}"] = self._get_grad_norm(warn_empty_grads=False)
         opt.hpo_step(closure=closure)
         hpo_grads = torch.stack([w.grad for w in self.loss_weights.values()])
         hpo_grad_norm = torch.linalg.norm(hpo_grads)

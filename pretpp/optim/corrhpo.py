@@ -1,6 +1,10 @@
 import torch
 
 
+HPO_STAGE_DOWNSTREAM = "downstream"
+HPO_STAGE_FINAL = "final"
+
+
 class CorrHPOptimizer(torch.optim.Optimizer):
     """Correlated Hyperparameter Optimizer.
 
@@ -13,6 +17,24 @@ class CorrHPOptimizer(torch.optim.Optimizer):
         weights_normalization: Whether to normalize weights by their sum or not.
         clip_hp_grad: Clipping value for hyperparameters gradients.
         kwargs: Base optimizer parameters.
+
+    Example usage:
+    ```
+    optimizer = CorrHPOptimizer([{"params": [w1, w2]},  # Weights for tuning.
+                                 {"params": model.parameters()}],
+                                torch.optim.Adam,
+                                lr=0.01)
+
+    output = model(x)
+    down_loss, loss1, loss2 = criterion(x)
+
+    def closure(down_weight, w1, w2, stage=None):
+        optimizer.zero_grad()
+        loss = down_weight * down_loss + w1 * loss1 + w2 * loss2
+        loss.backward(retain_graph=stage != HPO_STAGE_FINAL)
+
+    optimizer.hpo_step(closure)
+    ```
     """
     def __init__(self, params, base_optimizer_cls, downstream_weight="merge",
                  weights_parametrization="sigmoid", weights_normalization=True,
@@ -69,7 +91,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
             # Compute downstream grads.
             downstream_weight = 1
             loss_weights = [0] * self.n_weights
-            closure(downstream_weight, *loss_weights, final=False)
+            closure(downstream_weight, *loss_weights, stage=HPO_STAGE_DOWNSTREAM)
             down_grads = self._gather_grads()
 
             # Compute weights grads.
@@ -79,7 +101,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                 grad_sum = [torch.zeros_like(v) for v in down_grads]
             for i, w in enumerate(weights):
                 loss_weights[i] = 1
-                closure(downstream_weight, *loss_weights, final=False)
+                closure(downstream_weight, *loss_weights, stage=i)
                 loss_weights[i] = 0
                 loss_grads = self._gather_grads()
                 assert len(down_grads) == len(loss_grads)
@@ -109,7 +131,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
 
             # Compute model grads.
             actual_weights = weights / (weights.sum() + self.eps) if self.weights_normalization else weights
-            closure(self.downstream_weight, *actual_weights, final=True)
+            closure(self.downstream_weight, *actual_weights, stage=HPO_STAGE_FINAL)
 
             # Set weights grads.
             for w, g in zip(self.param_groups[0]["params"], weight_grads):
