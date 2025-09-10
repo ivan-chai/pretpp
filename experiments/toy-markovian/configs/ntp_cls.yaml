@@ -9,17 +9,23 @@ module:
   _target_: pretpp.modules.BaseModule
   loss_projection_partial: ${head}
   loss:
-    _target_: pretpp.losses.HybridNextClsLoss
+    _target_: pretpp.losses.HybridLoss
+    prediction_loss: cls
     losses:
-      timestamps:
-        _target_: hotpp.losses.TimeMAELoss
-        max_delta: ${max_time_delta}
-      labels:
-        _target_: hotpp.losses.CrossEntropyLoss
-        num_classes: ${num_classes}
-    targets:
-      target:
-        num_classes: ${num_downstream_classes}
-        cast: true
+      next_item:
+        _target_: pretpp.losses.NextItemLoss
+        losses:
+          timestamps:
+            _target_: hotpp.losses.TimeMAELoss
+            max_delta: ${max_time_delta}
+          labels:
+            _target_: hotpp.losses.CrossEntropyLoss
+            num_classes: ${num_classes}
+      cls:
+        _target_: pretpp.losses.ClassificationLoss
+        targets:
+          target:
+            num_classes: ${num_downstream_classes}
+            cast: true
     aggregator:
       _target_: hotpp.nn.LastAggregator

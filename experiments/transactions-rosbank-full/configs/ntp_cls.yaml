@@ -1,29 +1,13 @@
 defaults:
   - default
-  - default_transformer
+  - default_rnn
   - _self_
 
-name: ntp_cls_hpo
+name: ntp_cls
 
 module:
-  _target_: pretpp.modules.HPOModule
-  hpo_losses:
-    - next_item_timestamps
-    - next_item_labels
-    - next_item_log_amount
-  hpo_lr: 0.01
-  downstream_loss: cls_target
-  loss_projection_partial:
-    _target_: pretpp.nn.CatHead
-    _partial_: true
-    infer_output_size_index: 0
-    head_partials:
-      - ${head}
-      - _target_: hotpp.nn.Head
-        _partial_: true
-        output_size: ${num_downstream_classes}
-        hidden_dims: [128]
-        use_batch_norm: true
+  _target_: pretpp.modules.BaseModule
+  loss_projection_partial: ${head}
   loss:
     _target_: pretpp.losses.HybridLoss
     prediction_loss: cls
@@ -35,17 +19,27 @@ module:
             _target_: hotpp.losses.TimeMAELoss
             max_delta: ${max_time_delta}
             smoothing: 1
-            grad_scale: null
+            grad_scale: 0.6
           labels:
             _target_: hotpp.losses.CrossEntropyLoss
             num_classes: ${num_classes}
-            grad_scale: null
+          currency:
+            _target_: hotpp.losses.CrossEntropyLoss
+            num_classes: 68
+            grad_scale: 0.5
+          channel_type:
+            _target_: hotpp.losses.CrossEntropyLoss
+            num_classes: 7
+            grad_scale: 0.4
+          trx_category:
+            _target_: hotpp.losses.CrossEntropyLoss
+            num_classes: 11
+            grad_scale: 0.8
           log_amount:
             _target_: hotpp.losses.MAELoss
-            grad_scale: null
+            grad_scale: 1
       cls:
         _target_: pretpp.losses.ClassificationLoss
-        drop_nans: true
         targets:
           target:
             num_classes: ${num_downstream_classes}

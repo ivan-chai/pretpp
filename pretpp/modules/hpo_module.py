@@ -10,7 +10,6 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 
 from hotpp.data import PaddedBatch
 from pretpp.nn import IdentityHead
-from ..losses import HybridNextClsLoss
 from ..optim import CorrHPOptimizer, HPO_STAGE_DOWNSTREAM, HPO_STAGE_FINAL
 from .base_module import BaseModule
 
