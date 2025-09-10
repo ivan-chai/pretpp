@@ -119,7 +119,7 @@ trainer:
   devices: 1
   max_epochs: 45
   enable_checkpointing: true
-  precision: 16-mixed
+  precision: bf16-mixed
   gradient_clip_val: 1  # Increases training stability.
   check_val_every_n_epoch: 5
   model_selection:

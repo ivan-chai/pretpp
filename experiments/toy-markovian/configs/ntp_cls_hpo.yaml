@@ -37,6 +37,3 @@ module:
         cast: true
     aggregator:
       _target_: hotpp.nn.LastAggregator
-
-trainer:
-  precision: null
