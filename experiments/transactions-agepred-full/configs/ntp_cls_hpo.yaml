@@ -11,6 +11,7 @@ module:
     - next_item_timestamps
     - next_item_labels
     - next_item_log_amount
+  hpo_lr: 0.01
   downstream_loss: cls_target
   loss_projection_partial:
     _target_: pretpp.nn.CatHead

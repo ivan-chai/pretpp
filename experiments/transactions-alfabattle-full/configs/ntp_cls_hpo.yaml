@@ -26,6 +26,7 @@ module:
     - next_item_weekofyear
     - next_item_log_amount
     - next_item_log_hour_diff
+  hpo_lr: 0.01
   downstream_loss: cls_target
   loss_projection_partial:
     _target_: pretpp.nn.CatHead
