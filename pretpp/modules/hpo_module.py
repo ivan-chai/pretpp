@@ -59,26 +59,25 @@ class HPOModule(BaseModule):
     def training_step(self, batch, batch_idx):
         x, y = batch
         inputs, targets = self._loss.prepare_batch(x, y)
+        outputs, losses, metrics = self._compute_loss(inputs, targets)
+        final_loss = next(iter(losses.values())).clone()
 
         opt = self.optimizers()
         def closure(down, *weights, final=False):
             opt.zero_grad()
-            outputs, losses, metrics = self._compute_loss(inputs, targets)
-            if final:
-                # Final call with actual parameters.
-                report_loss = sum([l.detach().item() for l in losses.values()])
-                metrics = metrics | {f"hpo_{k}": w.item() for k, w in zip(self.hpo_losses, weights)}
-                self._log_metrics("train", len(x), report_loss, losses, metrics, single_batch_metrics=None)
             assert len(weights) == len(self.hpo_losses)
             loss = sum([w * losses[k] for k, w in zip(self.hpo_losses, weights)], down * losses[self.downstream_loss])
-            self.manual_backward(loss)
+            self.manual_backward(loss, retain_graph=not final)
             if final:
-                logits = torch.stack(list(self.loss_weights.values()))
-                hpo_grad_norm = (torch.sigmoid(logits) ** 2).sum().sqrt()
-                self.log("train/hpo_grad_norm", hpo_grad_norm, sync_dist=True)
+                final_loss.copy_(loss)
+                metrics.update({f"hpo_{name}": w.item() for name, w in zip(self.hpo_losses, weights)})
                 if self.gradient_clip_val is not None:
                     self.clip_gradients(opt, gradient_clip_val=self.gradient_clip_val, gradient_clip_algorithm=self.trainer.gradient_clip_algorithm)
         opt.hpo_step(closure=closure)
+        hpo_grads = torch.stack([w.grad for w in self.loss_weights.values()])
+        hpo_grad_norm = torch.linalg.norm(hpo_grads)
+        metrics["hpo_grad_norm"] = hpo_grad_norm
+        self._log_metrics("train", len(x), final_loss, losses, metrics, single_batch_metrics=None)
 
     def configure_optimizers(self):
         model_params = [v for k, v in self.named_parameters() if v.requires_grad and not k.startswith("loss_weights.")]
