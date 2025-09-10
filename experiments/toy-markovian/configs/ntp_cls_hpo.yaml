@@ -11,8 +11,6 @@ module:
     - next_item_timestamps
     - next_item_labels
   downstream_loss: cls_target
-  hpo_params:
-    downstream_weight: 1
   loss_projection_partial:
     _target_: pretpp.nn.CatHead
     _partial_: true
