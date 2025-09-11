@@ -3,7 +3,7 @@ defaults:
   - default_transformer
   - _self_
 
-name: ntp_cls_hpo
+name: ntp_cls_hpo_transformer
 
 data_module:
   batch_size: 128
