@@ -39,7 +39,7 @@ class TestCorrHPOptimizer(TestCase):
             v.backward()
 
         for parametrization in ["sigmoid", "exp", "softplus"]:
-            for normalization in [False, True]:
+            for normalization in [False, True, "scaled"]:
                 optimizer = CorrHPOptimizer([{"params": [alpha, beta]},
                                             {"params": [x]}],
                                             torch.optim.Adam,
@@ -58,6 +58,8 @@ class TestCorrHPOptimizer(TestCase):
                     weights = torch.nn.functional.softplus(logits)
                 if normalization:
                     weights = weights / weights.sum()
+                    if normalization == "scaled":
+                        weights *= len(weights)
                 w1, w2 = weights
 
                 grad = 2 * w1 * (x - 5) + 2 * w2 * (x + 3)
@@ -80,7 +82,7 @@ class TestCorrHPOptimizer(TestCase):
         torch.manual_seed(0)
         for parametrization in ["sigmoid"]:
             # "exp" and "softplus" are unstable.
-            for normalization in [True, False]:
+            for normalization in [True, False, "scaled"]:
                 x = torch.nn.Parameter(torch.randn([]))
                 alpha = torch.nn.Parameter(torch.rand([]))
                 beta = torch.nn.Parameter(torch.rand([]))

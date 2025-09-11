@@ -14,7 +14,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
         downstream_weight: The weight of the downstream loss in model optimization or "merge".
             The "merge" value means inserting downstream gradients for the weights, not updated by the main loss.
         weights_parametrization: Either "exp", "softplus", or "sigmoid".
-        weights_normalization: Whether to normalize weights by their sum or not.
+        weights_normalization: Whether to normalize weights by their sum or not (True, False or "scaled").
         clip_hp_grad: Clipping value for hyperparameters gradients.
         kwargs: Base optimizer parameters.
 
@@ -37,7 +37,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
     ```
     """
     def __init__(self, params, base_optimizer_cls, downstream_weight="merge",
-                 weights_parametrization="sigmoid", weights_normalization=True,
+                 weights_parametrization="sigmoid", weights_normalization="scaled",
                  clip_hp_grad=None, eps=1e-6, **kwargs):
         params = list(params)
         if len(params) < 2 or not isinstance(params[0], dict):
@@ -116,6 +116,8 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                 weight_grads /= s
                 product = sum([dg @ lg for dg, lg in zip(down_grads, grad_sum)])
                 weight_grads += product / s ** 2
+                if self.weights_normalization == "scaled":
+                    weight_grads *= len(weights)
 
             if self.weights_parametrization == "sigmoid":
                 weight_grads *= weights * torch.sigmoid(-logits)
