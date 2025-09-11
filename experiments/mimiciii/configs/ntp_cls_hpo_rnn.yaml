@@ -5,6 +5,11 @@ defaults:
 
 name: ntp_cls_hpo_rnn
 
+metric:
+  _target_: pretpp.metrics.DownstreamMetric
+  classification_fields:
+    - target
+
 module:
   _target_: pretpp.modules.HPOModule
   hpo_losses:
@@ -51,3 +56,5 @@ module:
             cast: true
     aggregator:
       _target_: hotpp.nn.LastAggregator
+  val_metric: ${metric}
+  test_metric: ${metric}

@@ -306,6 +306,7 @@ class BaseModule(pl.LightningModule):
     @torch.autocast("cuda", enabled=False)
     def _update_metric(self, metric, x, inputs, outputs, targets):
         predictions = self._loss.predict(outputs)
+        targets = self._loss.get_prediction_targets(targets)
         metric.update(predictions, targets)
 
     @torch.autocast("cuda", enabled=False)

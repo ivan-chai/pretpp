@@ -96,3 +96,6 @@ class HybridLoss(BaseLoss):
             loss_outputs = PaddedBatch(self._aggregator(loss_outputs).unsqueeze(1),
                                        torch.ones_like(loss_outputs.seq_lens))  # (B, 1, D).
         return loss.predict(loss_outputs)
+
+    def get_prediction_targets(self, targets):
+        return targets[self._prediction_loss]
