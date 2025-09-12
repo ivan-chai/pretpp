@@ -33,9 +33,10 @@ class HPOModule(BaseModule):
         downstream_loss: The name of the downstream loss.
         hpo_lr: A custom LR for hyperparameters.
         hpo_params: Parameters of the HP optimizer.
+        tune_on_val: Use validation data for hyperparameter tuning.
     """
     def __init__(self, seq_encoder, loss, hpo_losses, downstream_loss,
-                 hpo_lr=None, hpo_params=None, **kwargs):
+                 hpo_lr=None, hpo_params=None, tune_on_val=False, **kwargs):
         super().__init__(seq_encoder, loss, **kwargs)
         self.automatic_optimization = False
         # Register loss parameters.
@@ -43,6 +44,7 @@ class HPOModule(BaseModule):
         self.downstream_loss = downstream_loss
         self.hpo_lr = hpo_lr
         self.hpo_params = hpo_params
+        self.tune_on_val = tune_on_val
         self.loss_weights = torch.nn.ParameterDict({
             k: torch.nn.Parameter(torch.zeros([]))
             for k in self.hpo_losses
@@ -56,6 +58,10 @@ class HPOModule(BaseModule):
         BaseModule.trainer.fset(self, trainer)
 
     def training_step(self, batch, batch_idx):
+        dataloader_idx = batch[0].payload.get("_dataloader_idx", None)
+        if self.tune_on_val and ((dataloader_idx is None) or (dataloader_idx > 1)):
+            raise ValueError(f"When tune_on_val is used, there must be exact 2 dataloaders. Got {dataloader_idx}")
+
         x, y = batch
         inputs, targets = self._loss.prepare_batch(x, y)
         outputs, losses, metrics = self._compute_loss(inputs, targets)
@@ -77,11 +83,14 @@ class HPOModule(BaseModule):
             else:
                 assert isinstance(stage, int)
                 metrics[f"hpo_grad_norm_weight_{stage}"] = self._get_grad_norm(warn_empty_grads=False)
-        opt.hpo_step(closure=closure)
-        hpo_grads = torch.stack([w.grad for w in self.loss_weights.values()])
-        hpo_grad_norm = torch.linalg.norm(hpo_grads)
-        metrics["hpo_grad_norm"] = hpo_grad_norm
-        self._log_metrics("train", len(x), final_loss, losses, metrics, single_batch_metrics=None)
+        if self.tune_on_val and dataloader_idx == 1:
+            opt.cache_downstream(closure)
+        else:
+            opt.hpo_step(closure)
+            hpo_grads = torch.stack([w.grad for w in self.loss_weights.values()])
+            hpo_grad_norm = torch.linalg.norm(hpo_grads)
+            metrics["hpo_grad_norm"] = hpo_grad_norm
+            self._log_metrics("train", len(x), final_loss, losses, metrics, single_batch_metrics=None)
 
     def configure_optimizers(self):
         model_params = [v for k, v in self.named_parameters() if v.requires_grad and not k.startswith("loss_weights.")]

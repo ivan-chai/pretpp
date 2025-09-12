@@ -62,11 +62,24 @@ class CorrHPOptimizer(torch.optim.Optimizer):
         self.weights_normalization = weights_normalization
         self.clip_hp_grad = clip_hp_grad
         self.eps = eps
+        self._down_grads_cache = None
 
     def step(self, closure, inner=False):
         if not inner:
             raise ValueError("Please, use 'hpo_step' function.")
         return self.base_optimizer.step(closure)
+
+    def cache_downstream(self, closure=None):
+        """Cache downstream gradient for future computations.
+
+        Use this method to tune hyperparamers on validation batches.
+        """
+        assert closure is not None, "Sharpness Aware Minimization requires closure, but it was not provided"
+        closure = torch.enable_grad()(closure)  # the closure should do a full forward-backward pass
+        downstream_weight = 1
+        loss_weights = [0] * self.n_weights
+        closure(downstream_weight, *loss_weights, stage=HPO_STAGE_DOWNSTREAM)
+        self._down_grads_cache = self._gather_grads()
 
     def hpo_step(self, closure=None):
         """Make a single step.
@@ -91,8 +104,11 @@ class CorrHPOptimizer(torch.optim.Optimizer):
             # Compute downstream grads.
             downstream_weight = 1
             loss_weights = [0] * self.n_weights
-            closure(downstream_weight, *loss_weights, stage=HPO_STAGE_DOWNSTREAM)
-            down_grads = self._gather_grads()
+            if self._down_grads_cache is None:
+                closure(downstream_weight, *loss_weights, stage=HPO_STAGE_DOWNSTREAM)
+                down_grads = self._gather_grads()
+            else:
+                down_grads = self._down_grads_cache
 
             # Compute weights grads.
             downstream_weight = 0
