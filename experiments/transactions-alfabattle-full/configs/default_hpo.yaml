@@ -26,7 +26,10 @@ module:
     - loss_0_weekofyear
     - loss_0_log_amount
     - loss_0_log_hour_diff
-  hpo_lr: 0.01
+  hpo_params:
+    clip_hp_grad: 0.1
+  hp_group_params:
+    lr: 0.01
   downstream_loss: loss_1_target
   loss_projection_partial:
     _target_: pretpp.nn.CatHead

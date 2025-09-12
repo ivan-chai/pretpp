@@ -14,7 +14,10 @@ module:
     - loss_0_timestamps
     - loss_0_labels
     - loss_0_log_amount
-  hpo_lr: 0.01
+  hpo_params:
+    clip_hp_grad: 0.1
+  hp_group_params:
+    lr: 0.01
   downstream_loss: loss_1_target
   loss_projection_partial:
     _target_: pretpp.nn.CatHead
