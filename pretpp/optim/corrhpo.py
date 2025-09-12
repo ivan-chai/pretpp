@@ -1,3 +1,4 @@
+import math
 import torch
 
 
@@ -13,8 +14,8 @@ class CorrHPOptimizer(torch.optim.Optimizer):
         base_optimizer_cls: The optimizer to use.
         downstream_weight: The weight of the downstream loss in model optimization or "merge".
             The "merge" value means inserting downstream gradients for the weights, not updated by the main loss.
-        weights_parametrization: Either "exp", "softplus", or "sigmoid".
-        weights_normalization: Whether to normalize weights by their sum or not (True, False or "scaled").
+        weights_parametrization: Either "exp", "softplus", "tanh" or "sigmoid".
+        weights_normalization: Whether to normalize weights by their sum or not ("sum", "norm", or "none").
         clip_hp_grad: Clipping value for hyperparameters gradients.
         kwargs: Base optimizer parameters.
 
@@ -37,13 +38,15 @@ class CorrHPOptimizer(torch.optim.Optimizer):
     ```
     """
     def __init__(self, params, base_optimizer_cls, downstream_weight="merge",
-                 weights_parametrization="sigmoid", weights_normalization="scaled",
+                 weights_parametrization="sigmoid", weights_normalization="norm",
                  clip_hp_grad=None, eps=1e-6, **kwargs):
         params = list(params)
         if len(params) < 2 or not isinstance(params[0], dict):
             raise ValueError("Expected at least two param groups with the first group being loss weights.")
-        if weights_parametrization not in ["sigmoid", "softplus", "exp"]:
-            raise ValueError(f"Unknown weights normalization method: {weights_parametrization}")
+        if weights_parametrization not in ["tanh", "sigmoid", "softplus", "exp"]:
+            raise ValueError(f"Unknown weights parametrization method: {weights_parametrization}")
+        if weights_normalization not in ["sum", "norm", "none"]:
+            raise ValueError(f"Unknown weights normalization method: {weights_normalization}")
         defaults = dict(**kwargs)
         super().__init__(params, defaults)
         self.base_optimizer = base_optimizer_cls(self.param_groups, **kwargs)
@@ -97,6 +100,8 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                 weights = torch.exp(logits)
             elif self.weights_parametrization == "sigmoid":
                 weights = torch.sigmoid(logits)
+            elif self.weights_parametrization == "tanh":
+                weights = torch.tanh(logits)
             else:
                 assert self.weights_parametrization == "softplus"
                 weights = torch.nn.functional.softplus(logits)
@@ -114,7 +119,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
             # Compute weights grads.
             downstream_weight = 0
             weight_grads = torch.zeros(self.n_weights, dtype=down_grads[0].dtype, device=down_grads[0].device)
-            if self.weights_normalization:
+            if self.weights_normalization != "none":
                 grad_sum = [torch.zeros_like(v) for v in down_grads]
             for i, w in enumerate(weights):
                 loss_weights[i] = 1
@@ -124,20 +129,32 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                 assert len(down_grads) == len(loss_grads)
                 product = sum([dg @ lg for dg, lg in zip(down_grads, loss_grads)])
                 weight_grads[i] -= product
-                if self.weights_normalization:
+                if self.weights_normalization != "none":
                     for j, v in enumerate(loss_grads):
                         grad_sum[j] += v * w
 
-            if self.weights_normalization:
+            if self.weights_normalization == "sum":
                 s = weights.sum() + self.eps
                 weight_grads /= s
                 product = sum([dg @ lg for dg, lg in zip(down_grads, grad_sum)])
                 weight_grads += product / s ** 2
-                if self.weights_normalization == "scaled":
-                    weight_grads *= len(weights)
+                weight_grads *= len(weights)  # Scale by the number of weights.
+                actual_weights = weights / s
+            elif self.weights_normalization == "norm":
+                norm = torch.linalg.norm(weights) + self.eps
+                weight_grads /= norm
+                product = sum([dg @ lg for dg, lg in zip(down_grads, grad_sum)])
+                weight_grads += weights * product / norm ** 3
+                weight_grads *= math.sqrt(len(weights))  # Scale by the norm of union vector.
+                actual_weights = weights / norm
+            else:
+                assert self.weights_normalization == "none"
+                actual_weights = weights
 
             if self.weights_parametrization == "sigmoid":
                 weight_grads *= weights * torch.sigmoid(-logits)
+            elif self.weights_parametrization == "tanh":
+                weight_grads /= torch.cosh(logits).square() + self.eps
             elif self.weights_parametrization == "exp":
                 weight_grads *= weights
             else:
@@ -149,7 +166,6 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                     weight_grads *= self.clip_hp_grad / grad_norm
 
             # Compute model grads.
-            actual_weights = weights / (weights.sum() + self.eps) if self.weights_normalization else weights
             closure(self.downstream_weight, *actual_weights, stage=HPO_STAGE_FINAL)
 
             # Set weights grads.

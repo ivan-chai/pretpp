@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import math
 import torch
 from unittest import TestCase, main
 
@@ -38,10 +39,10 @@ class TestCorrHPOptimizer(TestCase):
                 v = v + loss(x, alpha, beta)
             v.backward()
 
-        for parametrization in ["sigmoid", "exp", "softplus"]:
-            for normalization in [False, True, "scaled"]:
+        for parametrization in ["sigmoid", "exp", "tanh", "softplus"]:
+            for normalization in ["none", "sum", "norm"]:
                 optimizer = CorrHPOptimizer([{"params": [alpha, beta]},
-                                            {"params": [x]}],
+                                             {"params": [x]}],
                                             torch.optim.Adam,
                                             weights_parametrization=parametrization,
                                             weights_normalization=normalization,
@@ -53,13 +54,17 @@ class TestCorrHPOptimizer(TestCase):
                     weights = torch.exp(logits)
                 elif parametrization == "sigmoid":
                     weights = torch.sigmoid(logits)
+                elif parametrization == "tanh":
+                    weights = torch.tanh(logits)
                 else:
                     assert parametrization == "softplus"
                     weights = torch.nn.functional.softplus(logits)
-                if normalization:
-                    weights = weights / weights.sum()
-                    if normalization == "scaled":
-                        weights *= len(weights)
+                if normalization == "sum":
+                    weights = weights / weights.sum() * len(weights)
+                elif normalization == "norm":
+                    weights = weights / torch.linalg.norm(weights) * math.sqrt(len(weights))
+                else:
+                    assert normalization == "none"
                 w1, w2 = weights
 
                 grad = 2 * w1 * (x - 5) + 2 * w2 * (x + 3)
@@ -81,12 +86,13 @@ class TestCorrHPOptimizer(TestCase):
     def test_optimizer(self):
         torch.manual_seed(0)
         for parametrization in ["sigmoid"]:
-            # "exp" and "softplus" are unstable.
-            for normalization in [True, False, "scaled"]:
+            # "exp", "tanh" and "softplus" are unstable.
+            for normalization in ["none", "sum", "norm"]:
+                print(parametrization, normalization)
                 x = torch.nn.Parameter(torch.randn([]))
                 alpha = torch.nn.Parameter(torch.rand([]))
                 beta = torch.nn.Parameter(torch.rand([]))
-                kwargs = {"lr": 0.001} if parametrization in {"exp", "softplus"} else {}
+                kwargs = {"lr": 0.005} if normalization in {"norm"} else {}
                 optimizer = CorrHPOptimizer([{"params": [alpha, beta], **kwargs},
                                             {"params": [x]}],
                                             torch.optim.Adam,
