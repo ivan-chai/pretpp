@@ -104,9 +104,10 @@ class CorrHPOptimizer(torch.optim.Optimizer):
             # Compute downstream grads.
             downstream_weight = 1
             loss_weights = [0] * self.n_weights
+            closure(downstream_weight, *loss_weights, stage=HPO_STAGE_DOWNSTREAM)
+            down_train_grads = self._gather_grads()
             if self._down_grads_cache is None:
-                closure(downstream_weight, *loss_weights, stage=HPO_STAGE_DOWNSTREAM)
-                down_grads = self._gather_grads()
+                down_grads = down_train_grads
             else:
                 down_grads = self._down_grads_cache
 
@@ -160,11 +161,11 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                 for group in self.param_groups[1:]:
                     for p in group["params"]:
                         if p.grad is None:
-                            p.grad = down_grads[i].reshape(p.shape)
+                            p.grad = down_train_grads[i].reshape(p.shape)
                         else:
-                            p.grad = torch.where(p.grad.abs() > 0, p.grad, down_grads[i].reshape(p.shape))
+                            p.grad = torch.where(p.grad.abs() > 0, p.grad, down_train_grads[i].reshape(p.shape))
                         i += 1
-                assert i == len(down_grads)
+                assert i == len(down_train_grads)
 
         return self.step(inner_closure, inner=True)
 
