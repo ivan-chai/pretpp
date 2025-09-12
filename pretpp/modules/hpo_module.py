@@ -31,19 +31,19 @@ class HPOModule(BaseModule):
     Args:
         hpo_losses: A list of losses to tune hyperparameters for.
         downstream_loss: The name of the downstream loss.
-        hpo_lr: A custom LR for hyperparameters.
         hpo_params: Parameters of the HP optimizer.
+        hp_group_params: Specific parameters for weights optimization (lr etc.).
         tune_on_val: Use validation data for hyperparameter tuning.
     """
     def __init__(self, seq_encoder, loss, hpo_losses, downstream_loss,
-                 hpo_lr=None, hpo_params=None, tune_on_val=False, **kwargs):
+                 hpo_params=None, hp_group_params=None, tune_on_val=False, **kwargs):
         super().__init__(seq_encoder, loss, **kwargs)
         self.automatic_optimization = False
         # Register loss parameters.
         self.hpo_losses = hpo_losses
         self.downstream_loss = downstream_loss
-        self.hpo_lr = hpo_lr
         self.hpo_params = hpo_params
+        self.hp_group_params = hp_group_params
         self.tune_on_val = tune_on_val
         self.loss_weights = torch.nn.ParameterDict({
             k: torch.nn.Parameter(torch.zeros([]))
@@ -98,8 +98,8 @@ class HPOModule(BaseModule):
             {"params": [self.loss_weights[k] for k in self.hpo_losses]},
             {"params": model_params}
         ]
-        if self.hpo_lr is not None:
-            params[0]["lr"] = self.hpo_lr
+        if self.hp_group_params is not None:
+            params[0].update(self.hp_group_params)
         optimizer = CorrHPOptimizer(params, self._optimizer_partial,
                                     **(self.hpo_params or {}))
         if self._lr_scheduler_partial is None:

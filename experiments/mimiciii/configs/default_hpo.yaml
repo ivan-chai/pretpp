@@ -13,10 +13,8 @@ module:
   hpo_losses:
     - loss_0_timestamps
     - loss_0_labels
-  hpo_params:
-    clip_hp_grad: 0.1
-  hp_group_params:
-    lr: 0.01
+    - loss_0_types
+  hpo_lr: 0.01
   downstream_loss: loss_1_target
   loss_projection_partial:
     _target_: pretpp.nn.CatHead
@@ -38,10 +36,18 @@ module:
           timestamps:
             _target_: hotpp.losses.TimeMAELoss
             max_delta: ${max_time_delta}
+            smoothing: 1
+            grad_scale: null
           labels:
             _target_: hotpp.losses.CrossEntropyLoss
             num_classes: ${num_classes}
+            grad_scale: null
+          types:
+            _target_: hotpp.losses.CrossEntropyLoss
+            num_classes: 5
+            grad_scale: null
       - _target_: pretpp.losses.ClassificationLoss
+        drop_nans: true
         targets:
           target:
             num_classes: ${num_downstream_classes}

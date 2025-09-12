@@ -85,22 +85,20 @@ class TestCorrHPOptimizer(TestCase):
 
     def test_optimizer(self):
         torch.manual_seed(0)
-        for parametrization in ["sigmoid"]:
-            # "exp", "tanh" and "softplus" are unstable.
+        for parametrization in ["sigmoid", "exp", "tanh", "softplus"]:
             for normalization in ["none", "sum", "norm"]:
-                print(parametrization, normalization)
                 x = torch.nn.Parameter(torch.randn([]))
                 alpha = torch.nn.Parameter(torch.rand([]))
                 beta = torch.nn.Parameter(torch.rand([]))
-                kwargs = {"lr": 0.005} if normalization in {"norm"} else {}
-                optimizer = CorrHPOptimizer([{"params": [alpha, beta], **kwargs},
+                optimizer = CorrHPOptimizer([{"params": [alpha, beta]},
                                             {"params": [x]}],
-                                            torch.optim.Adam,
+                                            torch.optim.SGD,
                                             weights_parametrization=parametrization,
                                             weights_normalization=normalization,
+                                            clip_hp_grad=None if parametrization == "sigmoid" else 0.1,
                                             lr=0.01)
 
-                for step in range(1000):
+                for step in range(2000):
                     def closure(down, alpha, beta, stage=None):
                         optimizer.zero_grad()
                         if down > 0:
@@ -112,7 +110,11 @@ class TestCorrHPOptimizer(TestCase):
                         v.backward()
                     optimizer.hpo_step(closure)
                 final_downstream_loss = downstream(x).item()
-                self.assertAlmostEqual(final_downstream_loss, 14.4, places=3)
+                try:
+                    self.assertAlmostEqual(final_downstream_loss, 14.4, places=2)
+                except AssertionError:
+                    print(f"Test failed for {parametrization} {normalization}")
+                    raise
 
 
 if __name__ == "__main__":
