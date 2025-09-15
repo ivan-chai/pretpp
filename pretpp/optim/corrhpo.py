@@ -1,5 +1,7 @@
 import math
 import torch
+from copy import deepcopy
+from torch.optim.lr_scheduler import LambdaLR
 
 
 HPO_STAGE_DOWNSTREAM = "downstream"
@@ -38,8 +40,8 @@ class CorrHPOptimizer(torch.optim.Optimizer):
     ```
     """
     def __init__(self, params, base_optimizer_cls, downstream_weight="merge",
-                 weights_parametrization="sigmoid", weights_normalization="norm",
-                 normalize_gradients=False, clip_hp_grad=None, eps=1e-6, **kwargs):
+                 weights_parametrization="sigmoid", weights_normalization="sum",
+                 clip_hp_grad=None, eps=1e-6, **kwargs):
         params = list(params)
         if len(params) < 2 or not isinstance(params[0], dict):
             raise ValueError("Expected at least two param groups with the first group being loss weights.")
@@ -63,7 +65,6 @@ class CorrHPOptimizer(torch.optim.Optimizer):
             self.downstream_weight = float(downstream_weight)
         self.weights_parametrization = weights_parametrization
         self.weights_normalization = weights_normalization
-        self.normalize_gradients = normalize_gradients
         self.clip_hp_grad = clip_hp_grad
         self.eps = eps
         self._down_grads_cache = None
@@ -126,7 +127,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                 loss_weights[i] = 1
                 closure(downstream_weight, *loss_weights, stage=i)
                 loss_weights[i] = 0
-                loss_grads = self._gather_grads(normalize=self.normalize_gradients)
+                loss_grads = self._gather_grads()
                 assert len(down_grads) == len(loss_grads)
                 product = sum([dg @ lg for dg, lg in zip(down_grads, loss_grads)])
                 weight_grads[i] -= product
@@ -190,7 +191,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
         super().load_state_dict(state_dict)
         self.base_optimizer.param_groups = self.param_groups
 
-    def _gather_grads(self, normalize=False):
+    def _gather_grads(self):
         grads = []
         for group in self.param_groups[1:]:
             for p in group["params"]:
@@ -199,7 +200,36 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                 else:
                     grads.append(p.grad.flatten())
                     p.grad = None
-        if normalize:
-            norm = sum([g.square().sum() for g in grads]) ** 0.5
-            grads = [g / norm for g in grads]
         return grads
+
+
+class RepetitiveWarmupScheduler(LambdaLR):
+    def __init__(self, optimizer, cycle_steps, warmup_steps,
+                 reset_optimizer=True, last_epoch=-1,
+                 **kwargs):  # ignored, for configuration simplicity.
+        self._cycle_steps = cycle_steps
+        self._warmup_steps = warmup_steps
+        self._reset_optimizer = reset_optimizer
+        self._init_optimizer_state = deepcopy(optimizer.state_dict())
+        self.default_interval = "step"
+        super().__init__(optimizer, last_epoch=last_epoch,
+                         lr_lambda=self._lr_lambda_impl)
+
+    def state_dict(self):
+        state = super().state_dict()
+        state["init_optimizer_state"] = self._init_optimizer_state
+        return state
+
+    def load_state_dict(self, state):
+        self._init_optimizer_state = state.pop("init_optimizer_state")
+        assert self._init_optimizer_state is not None
+        return super().load_state_dict(state)
+
+    def _lr_lambda_impl(self, epoch):
+        in_cycle = epoch % self._cycle_steps
+        if in_cycle == 0 and self._reset_optimizer:
+            self.optimizer.load_state_dict(deepcopy(self._init_optimizer_state))
+            print("RESET", epoch)
+        if in_cycle == self._warmup_steps:
+            print("Stop warmup", epoch)
+        return 0 if in_cycle < self._warmup_steps else 1

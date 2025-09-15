@@ -253,11 +253,12 @@ class BaseModule(pl.LightningModule):
             return optimizer
         else:
             scheduler = self._lr_scheduler_partial(optimizer)
+            scheduler = {
+                "scheduler": scheduler,
+                "interval": getattr(scheduler, "default_interval", "epoch")
+            }
             if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                scheduler = {
-                    "scheduler": scheduler,
-                    "monitor": "val/loss",
-                }
+                scheduler["monitor"] = "val/loss"
             return [optimizer], [scheduler]
 
     def configure_callbacks(self):

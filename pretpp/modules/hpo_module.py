@@ -92,6 +92,28 @@ class HPOModule(BaseModule):
             metrics["hpo_grad_norm"] = hpo_grad_norm
             self._log_metrics("train", len(x), final_loss, losses, metrics, single_batch_metrics=None)
 
+        # Make scheduler step if necessary.
+        for config in self.trainer.lr_scheduler_configs:
+            if config.interval != "step":
+                continue
+            if config.frequency != 1:
+                raise NotImplementedError("Frequency in LR scheduler.")
+            if config.reduce_on_plateau:
+                raise NotImplementedError("ReduceOnPlateau LR scheduler.")
+            config.scheduler.step()
+
+    def on_train_epoch_end(self):
+        super().on_train_epoch_end()
+        # Make scheduler step if necessary.
+        for config in self.trainer.lr_scheduler_configs:
+            if config.interval != "epoch":
+                continue
+            if config.frequency != 1:
+                raise NotImplementedError("Frequency in LR scheduler.")
+            if config.reduce_on_plateau:
+                raise NotImplementedError("ReduceOnPlateau LR scheduler.")
+            config.scheduler.step()
+
     def configure_optimizers(self):
         model_params = [v for k, v in self.named_parameters() if v.requires_grad and not k.startswith("loss_weights.")]
         params = [
@@ -106,9 +128,10 @@ class HPOModule(BaseModule):
             return optimizer
         else:
             scheduler = self._lr_scheduler_partial(optimizer)
+            scheduler = {
+                "scheduler": scheduler,
+                "interval": getattr(scheduler, "default_interval", "epoch")
+            }
             if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                scheduler = {
-                    "scheduler": scheduler,
-                    "monitor": "val/loss",
-                }
+                scheduler["monitor"] = "val/loss"
             return [optimizer], [scheduler]
