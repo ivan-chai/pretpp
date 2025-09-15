@@ -101,7 +101,7 @@ class HPOModule(BaseModule):
         def closure(down, *weights, stage=None):
             opt.zero_grad()
             assert len(weights) == len(self.hpo_losses)
-            if HPO_STAGE_DOWNSTREAM:
+            if stage == HPO_STAGE_DOWNSTREAM:
                 loss = down * losses[self.downstream_loss]
             else:
                 loss = sum([w * losses[k] for k, w in zip(self.hpo_losses, weights)], down * losses[self.downstream_loss])
