@@ -39,7 +39,7 @@ class TestCorrHPOptimizer(TestCase):
                 v = v + loss(x, alpha, beta)
             v.backward()
 
-        for parametrization in ["sigmoid", "exp", "tanh", "softplus"]:
+        for parametrization in ["sigmoid", "exp", "tanh", "abs", "softplus"]:
             for normalization in ["none", "sum", "norm"]:
                 optimizer = CorrHPOptimizer([{"params": [alpha, beta]},
                                              {"params": [x]}],
@@ -56,6 +56,8 @@ class TestCorrHPOptimizer(TestCase):
                     weights = torch.sigmoid(logits)
                 elif parametrization == "tanh":
                     weights = torch.tanh(logits)
+                elif parametrization == "abs":
+                    weights = torch.abs(logits)
                 else:
                     assert parametrization == "softplus"
                     weights = torch.nn.functional.softplus(logits)
@@ -85,7 +87,7 @@ class TestCorrHPOptimizer(TestCase):
 
     def test_optimizer(self):
         torch.manual_seed(0)
-        for parametrization in ["sigmoid", "exp", "tanh", "softplus"]:
+        for parametrization in ["sigmoid", "exp", "tanh", "abs", "softplus"]:
             for normalization in ["none", "sum", "norm"]:
                 x = torch.nn.Parameter(torch.randn([]))
                 alpha = torch.nn.Parameter(torch.rand([]))
