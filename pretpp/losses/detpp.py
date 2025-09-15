@@ -22,15 +22,16 @@ class DeTPPLoss(DetectionLoss, BaseLoss):
         # Offset is applied in base loss classes.
         return inputs, inputs
 
-    def forward(self, outputs, targets):
+    def forward(self, targets, outputs=None, embeddings=None):
         """Compute loss and metrics.
 
         Args:
-            outputs: Model outputs with shape (B, L, *, D) or (B, 1, *, D).
-                Outputs can be dictionary with predictions for particular fields.
-            targets: Target features with shape (B, L, *).
+            targets: Target values, as returned by prepare_batch.
+            outputs: Sequential model outputs with shape (B, L, D), when self.aggregate is either False or "both".
+            embeddings (unused): Aggregated embeddings with shape (B, D), when self.aggregate is either True or "both".
 
         Returns:
             Losses dict and metrics dict.
         """
+        assert outputs is not None
         return super().forward(targets, outputs, states=None)

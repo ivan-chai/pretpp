@@ -109,16 +109,21 @@ class ColesLoss(BaseLoss):
         new_inputs = self.prepare_inference_batch(new_inputs)
         return new_inputs, targets
 
-    def forward(self, outputs, targets):
+    def forward(self, targets, outputs=None, embeddings=None):
         """Extract targets and compute loss between predictions and targets.
 
         Args:
-            outputs: Model output embeddings with shape (B, 1, D).
-            targets: Target indices with shape (B).
+            targets: Target values, as returned by prepare_batch.
+            outputs: Sequential model outputs with shape (B, L, D), when self.aggregate is either False or "both".
+            embeddings: Aggregated embeddings with shape (B, D), when self.aggregate is either True or "both".
 
         Returns:
             Losses dict and metrics dict.
         """
+        if self.aggregate:
+            assert embeddings is not None
+            outputs = PaddedBatch(embeddings.unsqueeze(1),
+                                  torch.ones(len(embeddings), device=embeddings.device, dtype=torch.long))  # (B, 1, D).
         outputs, lengths = outputs.payload, outputs.seq_lens
         if self.cls_token is not None:
             # Extract CLS token embedding.

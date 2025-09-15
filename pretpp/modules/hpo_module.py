@@ -34,9 +34,12 @@ class HPOModule(BaseModule):
         hpo_params: Parameters of the HP optimizer.
         hp_group_params: Specific parameters for weights optimization (lr etc.).
         tune_on_val: Use validation data for hyperparameter tuning.
+        downstream_aggregate_for_target: If set to the target name, use embeddings for downstream loss computation.
     """
     def __init__(self, seq_encoder, loss, hpo_losses, downstream_loss,
-                 hpo_params=None, hp_group_params=None, tune_on_val=False, **kwargs):
+                 hpo_params=None, hp_group_params=None,
+                 tune_on_val=False, downstream_aggregate_for_target=False,
+                 **kwargs):
         super().__init__(seq_encoder, loss, **kwargs)
         self.automatic_optimization = False
         # Register loss parameters.
@@ -45,6 +48,7 @@ class HPOModule(BaseModule):
         self.hpo_params = hpo_params
         self.hp_group_params = hp_group_params
         self.tune_on_val = tune_on_val
+        self.downstream_aggregate_for_target = downstream_aggregate_for_target
         self.loss_weights = torch.nn.ParameterDict({
             k: torch.nn.Parameter(torch.zeros([]))
             for k in self.hpo_losses
@@ -57,21 +61,50 @@ class HPOModule(BaseModule):
         trainer.gradient_clip_val = None
         BaseModule.trainer.fset(self, trainer)
 
+    def _compute_loss(self, inputs, targets, downstream_only=False):
+        if downstream_only:
+            if self.downstream_aggregate_for_target:
+                targets = {self.downstream_aggregate_for_target: targets[self.downstream_aggregate_for_target]}
+            aggregate = self.downstream_aggregate_for_target or self._loss.aggregate
+        else:
+            aggregate = self._loss.aggregate
+        if aggregate or (aggregate == "both"):
+            embeddings = PaddedBatch(self._embed_impl(inputs).unsqueeze(1),
+                                     torch.ones_like(inputs.seq_lens))  # (B, 1, D).
+            embeddings = self._loss_projection(embeddings).payload.squeeze(1)  # (B, D).
+            assert embeddings.ndim == 2
+        else:
+            embeddings = None
+        if not aggregate or (aggregate == "both"):
+            outputs, _ = self.forward(inputs)
+            outputs = self._loss_projection(outputs)  # (B, L, D).
+        else:
+            outputs = None
+
+        losses, metrics = self._loss(targets, outputs=outputs, embeddings=embeddings)
+        return outputs, embeddings, losses, metrics
+
     def training_step(self, batch, batch_idx):
         dataloader_idx = batch[0].payload.get("_dataloader_idx", None)
         if self.tune_on_val and ((dataloader_idx is None) or (dataloader_idx > 1)):
             raise ValueError(f"When tune_on_val is used, there must be exact 2 dataloaders. Got {dataloader_idx}")
+        downstream_only = self.tune_on_val and (dataloader_idx == 1)
 
         x, y = batch
         inputs, targets = self._loss.prepare_batch(x, y)
-        outputs, losses, metrics = self._compute_loss(inputs, targets)
-        final_loss = next(iter(losses.values())).clone()
+        outputs, embeddings, losses, metrics = self._compute_loss(inputs, targets,
+                                                                  downstream_only=downstream_only)
+        assert losses
+        final_loss = torch.empty_like(next(iter(losses.values())))
 
         opt = self.optimizers()
         def closure(down, *weights, stage=None):
             opt.zero_grad()
             assert len(weights) == len(self.hpo_losses)
-            loss = sum([w * losses[k] for k, w in zip(self.hpo_losses, weights)], down * losses[self.downstream_loss])
+            if HPO_STAGE_DOWNSTREAM:
+                loss = down * losses[self.downstream_loss]
+            else:
+                loss = sum([w * losses[k] for k, w in zip(self.hpo_losses, weights)], down * losses[self.downstream_loss])
             self.manual_backward(loss, retain_graph=stage != HPO_STAGE_FINAL)
             if stage == HPO_STAGE_DOWNSTREAM:
                 metrics["hpo_grad_norm_downstream"] = self._get_grad_norm(warn_empty_grads=False)

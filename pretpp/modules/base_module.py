@@ -159,13 +159,14 @@ class BaseModule(pl.LightningModule):
         outputs = self._head(hiddens)
         return outputs, states
 
-    def _embed_impl(self, inputs):
+    def _embed_impl(self, inputs, hiddens=None, states=None):
         if self._aggregator is None:
             embeddings = self._seq_encoder.embed(inputs)  # (B, D).
             embeddings = self._head(PaddedBatch(embeddings.unsqueeze(1), torch.ones_like(inputs.seq_lens))).payload.squeeze(1)  # (B, D).
         else:
-            return_states = "full" if self._aggregator.need_states else False
-            hiddens, states = self.forward(inputs, return_states=return_states)
+            if hiddens is None:
+                return_states = "full" if self._aggregator.need_states else False
+                hiddens, states = self.forward(inputs, return_states=return_states)
             embeddings = self._aggregator(hiddens, states)
         return embeddings  # (B, D).
 
@@ -176,19 +177,27 @@ class BaseModule(pl.LightningModule):
         return embeddings
 
     def _compute_loss(self, inputs, targets):
-        if self._loss.aggregate:
-            outputs = PaddedBatch(self._embed_impl(inputs).unsqueeze(1),
-                                  torch.ones_like(inputs.seq_lens))  # (B, 1, D).
+        need_embeddings = (self._loss.aggregate) or (self._loss.aggregate == "both")
+        if (not self._loss.aggregate) or (self._loss.aggregate == "both"):
+            return_states = "full" if need_embeddings and (self._aggregator is not None) and self._aggregator.need_states else False
+            hiddens, states = self.forward(inputs, return_states=return_states)
+            outputs = self._loss_projection(hiddens)  # (B, L, D).
         else:
-            outputs, _ = self.forward(inputs)
-        outputs = self._loss_projection(outputs)  # (B, L, D).
-        losses, metrics = self._loss(outputs, targets)
-        return outputs, losses, metrics
+            outputs, hiddens, states = None, None, None
+        if need_embeddings:
+            embeddings = PaddedBatch(self._embed_impl(inputs, hiddens=hiddens, states=states).unsqueeze(1),
+                                     torch.ones_like(inputs.seq_lens))  # (B, 1, D).
+            embeddings = self._loss_projection(outputs).payload.squeeze(1)  # (B, D).
+            assert embeddings.ndim == 2
+        else:
+            embeddings = None
+        losses, metrics = self._loss(targets, outputs=outputs, embeddings=embeddings)
+        return outputs, embeddings, losses, metrics
 
     def training_step(self, batch, batch_idx):
         x, y = batch
         inputs, targets = self._loss.prepare_batch(x, y)
-        outputs, losses, metrics = self._compute_loss(inputs, targets)
+        outputs, embeddings, losses, metrics = self._compute_loss(inputs, targets)
         loss = sum(losses.values())
 
         # Log statistics.
@@ -204,11 +213,11 @@ class BaseModule(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         x, y = batch
         inputs, targets = self._loss.prepare_batch(x, y)
-        outputs, losses, metrics = self._compute_loss(inputs, targets)
+        outputs, embeddings, losses, metrics = self._compute_loss(inputs, targets)
         loss = sum(losses.values())
 
         if self._val_metric is not None:
-            self._update_metric(self._val_metric, x, inputs, outputs, targets)
+            self._update_metric(self._val_metric, x, inputs, outputs, embeddings, targets)
 
         # Log statistics.
         if batch_idx == 0:
@@ -220,11 +229,11 @@ class BaseModule(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         x, y = batch
         inputs, targets = self._loss.prepare_batch(x, y)
-        outputs, losses, metrics = self._compute_loss(inputs, targets)
+        outputs, embeddings, losses, metrics = self._compute_loss(inputs, targets)
         loss = sum(losses.values())
 
         if self._test_metric is not None:
-            self._update_metric(self._test_metric, x, inputs, outputs, targets)
+            self._update_metric(self._test_metric, x, inputs, outputs, embeddings, targets)
 
         # Log statistics.
         if batch_idx == 0:
@@ -305,8 +314,8 @@ class BaseModule(pl.LightningModule):
         self.log("grad_norm", self._get_grad_norm(), prog_bar=True)
 
     @torch.autocast("cuda", enabled=False)
-    def _update_metric(self, metric, x, inputs, outputs, targets):
-        predictions = self._loss.predict(outputs)
+    def _update_metric(self, metric, x, inputs, outputs, embeddings, targets):
+        predictions = self._loss.predict(outputs=outputs, embeddings=embeddings)
         targets = self._loss.get_prediction_targets(targets)
         metric.update(predictions, targets)
 

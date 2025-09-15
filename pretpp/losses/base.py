@@ -29,7 +29,7 @@ class BaseLoss(torch.nn.Module):
 
     @abstractproperty
     def aggregate(self):
-        """The booling flag indicating input is an embedding rather than a sequence."""
+        """The booling flag indicating the need of aggregated input, either True, False, or `both`."""
         pass
 
     @abstractproperty
@@ -49,7 +49,20 @@ class BaseLoss(torch.nn.Module):
         """
         return {}
 
-    def predict(self, outputs):
+    def forward(self, targets, outputs=None, embeddings=None):
+        """Loss computation method.
+
+        Args:
+            targets: Target values, as returned by prepare_batch.
+            outputs: Sequential model outputs with shape (B, L, D), when self.aggregate is either False or "both".
+            embeddings: Aggregated embeddings with shape (B, D), when self.aggregate is either True or "both".
+
+        Returns:
+            A tuple of losses dictionary and metrics dictionary.
+        """
+        raise NotImplementedError("Please, implement the forward method for the loss.")
+
+    def predict(self, outputs=None, embeddings=None):
         raise NotImplementedError("The loss doesn't support prediction.")
 
     def get_prediction_targets(self, targets):

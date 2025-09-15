@@ -161,7 +161,7 @@ class TestMLMLoss(TestCase):
         optimizer = torch.optim.Adam([timestamps_prediction, labels_prediction], lr=0.01)
         for step in range(1000):
             _, targets = loss.prepare_batch(inputs)
-            values, _ = loss({"timestamps": timestamps_prediction[:, 1:, None], "labels": labels_prediction[:, 1:]}, targets)
+            values, _ = loss(targets, outputs={"timestamps": timestamps_prediction[:, 1:, None], "labels": labels_prediction[:, 1:]})
             value = sum(values.values())
             if step == 0:
                 print("Init losses:", values)

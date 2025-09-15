@@ -10,6 +10,7 @@ data_module:
 module:
   _target_: pretpp.modules.HPOModule
   tune_on_val: true
+  downstream_aggregate_for_target: 1
   hpo_losses:
     - loss_0_timestamps
     - loss_0_labels
@@ -120,5 +121,3 @@ module:
           target:
             num_classes: ${num_downstream_classes}
             cast: true
-    aggregator:
-      _target_: hotpp.nn.LastAggregator

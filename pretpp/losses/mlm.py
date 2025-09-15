@@ -120,17 +120,18 @@ class MLMLoss(BaseLoss):
         targets = PaddedBatch(targets, lengths, seq_names=inputs.seq_names)
         return model_inputs, targets
 
-    def forward(self, outputs, targets):
+    def forward(self, targets, outputs=None, embeddings=None):
         """Extract targets and compute loss between predictions and targets.
 
         Args:
-            outputs: Model outputs with shape (B, L, *, D) or (B, 1, *, D).
-                Outputs can be dictionary with predictions for particular fields.
-            targets: Target features with shape (B, L, *).
+            targets: Target values, as returned by prepare_batch.
+            outputs: Sequential model outputs with shape (B, L, D), when self.aggregate is either False or "both".
+            embeddings (unused): Aggregated embeddings with shape (B, D), when self.aggregate is either True or "both".
 
         Returns:
             Losses dict and metrics dict.
         """
+        assert outputs is not None
         # Compute losses. It is assumed that predictions lengths are equal to targets lengths.
         if not isinstance(outputs, dict):
             outputs = self._split_outputs(outputs.payload)

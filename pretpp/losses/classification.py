@@ -92,16 +92,21 @@ class ClassificationLoss(BaseLoss):
             targets = PaddedBatch(new_targets, targets.seq_lens + 1, seq_names=set(targets.seq_names) & set(self._targets))
         return inputs, targets
 
-    def forward(self, outputs, targets):
+    def forward(self, targets, outputs=None, embeddings=None):
         """Extract targets and compute loss between predictions and targets.
 
         Args:
-            outputs: Model outputs with shape (B, L, D).
-            targets: Target features with shape (B, L) or (B).
+            targets: Target values, as returned by prepare_batch.
+            outputs: Sequential model outputs with shape (B, L, D), when self.aggregate is either False or "both".
+            embeddings: Aggregated embeddings with shape (B, D), when self.aggregate is either True or "both".
 
         Returns:
             Losses dict and metrics dict.
         """
+        if self.aggregate:
+            assert embeddings is not None
+            outputs = PaddedBatch(embeddings.unsqueeze(1),
+                                  torch.ones(len(embeddings), device=embeddings.device, dtype=torch.long))  # (B, 1, D).
         outputs, lengths = self._split_outputs(outputs)  # (B, L, D).
         last = (lengths - 1).clip(min=0)[:, None, None]  # (B, 1, 1).
         losses = {}
@@ -131,13 +136,19 @@ class ClassificationLoss(BaseLoss):
                 metrics[f"batch-accuracy-{name}"] = (last_logits.argmax(-1) == target).float().mean()
         return losses, metrics
 
-    def predict(self, outputs):
+    def predict(self, outputs=None, embeddings=None):
+        if self.aggregate:
+            assert embeddings is not None
+            outputs = PaddedBatch(embeddings.unsqueeze(1),
+                                  torch.ones(len(embeddings), device=embeddings.device, dtype=torch.long))
         orig_lengths = outputs.seq_lens
         outputs, lengths = self._split_outputs(outputs)  # (B, L, D).
         last = (lengths - 1).clip(min=0)[:, None, None]  # (B, 1, 1).
         result = {}
         for name in sorted(set(self._targets) & set(outputs)):
-            result[name] = outputs[name].take_along_dim(last, 1).squeeze(1).argmax(-1)  # (B).
+            if not self.aggregate:
+                outputs[name] = outputs[name].take_along_dim(last, 1)
+            result[name] = outputs[name].squeeze(1).argmax(-1)  # (B).
         return PaddedBatch(result, orig_lengths, seq_names={})
 
     def _split_outputs(self, outputs):

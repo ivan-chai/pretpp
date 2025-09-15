@@ -13,17 +13,14 @@ class HybridLoss(BaseLoss):
         losses: A list of losses.
         prediction_loss: An index of the prediction loss.
     """
-    def __init__(self, losses, prediction_loss=None, aggregator=None):
-        if any([loss.aggregate for loss in losses]) and (not aggregator):
-            raise ValueError("Need aggregator")
+    def __init__(self, losses, prediction_loss=None):
         super().__init__()
         self._losses = torch.nn.ModuleList(losses)
         self._prediction_loss = prediction_loss
-        self._aggregator = aggregator
 
     @property
     def aggregate(self):
-        return False
+        return "both"
 
     @property
     def input_size(self):
@@ -54,14 +51,13 @@ class HybridLoss(BaseLoss):
             new_targets[i] = loss_targets
         return inputs, new_targets
 
-    def forward(self, outputs, targets):
+    def forward(self, targets, outputs=None, embeddings=None):
         """Extract targets and compute loss between predictions and targets.
 
         Args:
-            outputs: Model outputs with shape (B, L, *, D) or (B, 1, *, D).
-                Outputs can be dictionary with predictions for particular fields.
-            targets: Target features with shape (B, L, *).
-            reduction: `mean` or `none`.
+            targets: Target values, as returned by prepare_batch.
+            outputs: Sequential model outputs with shape (B, L, D), when self.aggregate is either False or "both".
+            embeddings: Aggregated embeddings with shape (B, D), when self.aggregate is either True or "both".
 
         Returns:
             Losses dict and metrics dict.
@@ -70,32 +66,41 @@ class HybridLoss(BaseLoss):
         metrics = {}
         offset = 0
         for i, loss in enumerate(self._losses):
-            loss_outputs = PaddedBatch(outputs.payload[..., offset:offset + loss.input_size], outputs.seq_lens)
-            if loss.aggregate:
-                loss_outputs = PaddedBatch(self._aggregator(loss_outputs).unsqueeze(1),
-                                           torch.ones_like(loss_outputs.seq_lens))  # (B, 1, D).
-            current_losses, current_metrics = loss(loss_outputs, targets[i])
+            if i not in targets:
+                offset += loss.input_size
+                continue
+            if outputs is not None:
+                loss_outputs = PaddedBatch(outputs.payload[..., offset:offset + loss.input_size],
+                                           outputs.seq_lens)
+            else:
+                loss_outputs = None
+            if embeddings is not None:
+                loss_embeddings = embeddings[..., offset:offset + loss.input_size]
+            else:
+                loss_embeddings = None
+            current_losses, current_metrics = loss(targets[i], outputs=loss_outputs, embeddings=loss_embeddings)
             losses |= {f"loss_{i}_" + k: v for k, v in current_losses.items()}
             metrics |= {f"loss_{i}_" + k: v for k, v in current_metrics.items()}
             offset += loss.input_size
-        if offset != outputs.payload.shape[-1]:
+        gt_dim = (outputs.payload if outputs is not None else embeddings).shape[-1]
+        if offset != gt_dim:
             raise RuntimeError("Failed to parse model outputs: dimension mismatch.")
         return losses, metrics
 
-    def predict(self, outputs):
+    def predict(self, outputs=None, embeddings=None):
         offset = 0
         for i, loss in enumerate(self._losses):
             if i == self._prediction_loss:
-                loss_outputs = PaddedBatch(outputs.payload[..., offset:offset + loss.input_size], outputs.seq_lens)
+                if outputs is not None:
+                    loss_outputs = PaddedBatch(outputs.payload[..., offset:offset + loss.input_size], outputs.seq_lens)
+                if embeddings is not None:
+                    loss_embeddings = embeddings[..., offset:offset + loss.input_size]
                 break
             offset += loss.input_size
         else:
             raise RuntimeError(f"Wrong prediction loss index: {self._prediction_loss}")
         loss = self._losses[self._prediction_loss]
-        if loss.aggregate:
-            loss_outputs = PaddedBatch(self._aggregator(loss_outputs).unsqueeze(1),
-                                       torch.ones_like(loss_outputs.seq_lens))  # (B, 1, D).
-        return loss.predict(loss_outputs)
+        return loss.predict(outputs=loss_outputs, embeddings=loss_embeddings)
 
     def get_prediction_targets(self, targets):
         return targets[self._prediction_loss]
