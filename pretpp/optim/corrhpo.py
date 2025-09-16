@@ -163,7 +163,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
             elif self.weights_parametrization == "tanh":
                 weight_grads /= torch.cosh(logits).square() + self.eps
             elif self.weights_parametrization == "abs":
-                weight_grads *= torch.sign(logits)
+                weight_grads = torch.where(logits >= 0, weight_grads, -weight_grads)  # torch.sign freezes at zero.
             elif self.weights_parametrization == "exp":
                 weight_grads *= weights
             else:
