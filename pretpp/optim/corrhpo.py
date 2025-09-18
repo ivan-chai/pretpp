@@ -212,7 +212,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
             if isinstance(self.base_optimizer, torch.optim.Adam):
                 i = 0
                 for group in self.param_groups[1:]:
-                    beta2 = group["betas"][1]
+                    _, beta2 = group["betas"]
                     eps = group["eps"]
                     for p in group["params"]:
                         state = self.base_optimizer.state[p]
@@ -225,6 +225,8 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                         grads[i] /= exp_avg_sq.sqrt().flatten() / bias_correction2_sqrt + eps
                         i += 1
                 assert i == len(grads)
+            elif isinstance(self.base_optimizer, torch.optim.SGD):
+                pass  # No need for correction.
             else:
                 raise NotImplementedError(f"Can't apply correction to {type(self.base_optimizer).__name__}")
         return grads

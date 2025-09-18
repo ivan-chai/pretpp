@@ -1,8 +1,9 @@
 seed_everything: 42
 num_evaluation_seeds: 5
 
-num_classes: 10002
-num_classes_plus1: 10003
+#Two classes: CLS token and other, don't model labels distribution.
+num_classes: 1 # 10002
+num_classes_plus1: 2 # 10003
 max_time_delta: 14
 max_duration: 120
 num_downstream_classes: 2
@@ -23,7 +24,7 @@ transformer_dropout: 0.1
 transformer_min_length: 1
 transformer_cls_token:
   timestamps: -1
-  labels: ${num_classes}  # Use final label for CLS.
+  labels: 0
   regular_points_received: 0
   express_points_received: 0
   regular_points_spent: 0
@@ -134,7 +135,7 @@ module:
       _target_: hotpp.nn.Embedder
       embeddings:
         labels:  # dummy.
-          in: 10
+          in: 1
           out: 4
           clip: true
         level_3:
@@ -173,7 +174,7 @@ trainer:
   devices: 1
   max_epochs: 30
   enable_checkpointing: true
-  precision: 16-mixed
+  precision: bf16-mixed
   gradient_clip_val: 1  # Increases training stability.
   check_val_every_n_epoch: 5
   model_selection:
