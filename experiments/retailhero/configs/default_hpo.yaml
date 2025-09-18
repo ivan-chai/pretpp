@@ -20,6 +20,7 @@ module:
   hpo_params:
     weights_parametrization: abs
     apply_optimizer_correction: true
+    clip_hp_grad: 0.1
   downstream_loss: loss_1_target
   loss_projection_partial:
     _target_: pretpp.nn.CatHead
