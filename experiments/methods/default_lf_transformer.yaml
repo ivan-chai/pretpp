@@ -10,6 +10,7 @@ module:
       strategy_partial:
         _target_: pretpp.nn.LongFormerHTStrategy
         _partial_: true
-        kernel_size: 10
+        kernel_size: null
         global_frequency: 0.1
+      causal: false
   aggregator: null

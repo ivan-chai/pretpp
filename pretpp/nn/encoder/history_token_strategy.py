@@ -91,6 +91,10 @@ class HTStrategyBase(ABC, torch.nn.Module):
     def init_token(self, n_embd):
         self.token = torch.nn.Parameter(torch.randn(n_embd))  # (D).
 
+    @property
+    def causal(self):
+        return True
+
     @abstractmethod
     def select(self, timestamps, embedding=False):
         """Select token positions based on lengths. Use internal state for storage."""
@@ -546,13 +550,17 @@ class LongFormerHTStrategy(HTStrategyBase):
     """Simulate LongFormer (don't insert extra tokens). Predict the average of global tokens.
 
     Args:
+        kernel_size: If not None, use convolution attention mask with a specified kernel size.
         global_frequency: The fraction of global tokens.
-        apply_probability: The probability of HT usage for each real token.
     """
-    def __init__(self, n_embd, kernel_size=10, global_frequency=0.1):
+    def __init__(self, n_embd, kernel_size=None, global_frequency=0.1):
         super().__init__(n_embd)
         self.kernel_size = kernel_size
         self.global_frequency = global_frequency
+
+    @property
+    def causal(self):
+        return False
 
     def init_token(self, n_embd):
         pass
@@ -565,7 +573,7 @@ class LongFormerHTStrategy(HTStrategyBase):
         max_length = self.seq_lens.max().item()
         assert max_length > 0
         max_tokens = max(1, int(round(self.global_frequency * max_length)))
-        if self.training:
+        if not self.embedding:
             # Use random locations at train to prevent overfitting.
             global_positions = 1 + torch.randperm(max_length - 1, device=self.device)[:max_tokens - 1].sort()[0]  # (R - 1) in [1, L), sorted.
             global_positions = torch.cat([torch.zeros([1], device=self.device, dtype=torch.long), global_positions])  # (R) in [0, L), sorted.
@@ -587,8 +595,12 @@ class LongFormerHTStrategy(HTStrategyBase):
     def make_attention_mask(self):
         # Put ones at diagonals.
         conv_mask = torch.ones(self.length, self.length, dtype=torch.bool, device=self.device)
-        conv_mask = torch.tril(conv_mask, self.kernel_size)
-        conv_mask = torch.triu(conv_mask, -self.kernel_size)
+        if self.kernel_size:
+            conv_mask = torch.tril(conv_mask, self.kernel_size)
+            conv_mask = torch.triu(conv_mask, -self.kernel_size)
+
+        # Add causality to all tokens except global.
+        conv_mask = torch.tril(conv_mask)
 
         # Put ones at global rows and cols.
         glob_mask = torch.zeros(self.length, self.length, dtype=torch.bool, device=self.device)
@@ -601,8 +613,7 @@ class LongFormerHTStrategy(HTStrategyBase):
 
     def extract_outputs(self, x):
         if self.embedding:
-            # Average global token output.
-            return x.payload.take_along_dim(self.global_positions[None, :, None], 1).mean(1)  # (B, D).
+            return x.payload.take_along_dim((x.seq_lens[:, None, None] - 1).clip(min=0), 1).squeeze(1)  # (B, D).
         else:
             return x
 
