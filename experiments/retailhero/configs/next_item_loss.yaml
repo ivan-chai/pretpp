@@ -6,20 +6,21 @@ module:
         _target_: hotpp.losses.TimeMAELoss
         max_delta: ${max_time_delta}
         smoothing: 1
-        grad_scale: 0.4
+        grad_scale: 0.8  # 0.1
       level_3:
         _target_: hotpp.losses.CrossEntropyLoss
-        num_classes: 203
+        num_classes: 203 # 0.26
+        grad_scale: 0  # 0.1
       level_4:
         _target_: hotpp.losses.CrossEntropyLoss
-        num_classes: 790
-        grad_scale: 1
+        num_classes: 790 # 0.26
+        grad_scale: 0.8
       trn_sum_from_iss:
         _target_: hotpp.losses.MAELoss
-        grad_scale: 0.4
+        grad_scale: 0.05  # 0.1
       netto:
         _target_: hotpp.losses.MAELoss
-        grad_scale: 1
+        grad_scale: 0.05    # 0.26
       regular_points_received:
         _target_: hotpp.losses.MAELoss
-        grad_scale: 0.05
+        grad_scale: 0.3 # 0.01

@@ -10,6 +10,7 @@ command:
   - configs
   - --config-name
   - next_item_transformer
+  - data_module.batch_size=128
   - ~seed_everything
   - ~model_path
   - ~report
