@@ -1,0 +1,14 @@
+defaults:
+  - default_transformer
+  - _self_
+
+module:
+  seq_encoder:
+    model_partial:
+      _target_: pretpp.nn.HistoryTokenTransformer
+      embed_layer: all
+      strategy_partial:
+        _target_: pretpp.nn.RecMemHTStrategy
+        _partial_: true
+        n_tokens: 3
+  aggregator: null
