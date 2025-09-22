@@ -476,18 +476,20 @@ class RecMemHTStrategy(HTStrategyImpl):
 
     Args:
         n_tokens: The number of tokens.
+        multitoken: Whether to use the same history token for all positions or use different tokens.
         apply_probability: The probability of HT usage for each real token.
         predict: The type of tokens used for prediction (`input_tokens`, `history_tokens` or `all`).
     """
-    def __init__(self, n_embd, n_tokens=3, apply_probability=1.0,
+    def __init__(self, n_embd, n_tokens=3, multitoken=False, apply_probability=1.0,
                  predict="input_tokens"):
         super(HTStrategyBase, self).__init__()
         self.n_tokens = n_tokens
+        self.multitoken = multitoken
         super().__init__(n_embd, apply_probability=apply_probability,
                          predict=predict, embedding="last")
 
     def init_token(self, n_embd):
-        self.token = torch.nn.Parameter(torch.randn(self.n_tokens, n_embd))  # (K, D).
+        self.token = torch.nn.Parameter(torch.randn(self.n_tokens if self.multitoken else 1, n_embd))  # (K, D).
 
     def select_positions(self, lengths):
         max_length = lengths.max().item()
