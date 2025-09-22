@@ -28,12 +28,12 @@ transformer_cls_token:
   operation_kind: 0
   operation_type: 0
   operation_type_group: 0
-#  card_type: 0
+  card_type: 0
   ecommerce_flag: 0
   payment_system: 0
   income_flag: 0
-#  country: 0
-#  city: 0
+  country: 0
+  city: 0
   mcc_category: 0
   day_of_week: 0
   hour: 0
@@ -58,14 +58,14 @@ data_module:
     - labels
     - currency
     - operation_kind
-#    - card_type
+    - card_type
     - operation_type
     - operation_type_group
     - ecommerce_flag
     - payment_system
     - income_flag
-#    - country
-#    - city
+    - country
+    - city
     - mcc_category
     - day_of_week
     - hour
@@ -136,9 +136,9 @@ module:
         operation_kind:
           in: 9
           out: 2
-#        card_type:
-#          in: 177
-#          out: 4
+        card_type:
+          in: 177
+          out: 4
         operation_type:
           in: 24
           out: 4
@@ -147,19 +147,19 @@ module:
           out: 32
         ecommerce_flag:
           in: 5
-          out: 1
+          out: 2
         payment_system:
           in: 9
           out: 4
         income_flag:
           in: 5
-          out: 1
-#        country:
-#          in: 26
-#          out: 4
-#        city:
-#          in: 170
-#          out: 4
+          out: 2
+        country:
+          in: 26
+          out: 4
+        city:
+          in: 170
+          out: 4
         mcc_category:
           in: 30
           out: 16
