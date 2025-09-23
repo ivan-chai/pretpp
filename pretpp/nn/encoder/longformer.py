@@ -7,6 +7,7 @@ from torch.nn.functional import _canonical_mask, _none_or_dtype
 from typing import Optional
 from hotpp.data import PaddedBatch
 from hotpp.nn import SimpleTransformer
+from hotpp.nn.encoder.transformer.simple import extended_transformer
 from hotpp.nn.encoder.transformer.rope import MultiheadAttentionRoPE, multi_head_attention_rope_forward
 
 from .history_token_strategy import add_token_to_the_end
@@ -28,13 +29,16 @@ class LongFormer(SimpleTransformer):
         kernel_size: Convolution kernel size or None to disable convolution mask.
         global_frequency: Frequency of the global token.
     """
-    def __init__(self, input_size, *, kernel_size=None, global_frequency=0.1, **kwargs):
+    def __init__(self, input_size, *, kernel_size=None, global_frequency=0.1, embed_layer=None, **kwargs):
         if kwargs.pop("causal", True):
             raise ValueError("LongFormer can't be causal.")
         super().__init__(input_size, **kwargs)
         replace_with_lf_attention(self)
         self.kernel_size = kernel_size
         self.global_frequency = global_frequency
+        if embed_layer == "all":
+            embed_layer = list(range(self.n_layer))
+        self.embed_layer = embed_layer
 
     def _select_global(self, seq_lens, embedding=False):
         device = seq_lens.device
@@ -80,28 +84,54 @@ class LongFormer(SimpleTransformer):
 
         return mask  # Zeros for allowed interractions.
 
-    def transform(self, embeddings, embedding=False):
+    def transform(self, embeddings, return_states=False, embedding=False):
+        if return_states not in {False, "full"}:
+            raise ValueError(f"Unknown states mode: {return_states}")
+        return_states = return_states == "full"
         global_positions = self._select_global(embeddings.seq_lens, embedding=embedding)
         attention_mask = self._make_attention_mask(embeddings, global_positions,
                                                    embedding=embedding)
         if attention_mask.ndim == 3:
             if attention_mask.shape[0] == len(embeddings):
                 attention_mask = attention_mask.repeat_interleave(self.n_head, dim=0)
-        outputs = self.encoder(embeddings.payload,
-                               mask=attention_mask.float(),  # To skip "canonical" checks.
-                               src_key_padding_mask=~embeddings.seq_len_mask.bool(),
-                               is_causal=False,
-                               rope=self.rope)  # (B, L, D).
-        return PaddedBatch(outputs, embeddings.seq_lens)
+        with extended_transformer(self.encoder, cache_hiddens=return_states) as encoder:
+            outputs = self.encoder(embeddings.payload,
+                                   mask=attention_mask.float(),  # Use float to skip "canonical" checks.
+                                   src_key_padding_mask=~embeddings.seq_len_mask.bool(),
+                                   is_causal=False,
+                                   rope=self.rope)  # (B, L, D).
+            if return_states:
+                states = encoder.activations
+            else:
+                states = None
+        return PaddedBatch(outputs, embeddings.seq_lens), states
 
     def embed(self, x, timestamps):
         embeddings = PaddedBatch(self.input_projection(x.payload), x.seq_lens)  # (B, L, D).
         embeddings = PaddedBatch(self.positional(embeddings.payload, timestamps.payload), embeddings.seq_lens)  # (B, L, D).
+        return_states = "full" if self.embed_layer is not None else False
         if self.rope is not None:
             with self.rope.cache(timestamps.payload):
-                outputs = self.transform(embeddings, embedding=True)
+                outputs, states = self.transform(embeddings,
+                                                 return_states=return_states,
+                                                 embedding=True)
         else:
-            outputs = self.transform(embeddings, embedding=True)
+            outputs, states = self.transform(embeddings,
+                                             return_states=return_states,
+                                             embedding=True)
+        if self.embed_layer is not None:
+            # states: N * (B, L, D).
+            try:
+                embed_layers = list(self.embed_layer)
+            except TypeError:
+                embed_layers = [self.embed_layer]
+            all_outputs = []
+            for embed_layer in embed_layers:
+                embed_layer = embed_layer % self.n_layer
+                outputs = states[embed_layer]  # (B, L, D).
+                all_outputs.append(outputs)
+            outputs = torch.stack(all_outputs, 0).sum(0)  # (B, L, D).
+            outputs = PaddedBatch(outputs, embeddings.seq_lens)
         embeddings = outputs.payload.take_along_dim((outputs.seq_lens[:, None, None] - 1).clip(min=0), 1).squeeze(1)  # (B, D).
         return embeddings
 
@@ -112,9 +142,9 @@ class LongFormer(SimpleTransformer):
         embeddings = PaddedBatch(self.positional(embeddings.payload, timestamps.payload), embeddings.seq_lens)  # (B, L, D).
         if self.rope is not None:
             with self.rope.cache(timestamps.payload):
-                outputs = self.transform(embeddings)
+                outputs, _ = self.transform(embeddings)
         else:
-            outputs = self.transform(embeddings)
+            outputs, _ = self.transform(embeddings)
         states = None
         return outputs, states
 
