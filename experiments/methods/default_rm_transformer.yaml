@@ -8,5 +8,5 @@ module:
       _target_: pretpp.nn.RecurrentMemoryTransformer
       chunk_size: ${transformer_recmem_chunk_size}
       n_tokens: 3
-      multitoken: false
+      multitoken: true
   aggregator: null
