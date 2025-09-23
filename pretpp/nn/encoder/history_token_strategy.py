@@ -555,8 +555,8 @@ class LongFormerHTStrategy(HTStrategyBase):
         kernel_size: If not None, use convolution attention mask with a specified kernel size.
         global_frequency: The fraction of global tokens.
     """
-    def __init__(self, n_embd, kernel_size=None, global_frequency=0.1):
-        super().__init__(n_embd)
+    def __init__(self, kernel_size=None, global_frequency=0.1):
+        super().__init__(None)
         self.kernel_size = kernel_size
         self.global_frequency = global_frequency
 
