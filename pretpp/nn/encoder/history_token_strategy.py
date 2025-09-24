@@ -23,12 +23,13 @@ def add_token_to_the_end(x, timestamps, token):
     return new_x, new_timestamps
 
 
-def make_ht_attention_mask(length, ht_positions, active_tokens="random", device=None):
+def make_ht_attention_mask(length, ht_positions, use_attention_sink=False, active_tokens="random", device=None):
     """Make attention mask for history tokens.
 
     Args:
         length: The length of input sequence.
         ht_positions: Sorted token indices to insert HT after with shape (R).
+        use_attention_sink: If true, always allow access to the first token.
         active_tokens: Either `random`, `last`, `none` or a tensor with shape (L) of HT token indices
             with 0 meaning no HT and R meaning the last HT.
 
@@ -78,6 +79,9 @@ def make_ht_attention_mask(length, ht_positions, active_tokens="random", device=
         torch.cat([mask_rl, mask_rr], 1)
     ], 0)
     mask = mask.take_along_dim(order[:, None], 0).take_along_dim(order[None, :], 1)
+    if use_attention_sink and mask.shape[1] > 0:
+        assert mask.ndim == 2
+        mask[:, 0] = False
     return mask
 
 
@@ -175,18 +179,20 @@ class HTStrategyImpl(HTStrategyBase):
     """Simple implementation of common strategy algorithms.
 
     Args:
+        use_attention_sink: If true, always allow access to the first token.
         apply_probability: The probability of HT usage for each real token.
         token_selection: Either `random`, `last` or `none`.
         predict: The type of tokens used for prediction (`input_tokens`, `history_tokens` or `all`).
         embedding: Either `end_ht`, `avg_ht`, `avg`, `last`, or `mix_end_ht_avg`.
     """
-    def __init__(self, n_embd, apply_probability=0.5, token_selection="random",
+    def __init__(self, n_embd, use_attention_sink=False, apply_probability=0.5, token_selection="random",
                  predict="input_tokens", embedding="end_ht"):
         if token_selection not in {"random", "last", "none"}:
             raise ValueError(f"Unknown token selection mode: {token_selection}")
         if predict not in {"input_tokens", "history_tokens", "all"}:
             raise ValueError(f"Unknown prediction mode: {predict}")
         super().__init__(n_embd)
+        self.use_attention_sink = use_attention_sink
         self.apply_probability = apply_probability
         self.token_selection = token_selection
         self.predict = predict
@@ -290,6 +296,7 @@ class HTStrategyImpl(HTStrategyBase):
         if self.apply_to_batch:
             token_selection = "none" if self.embedding else self.token_selection
             return make_ht_attention_mask(self.length, self.after_positions,
+                                          use_attention_sink=self.use_attention_sink,
                                           active_tokens=token_selection,
                                           device=self.device)
         else:
@@ -347,10 +354,11 @@ class SubsetHTStrategy(HTStrategyImpl):
         predict: The type of tokens used for prediction (`input_tokens`, `history_tokens` or `all`).
         embedding: Either `end_ht`, `avg_ht`, `avg`, `last`, or `mix_end_ht_avg`.
     """
-    def __init__(self, n_embd, frequency=0.1, apply_probability=0.5,
+    def __init__(self, n_embd, use_attention_sink=False, frequency=0.1, apply_probability=0.5,
                  token_selection="random", token_sampling="uniform",
                  predict="input_tokens", embedding="end_ht"):
         super().__init__(n_embd,
+                         use_attention_sink=use_attention_sink,
                          apply_probability=apply_probability,
                          token_selection=token_selection,
                          predict=predict,
