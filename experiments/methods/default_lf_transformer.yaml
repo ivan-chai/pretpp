@@ -8,6 +8,6 @@ module:
       _target_: pretpp.nn.LongFormer
       embed_layer: all
       kernel_size: null
-      global_frequency: ${transformer_history_token_frequency}
+      global_frequency: 0
       causal: false
   aggregator: null

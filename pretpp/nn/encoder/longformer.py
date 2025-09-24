@@ -7,7 +7,7 @@ from torch.nn.functional import _canonical_mask, _none_or_dtype
 from typing import Optional
 from hotpp.data import PaddedBatch
 from hotpp.nn import SimpleTransformer
-from hotpp.nn.encoder.transformer.simple import extended_transformer
+from hotpp.nn.encoder.transformer.simple import extended_transformer, no_mha_fast_path
 from hotpp.nn.encoder.transformer.rope import MultiheadAttentionRoPE, multi_head_attention_rope_forward
 
 from .history_token_strategy import add_token_to_the_end
@@ -27,14 +27,16 @@ class LongFormer(SimpleTransformer):
     Args:
         chunk_size: The maximum size of input chunk at each iteration.
         kernel_size: Convolution kernel size or None to disable convolution mask.
+        first_global: Whether to set the first token as global token.
         global_frequency: Frequency of the global token.
     """
-    def __init__(self, input_size, *, kernel_size=None, global_frequency=0.1, embed_layer=None, **kwargs):
-        if kwargs.pop("causal", True):
-            raise ValueError("LongFormer can't be causal.")
+    def __init__(self, input_size, *, kernel_size=None, first_global=False, global_frequency=0.1, embed_layer=None, **kwargs):
         super().__init__(input_size, **kwargs)
+        if self.causal:
+            raise ValueError("LongFormer can't be causal.")
         replace_with_lf_attention(self)
         self.kernel_size = kernel_size
+        self.first_global = first_global
         self.global_frequency = global_frequency
         if embed_layer == "all":
             embed_layer = list(range(self.n_layer))
@@ -44,14 +46,25 @@ class LongFormer(SimpleTransformer):
         device = seq_lens.device
         max_length = seq_lens.max().item()
         assert max_length > 0
-        max_tokens = max(1, int(round(self.global_frequency * max_length)))
-        if not embedding:
-            # Use random locations at train to prevent overfitting.
-            global_positions = 1 + torch.randperm(max_length - 1, device=device)[:max_tokens - 1].sort()[0]  # (R - 1) in [1, L), sorted.
-            global_positions = torch.cat([torch.zeros([1], device=device, dtype=torch.long), global_positions])  # (R) in [0, L), sorted.
+        max_tokens = max(1 if self.first_global else 0, int(round(self.global_frequency * max_length)))
+        if max_tokens == 0:
+            return torch.zeros([0], device=device, dtype=torch.long)
+        if self.first_global:
+            if not embedding:
+                # Use random locations at train to prevent overfitting.
+                global_positions = 1 + torch.randperm(max_length - 1, device=device)[:max_tokens - 1].sort()[0]  # (R - 1) in [1, L), sorted.
+                global_positions = torch.cat([torch.zeros([1], device=device, dtype=torch.long), global_positions])  # (R) in [0, L), sorted.
+            else:
+                # Use regular locations at inference for preproducibility.
+                global_positions = torch.arange(0, max_length, max(1, int(round(max_length / max_tokens))), device=device)
         else:
-            # Use regular locations at inference for preproducibility.
-            global_positions = torch.arange(0, max_length, max(1, int(round(max_length / max_tokens))), device=device)
+            if not embedding:
+                # Use random locations at train to prevent overfitting.
+                global_positions = torch.randperm(max_length, device=device)[:max_tokens].sort()[0]  # (R - 1) in [1, L), sorted.
+            else:
+                # Use regular locations at inference for preproducibility.
+                step = max(1, int(round(max_length / max_tokens)))
+                global_positions = torch.arange(step, max_length, step, device=device)
         return global_positions
 
     def _make_attention_mask(self, embeddings, global_positions, embedding=False):
@@ -66,20 +79,22 @@ class LongFormer(SimpleTransformer):
         # Put ones at diagonals.
         mask = torch.ones(length, length, dtype=torch.long, device=embeddings.device)
         if self.kernel_size:
-            mask = torch.tril(conv_mask, self.kernel_size)
-            mask = torch.triu(conv_mask, -self.kernel_size)
+            mask = torch.tril(mask, self.kernel_size)
+            mask = torch.triu(mask, -self.kernel_size)
 
         # Add causality to all tokens except global.
         mask = 1 - torch.tril(mask)
-
-        # Put ones at global rows and cols.
-        mask[:, global_positions] = 0
-        mask[global_positions] = -1
-
-        # Make last tokens global.
         mask = mask[None].repeat(batch_size, 1, 1)  # (B, L, L).
         last = (embeddings.seq_lens - 1).clip(min=0)  # (B).
+
+        # Put ones at global rows and cols.
+        # Make last tokens global.
+        if global_positions.numel():
+            mask[:, :, global_positions] = 0
         mask.scatter_(2, last[:, None, None].expand(batch_size, length, 1), 0)
+
+        if global_positions.numel():
+            mask[:, global_positions, :] = -1
         mask.scatter_(1, last[:, None, None].expand(batch_size, 1, length), -1)
 
         return mask  # Zeros for allowed interractions.
@@ -94,16 +109,17 @@ class LongFormer(SimpleTransformer):
         if attention_mask.ndim == 3:
             if attention_mask.shape[0] == len(embeddings):
                 attention_mask = attention_mask.repeat_interleave(self.n_head, dim=0)
-        with extended_transformer(self.encoder, cache_hiddens=return_states) as encoder:
-            outputs = self.encoder(embeddings.payload,
-                                   mask=attention_mask.float(),  # Use float to skip "canonical" checks.
-                                   src_key_padding_mask=~embeddings.seq_len_mask.bool(),
-                                   is_causal=False,
-                                   rope=self.rope)  # (B, L, D).
-            if return_states:
-                states = encoder.activations
-            else:
-                states = None
+        with no_mha_fast_path():
+            with extended_transformer(self.encoder, cache_hiddens=return_states) as encoder:
+                outputs = self.encoder(embeddings.payload,
+                                       mask=attention_mask.float(),  # Use float to skip "canonical" checks.
+                                       src_key_padding_mask=~embeddings.seq_len_mask.bool(),
+                                       is_causal=False,
+                                       rope=self.rope)  # (B, L, D).
+                if return_states:
+                    states = encoder.activations
+                else:
+                    states = None
         return PaddedBatch(outputs, embeddings.seq_lens), states
 
     def embed(self, x, timestamps):
