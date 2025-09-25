@@ -1,0 +1,13 @@
+defaults:
+  - default_transformer
+  - _self_
+
+module:
+  seq_encoder:
+    model_partial:
+      _target_: pretpp.nn.LongFormer
+      embed_layer: all
+      kernel_size: null
+      global_frequency: 0
+      causal: false
+  aggregator: null

@@ -1,3 +1,5 @@
 from .bidir_rnn import BidirGRU
-from .history_token_strategy import FullHTStrategy, SubsetHTStrategy, FixedHTStrategy, LastHTStrategy, NoHTStrategy
+from .history_token_strategy import FullHTStrategy, SubsetHTStrategy, FixedHTStrategy, LastHTStrategy, RecMemHTStrategy, LongFormerHTStrategy, NoHTStrategy
 from .history_token_transformer import HistoryTokenTransformer
+from .recurrent_memory_transformer import RecurrentMemoryTransformer
+from .longformer import LongFormer
