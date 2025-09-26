@@ -32,13 +32,15 @@ class CorrHPOptimizer(torch.optim.Optimizer):
     output = model(x)
     down_loss, loss1, loss2 = criterion(x)
 
-    def closure(down_weight, w1, w2, stage=None):
+    def closure(down_weight, free_term_weight, w1, w2, stage=None):
         optimizer.zero_grad()
-        loss = down_weight * down_loss + w1 * loss1 + w2 * loss2
+        loss = down_weight * down_loss + w1 * loss1 + w2 * loss2 + free_term_weight * loss_free
         loss.backward(retain_graph=stage != HPO_STAGE_FINAL)
 
     optimizer.hpo_step(closure)
     ```
+
+    NOTE: Free term is responsible for the part of the loss that must to be tuned.
     """
     def __init__(self, params, base_optimizer_cls, downstream_weight="merge",
                  weights_parametrization="sigmoid", weights_normalization="sum",
@@ -86,13 +88,13 @@ class CorrHPOptimizer(torch.optim.Optimizer):
         closure = torch.enable_grad()(closure)  # the closure should do a full forward-backward pass
         downstream_weight = 1
         loss_weights = [0] * self.n_weights
-        closure(downstream_weight, *loss_weights, stage=HPO_STAGE_DOWNSTREAM)
+        closure(downstream_weight, 0, *loss_weights, stage=HPO_STAGE_DOWNSTREAM)
         self._down_grads_cache = self._gather_grads()
 
     def hpo_step(self, closure=None):
         """Make a single step.
 
-        The closure is used like this: closure(target_loss_weight, *loss_weights).
+        The closure is used like this: closure(target_loss_weight, free_term_weight, *loss_weights, stage=None).
         The closure must zero grads and compute gradients.
         """
         assert closure is not None, "Sharpness Aware Minimization requires closure, but it was not provided"
@@ -116,7 +118,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
             # Compute downstream grads.
             downstream_weight = 1
             loss_weights = [0] * self.n_weights
-            closure(downstream_weight, *loss_weights, stage=HPO_STAGE_DOWNSTREAM)
+            closure(downstream_weight, 0, *loss_weights, stage=HPO_STAGE_DOWNSTREAM)
             down_train_grads = self._gather_grads()
             if self._down_grads_cache is None:
                 down_grads = down_train_grads
@@ -130,7 +132,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                 grad_sum = [torch.zeros_like(v) for v in down_grads]
             for i, w in enumerate(weights):
                 loss_weights[i] = 1
-                closure(downstream_weight, *loss_weights, stage=i)
+                closure(downstream_weight, 0, *loss_weights, stage=i)
                 loss_weights[i] = 0
                 loss_grads = self._gather_grads(apply_optimizer_correction=self.apply_optimizer_correction)
                 assert len(down_grads) == len(loss_grads)
@@ -175,7 +177,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                     weight_grads *= self.clip_hp_grad / grad_norm
 
             # Compute model grads.
-            closure(self.downstream_weight, *actual_weights, stage=HPO_STAGE_FINAL)
+            closure(self.downstream_weight, 1, *actual_weights, stage=HPO_STAGE_FINAL)
 
             # Set weights grads.
             for w, g in zip(self.param_groups[0]["params"], weight_grads):

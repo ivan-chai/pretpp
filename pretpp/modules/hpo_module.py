@@ -68,7 +68,8 @@ class HPOModule(BaseModule):
         final_loss = next(iter(losses.values())).clone()
 
         opt = self.optimizers()
-        def closure(down, *weights, stage=None):
+        def closure(down, free, *weights, stage=None):
+            # The free term is not used.
             opt.zero_grad()
             assert len(weights) == len(self.hpo_losses)
             loss = sum([w * losses[k] for k, w in zip(self.hpo_losses, weights)], down * losses[self.downstream_loss])

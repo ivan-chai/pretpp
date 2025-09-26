@@ -3,7 +3,7 @@ import math
 import torch
 from unittest import TestCase, main
 
-from pretpp.optim import CorrHPOptimizer
+from pretpp.optim import CorrHPOptimizer, HPO_STAGE_DOWNSTREAM, HPO_STAGE_FINAL
 
 
 def f1(x):
@@ -29,7 +29,7 @@ class TestCorrHPOptimizer(TestCase):
         alpha = torch.nn.Parameter(torch.rand([]))
         beta = torch.nn.Parameter(torch.rand([]))
 
-        def closure(down, alpha, beta, stage=None):
+        def closure(down, free, alpha, beta, stage=None):
             optimizer.zero_grad()
             if down > 0:
                 v = down * downstream(x)
@@ -101,7 +101,7 @@ class TestCorrHPOptimizer(TestCase):
                                             lr=0.01)
 
                 for step in range(2000):
-                    def closure(down, alpha, beta, stage=None):
+                    def closure(down, free, alpha, beta, stage=None):
                         optimizer.zero_grad()
                         if down > 0:
                             v = down * downstream(x)
