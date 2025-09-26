@@ -23,12 +23,13 @@ def add_token_to_the_end(x, timestamps, token):
     return new_x, new_timestamps
 
 
-def make_ht_attention_mask(length, ht_positions, active_tokens="random", device=None):
+def make_ht_attention_mask(length, ht_positions, use_attention_sink=False, active_tokens="random", device=None):
     """Make attention mask for history tokens.
 
     Args:
         length: The length of input sequence.
         ht_positions: Sorted token indices to insert HT after with shape (R).
+        use_attention_sink: If true, always allow access to the first token.
         active_tokens: Either `random`, `last`, `none` or a tensor with shape (L) of HT token indices
             with 0 meaning no HT and R meaning the last HT.
 
@@ -78,6 +79,9 @@ def make_ht_attention_mask(length, ht_positions, active_tokens="random", device=
         torch.cat([mask_rl, mask_rr], 1)
     ], 0)
     mask = mask.take_along_dim(order[:, None], 0).take_along_dim(order[None, :], 1)
+    if use_attention_sink and mask.shape[1] > 0:
+        assert mask.ndim == 2
+        mask[:, 0] = False
     return mask
 
 
@@ -90,6 +94,10 @@ class HTStrategyBase(ABC, torch.nn.Module):
 
     def init_token(self, n_embd):
         self.token = torch.nn.Parameter(torch.randn(n_embd))  # (D).
+
+    @property
+    def causal(self):
+        return True
 
     @abstractmethod
     def select(self, timestamps, embedding=False):
@@ -171,18 +179,20 @@ class HTStrategyImpl(HTStrategyBase):
     """Simple implementation of common strategy algorithms.
 
     Args:
+        use_attention_sink: If true, always allow access to the first token.
         apply_probability: The probability of HT usage for each real token.
         token_selection: Either `random`, `last` or `none`.
         predict: The type of tokens used for prediction (`input_tokens`, `history_tokens` or `all`).
         embedding: Either `end_ht`, `avg_ht`, `avg`, `last`, or `mix_end_ht_avg`.
     """
-    def __init__(self, n_embd, apply_probability=0.5, token_selection="random",
+    def __init__(self, n_embd, use_attention_sink=False, apply_probability=0.5, token_selection="random",
                  predict="input_tokens", embedding="end_ht"):
         if token_selection not in {"random", "last", "none"}:
             raise ValueError(f"Unknown token selection mode: {token_selection}")
         if predict not in {"input_tokens", "history_tokens", "all"}:
             raise ValueError(f"Unknown prediction mode: {predict}")
         super().__init__(n_embd)
+        self.use_attention_sink = use_attention_sink
         self.apply_probability = apply_probability
         self.token_selection = token_selection
         self.predict = predict
@@ -286,6 +296,7 @@ class HTStrategyImpl(HTStrategyBase):
         if self.apply_to_batch:
             token_selection = "none" if self.embedding else self.token_selection
             return make_ht_attention_mask(self.length, self.after_positions,
+                                          use_attention_sink=self.use_attention_sink,
                                           active_tokens=token_selection,
                                           device=self.device)
         else:
@@ -343,10 +354,11 @@ class SubsetHTStrategy(HTStrategyImpl):
         predict: The type of tokens used for prediction (`input_tokens`, `history_tokens` or `all`).
         embedding: Either `end_ht`, `avg_ht`, `avg`, `last`, or `mix_end_ht_avg`.
     """
-    def __init__(self, n_embd, frequency=0.1, apply_probability=0.5,
+    def __init__(self, n_embd, use_attention_sink=False, frequency=0.1, apply_probability=0.5,
                  token_selection="random", token_sampling="uniform",
                  predict="input_tokens", embedding="end_ht"):
         super().__init__(n_embd,
+                         use_attention_sink=use_attention_sink,
                          apply_probability=apply_probability,
                          token_selection=token_selection,
                          predict=predict,
@@ -464,6 +476,155 @@ class LastHTStrategy(HTStrategyBase):
             return PaddedBatch(x.payload[:, :-1], (x.seq_lens - 1).clip(min=0))
         else:
             assert self.predict == "all"
+            return x
+
+
+class RecMemHTStrategy(HTStrategyImpl):
+    """Simulate recurrent-memory transformer.
+
+    Args:
+        n_tokens: The number of tokens.
+        multitoken: Whether to use the same history token for all positions or use different tokens.
+        apply_probability: The probability of HT usage for each real token.
+        predict: The type of tokens used for prediction (`input_tokens`, `history_tokens` or `all`).
+    """
+    def __init__(self, n_embd, n_tokens=3, multitoken=False, apply_probability=1.0,
+                 predict="input_tokens"):
+        super(HTStrategyBase, self).__init__()
+        self.n_tokens = n_tokens
+        self.multitoken = multitoken
+        super().__init__(n_embd, apply_probability=apply_probability,
+                         predict=predict, embedding="last")
+
+    def init_token(self, n_embd):
+        self.token = torch.nn.Parameter(torch.randn(self.n_tokens if self.multitoken else 1, n_embd))  # (K, D).
+
+    def select_positions(self, lengths):
+        max_length = lengths.max().item()
+        offset = torch.randint(0, max_length, size=[]).item()
+        return torch.full([self.n_tokens], offset, device=self.device)  # (R) in [0, L), sorted.
+
+    def insert_tokens(self, x, timestamps):
+        if self.embedding:
+            # Put K tokens to the end.
+            token = self.token.to(x.payload.dtype)  # (K, D).
+            for i in range(self.n_tokens):
+                x, timestamps = add_token_to_the_end(x, timestamps, token[i])
+            return x, timestamps
+        elif self.apply_to_batch:
+            b, l = x.shape
+            d = self.token.shape[1]
+            r = len(self.positions)
+            device = x.device
+
+            # Insert tokens.
+            offset = self.positions[0].item()
+            new_x = torch.cat([x.payload[:, :offset],
+                               self.token[None].expand(b, self.n_tokens, d),
+                               x.payload[:, offset:]], 1)  # (B, L + K, D).
+            new_timestamps = torch.cat([timestamps.payload[:, :offset],
+                                        timestamps.payload[:, offset - 1:offset].expand(b, self.n_tokens),
+                                        timestamps.payload[:, offset:]], 1)  # (B, L + K)
+            assert new_x.shape[:2] == new_timestamps.shape
+            active_tokens = (self.after_positions[None] < x.seq_lens[:, None]).sum(1)  # (B) in [0, R].
+            new_lengths = x.seq_lens + active_tokens  # (B) in [0, L + R].
+            return PaddedBatch(new_x, new_lengths), PaddedBatch(new_timestamps, new_lengths)
+        else:
+            token_gradient_branch = 0 * self.token.sum()
+            new_x = PaddedBatch(x.payload + token_gradient_branch, x.seq_lens)
+            return new_x, timestamps
+
+    def make_attention_mask(self):
+        """Use all history tokens, but skip early events."""
+        if self.apply_to_batch:
+            first = self.after_positions[0]
+            total_length = self.n_tokens + self.length
+            mask = torch.zeros((total_length, total_length), dtype=torch.bool, device=self.device)
+            mask[:first, first + self.n_tokens:] = True
+            mask[first + self.n_tokens:, :first] = True
+            return mask
+        else:
+            return None
+
+    def extract_outputs(self, x):
+        if self.embedding:
+            # Average last K tokens.
+            assert (x.seq_lens >= self.n_tokens).all()
+            indices = torch.cat([(x.seq_lens[:, None, None] - i) for i in range(1, 1 + self.n_tokens)], 1)  # (B, K, 1).
+            return x.payload.take_along_dim(indices, 1).mean(1)  # (B, D).
+        else:
+            return super().extract_outputs(x)
+
+
+class LongFormerHTStrategy(HTStrategyBase):
+    """Simulate LongFormer (don't insert extra tokens). Predict the average of global tokens.
+
+    Args:
+        kernel_size: If not None, use convolution attention mask with a specified kernel size.
+        global_frequency: The fraction of global tokens.
+    """
+    def __init__(self, kernel_size=None, global_frequency=0.1):
+        super().__init__(None)
+        self.kernel_size = kernel_size
+        self.global_frequency = global_frequency
+
+    @property
+    def causal(self):
+        return False
+
+    def init_token(self, n_embd):
+        pass
+
+    def select(self, timestamps, embedding=False):
+        self.embedding = embedding
+        self.device = timestamps.device
+        self.length = timestamps.payload.shape[1]
+        self.seq_lens = timestamps.seq_lens
+        max_length = self.seq_lens.max().item()
+        assert max_length > 0
+        max_tokens = max(1, int(round(self.global_frequency * max_length)))
+        if not self.embedding:
+            # Use random locations at train to prevent overfitting.
+            global_positions = 1 + torch.randperm(max_length - 1, device=self.device)[:max_tokens - 1].sort()[0]  # (R - 1) in [1, L), sorted.
+            global_positions = torch.cat([torch.zeros([1], device=self.device, dtype=torch.long), global_positions])  # (R) in [0, L), sorted.
+        else:
+            # Use regular locations at inference for preproducibility.
+            global_positions = torch.arange(0, max_length, max(1, int(round(max_length / max_tokens))), device=self.device)
+        self.global_positions = global_positions
+
+    def clear_state(self):
+        del self.embedding
+        del self.device
+        del self.length
+        del self.seq_lens
+        del self.global_positions
+
+    def insert_tokens(self, x, timestamps):
+        return x, timestamps
+
+    def make_attention_mask(self):
+        # Put ones at diagonals.
+        conv_mask = torch.ones(self.length, self.length, dtype=torch.bool, device=self.device)
+        if self.kernel_size:
+            conv_mask = torch.tril(conv_mask, self.kernel_size)
+            conv_mask = torch.triu(conv_mask, -self.kernel_size)
+
+        # Add causality to all tokens except global.
+        conv_mask = torch.tril(conv_mask)
+
+        # Put ones at global rows and cols.
+        glob_mask = torch.zeros(self.length, self.length, dtype=torch.bool, device=self.device)
+        glob_mask[self.global_positions] = True
+        glob_mask[:, self.global_positions] = True
+
+        # Combine.
+        mask = ~torch.logical_or(conv_mask, glob_mask)
+        return mask  # Zeros for allowed interractions.
+
+    def extract_outputs(self, x):
+        if self.embedding:
+            return x.payload.take_along_dim((x.seq_lens[:, None, None] - 1).clip(min=0), 1).squeeze(1)  # (B, D).
+        else:
             return x
 
 

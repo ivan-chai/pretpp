@@ -42,6 +42,7 @@ transformer_cls_token:
   log_hour_diff: -1
 transformer_history_token_frequency: 0.3
 transformer_history_token_probability: 0.5
+transformer_recmem_chunk_size: 256
 
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger

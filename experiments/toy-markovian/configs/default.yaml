@@ -27,6 +27,7 @@ transformer_cls_token:
 transformer_history_token_frequency: 0.1
 transformer_history_token_probability: 0.5
 transformer_history_token_positions: [62]  # Before the last token.
+transformer_recmem_chunk_size: 32
 
 logger:
   _target_: pytorch_lightning.loggers.TensorBoardLogger

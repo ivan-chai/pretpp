@@ -16,9 +16,9 @@ class HistoryTokenTransformer(SimpleTransformer):
     """
     def __init__(self, input_size, strategy_partial, embed_layer=None, **kwargs):
         super().__init__(input_size, **kwargs)
-        if not self.causal:
-            raise NotImplementedError("A history-token transformer must be causal.")
         self.strategy = strategy_partial(self.n_embd)
+        if self.strategy.causal != self.causal:
+            raise NotImplementedError("Strategy and transformer causality mismatch.")
         if embed_layer == "all":
             embed_layer = list(range(self.n_layer))
         self.embed_layer = embed_layer
