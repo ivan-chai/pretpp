@@ -8,6 +8,18 @@ HPO_STAGE_DOWNSTREAM = "downstream"
 HPO_STAGE_FINAL = "final"
 
 
+def softabs(x):
+    x_abs = x.abs()
+    x_sq = 0.5 * x.square()
+    return torch.where(x_abs < 1, x_sq, x_abs - 0.5)
+
+
+def softabs_deriv(x):
+    abs_deriv = x.sign()
+    sq_deriv = x
+    return torch.where(x.abs() < 1, sq_deriv, abs_deriv)
+
+
 class CorrHPOptimizer(torch.optim.Optimizer):
     """Correlated Hyperparameter Optimizer.
 
@@ -16,7 +28,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
         base_optimizer_cls: The optimizer to use.
         downstream_weight: The weight of the downstream loss in model optimization or "merge".
             The "merge" value means inserting downstream gradients for the weights, not updated by the main loss.
-        weights_parametrization: Either "exp", "softplus", "tanh", "abs", or "sigmoid".
+        weights_parametrization: Either "exp", "softplus", "tanh", "abs", "softabs", or "sigmoid".
         weights_normalization: Whether to normalize weights by their sum or not ("sum", "norm", or "none").
         apply_optimizer_correction: Try to approximate an actual optimizer step rather than simple SGD.
         clip_hp_grad: Clipping value for hyperparameters gradients.
@@ -49,7 +61,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
         params = list(params)
         if len(params) < 2 or not isinstance(params[0], dict):
             raise ValueError("Expected at least two param groups with the first group being loss weights.")
-        if weights_parametrization not in ["abs", "tanh", "sigmoid", "softplus", "exp"]:
+        if weights_parametrization not in ["abs", "softabs", "tanh", "sigmoid", "softplus", "exp"]:
             raise ValueError(f"Unknown weights parametrization method: {weights_parametrization}")
         if weights_normalization not in ["sum", "norm", "none"]:
             raise ValueError(f"Unknown weights normalization method: {weights_normalization}")
@@ -111,6 +123,8 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                 weights = torch.tanh(logits)
             elif self.weights_parametrization == "abs":
                 weights = torch.abs(logits)
+            elif self.weights_parametrization == "softabs":
+                weights = softabs(logits)
             else:
                 assert self.weights_parametrization == "softplus"
                 weights = torch.nn.functional.softplus(logits)
@@ -166,6 +180,8 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                 weight_grads /= torch.cosh(logits).square() + self.eps
             elif self.weights_parametrization == "abs":
                 weight_grads = torch.where(logits >= 0, weight_grads, -weight_grads)  # torch.sign freezes at zero.
+            elif self.weights_parametrization == "softabs":
+                weight_grads = softabs_deriv(logits) * weight_grads
             elif self.weights_parametrization == "exp":
                 weight_grads *= weights
             else:
