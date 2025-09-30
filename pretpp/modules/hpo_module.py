@@ -88,9 +88,11 @@ class HPOModule(BaseModule):
             opt.cache_downstream(closure)
         else:
             opt.hpo_step(closure)
-            hpo_grads = torch.stack([w.grad for w in self.loss_weights.values()])
-            hpo_grad_norm = torch.linalg.norm(hpo_grads)
-            metrics["hpo_grad_norm"] = hpo_grad_norm
+            hpo_grads = [w.grad for w in self.loss_weights.values() if w.grad is not None]
+            if hpo_grads:
+                hpo_grads = torch.stack(hpo_grads)
+                hpo_grad_norm = torch.linalg.norm(hpo_grads)
+                metrics["hpo_grad_norm"] = hpo_grad_norm
             self._log_metrics("train", len(x), final_loss, losses, metrics, single_batch_metrics=None)
 
         # Make scheduler step if necessary.

@@ -8,18 +8,6 @@ HPO_STAGE_DOWNSTREAM = "downstream"
 HPO_STAGE_FINAL = "final"
 
 
-def softabs(x):
-    x_abs = x.abs()
-    x_sq = 0.5 * x.square()
-    return torch.where(x_abs < 1, x_sq, x_abs - 0.5)
-
-
-def softabs_deriv(x):
-    abs_deriv = x.sign()
-    sq_deriv = x
-    return torch.where(x.abs() < 1, sq_deriv, abs_deriv)
-
-
 class CorrHPOptimizer(torch.optim.Optimizer):
     """Correlated Hyperparameter Optimizer.
 
@@ -28,9 +16,11 @@ class CorrHPOptimizer(torch.optim.Optimizer):
         base_optimizer_cls: The optimizer to use.
         downstream_weight: The weight of the downstream loss in model optimization or "merge".
             The "merge" value means inserting downstream gradients for the weights, not updated by the main loss.
-        weights_parametrization: Either "exp", "softplus", "tanh", "abs", "softabs", or "sigmoid".
-        weights_normalization: Whether to normalize weights by their sum or not ("sum", "norm", or "none").
+        weights_parametrization: Either "linear", "exp", "softplus", "tanh", "abs", or "sigmoid".
+        weights_normalization: Whether to normalize weights by their sum or not ("sum", "norm", "max", or "none").
         apply_optimizer_correction: Try to approximate an actual optimizer step rather than simple SGD.
+        closed_form: If true, set weights without gradient optimization.
+        closed_form_momentum: Use momentum when closed form is used.
         clip_hp_grad: Clipping value for hyperparameters gradients.
         kwargs: Base optimizer parameters.
 
@@ -56,14 +46,17 @@ class CorrHPOptimizer(torch.optim.Optimizer):
     """
     def __init__(self, params, base_optimizer_cls, downstream_weight="merge",
                  weights_parametrization="sigmoid", weights_normalization="sum",
-                 apply_optimizer_correction=False,
+                 apply_optimizer_correction=False, closed_form=False, closed_form_momentum=0,
+                 normalize_down_grad=False,
                  clip_hp_grad=None, eps=1e-6, **kwargs):
         params = list(params)
+        if closed_form:
+            weights_parametrization = "linear"
         if len(params) < 2 or not isinstance(params[0], dict):
             raise ValueError("Expected at least two param groups with the first group being loss weights.")
-        if weights_parametrization not in ["abs", "softabs", "tanh", "sigmoid", "softplus", "exp"]:
+        if weights_parametrization not in ["linear", "abs", "tanh", "sigmoid", "softplus", "exp"]:
             raise ValueError(f"Unknown weights parametrization method: {weights_parametrization}")
-        if weights_normalization not in ["sum", "norm", "none"]:
+        if weights_normalization not in ["sum", "norm", "max", "none"]:
             raise ValueError(f"Unknown weights normalization method: {weights_normalization}")
         defaults = dict(**kwargs)
         super().__init__(params, defaults)
@@ -82,6 +75,9 @@ class CorrHPOptimizer(torch.optim.Optimizer):
         self.weights_parametrization = weights_parametrization
         self.weights_normalization = weights_normalization
         self.apply_optimizer_correction = apply_optimizer_correction
+        self.closed_form = closed_form
+        self.closed_form_momentum = closed_form_momentum
+        self.normalize_down_grad = normalize_down_grad
         self.clip_hp_grad = clip_hp_grad
         self.eps = eps
         self._down_grads_cache = None
@@ -101,7 +97,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
         downstream_weight = 1
         loss_weights = [0] * self.n_weights
         closure(downstream_weight, 0, *loss_weights, stage=HPO_STAGE_DOWNSTREAM)
-        self._down_grads_cache = self._gather_grads()
+        self._down_grads_cache = self._gather_grads(normalize=self.normalize_down_grad)
 
     def hpo_step(self, closure=None):
         """Make a single step.
@@ -123,17 +119,17 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                 weights = torch.tanh(logits)
             elif self.weights_parametrization == "abs":
                 weights = torch.abs(logits)
-            elif self.weights_parametrization == "softabs":
-                weights = softabs(logits)
-            else:
-                assert self.weights_parametrization == "softplus"
+            elif self.weights_parametrization == "softplus":
                 weights = torch.nn.functional.softplus(logits)
+            else:
+                weights = logits
+                assert self.weights_parametrization == "linear"
 
             # Compute downstream grads.
             downstream_weight = 1
             loss_weights = [0] * self.n_weights
             closure(downstream_weight, 0, *loss_weights, stage=HPO_STAGE_DOWNSTREAM)
-            down_train_grads = self._gather_grads()
+            down_train_grads = self._gather_grads(normalize=self.normalize_down_grad)
             if self._down_grads_cache is None:
                 down_grads = down_train_grads
             else:
@@ -142,8 +138,12 @@ class CorrHPOptimizer(torch.optim.Optimizer):
             # Compute weights grads.
             downstream_weight = 0
             weight_grads = torch.zeros(self.n_weights, dtype=down_grads[0].dtype, device=down_grads[0].device)
-            if self.weights_normalization != "none":
+            compute_grad_sum = (not self.closed_form) and (self.weights_normalization not in {"none", "max"})
+            if compute_grad_sum:
                 grad_sum = [torch.zeros_like(v) for v in down_grads]
+            compute_norms = self.closed_form
+            if compute_norms:
+                norms = torch.zeros_like(weights)
             for i, w in enumerate(weights):
                 loss_weights[i] = 1
                 closure(downstream_weight, 0, *loss_weights, stage=i)
@@ -152,27 +152,50 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                 assert len(down_grads) == len(loss_grads)
                 product = sum([dg @ lg for dg, lg in zip(down_grads, loss_grads)])
                 weight_grads[i] -= product
-                if self.weights_normalization != "none":
+                if compute_grad_sum:
                     for j, v in enumerate(loss_grads):
                         grad_sum[j] += v * w
+                if compute_norms:
+                    norms[i] = torch.stack([g.square().sum() for g in loss_grads]).sum().sqrt()
 
-            if self.weights_normalization == "sum":
-                s = weights.sum() + self.eps
-                weight_grads /= s
-                product = sum([dg @ lg for dg, lg in zip(down_grads, grad_sum)])
-                weight_grads += product / s ** 2
-                weight_grads *= len(weights)  # Scale by the number of weights.
-                actual_weights = weights / s
-            elif self.weights_normalization == "norm":
-                norm = torch.linalg.norm(weights) + self.eps
-                weight_grads /= norm
-                product = sum([dg @ lg for dg, lg in zip(down_grads, grad_sum)])
-                weight_grads += weights * product / norm ** 3
-                weight_grads *= math.sqrt(len(weights))  # Scale by the norm of union vector.
-                actual_weights = weights / norm
+            if self.closed_form:
+                weight_grads = -weight_grads / norms[i].square()
+                if self.weights_normalization == "sum":
+                    s = weight_grads.sum() + self.eps
+                    weight_grads /= s
+                elif self.weights_normalization == "norm":
+                    norm = torch.linalg.norm(weight_grads) + self.eps
+                    weight_grads /= norm
+                elif self.weights_normalization == "max":
+                    norm = weight_grads.max()
+                    weight_grads /= norm
+                else:
+                    assert self.weights_normalization == "none"
+                actual_weights = weights * self.closed_form_momentum + weight_grads * (1 - self.closed_form_momentum)
+                del weight_grads
             else:
-                assert self.weights_normalization == "none"
-                actual_weights = weights
+                if self.weights_normalization == "sum":
+                    s = weights.sum() + self.eps
+                    weight_grads /= s
+                    product = sum([dg @ lg for dg, lg in zip(down_grads, grad_sum)])
+                    weight_grads += product / s ** 2
+                    weight_grads *= len(weights)  # Scale by the number of weights.
+                    actual_weights = weights / s
+                elif self.weights_normalization == "norm":
+                    norm = torch.linalg.norm(weights) + self.eps
+                    weight_grads /= norm
+                    product = sum([dg @ lg for dg, lg in zip(down_grads, grad_sum)])
+                    weight_grads += weights * product / norm ** 3
+                    weight_grads *= math.sqrt(len(weights))  # Scale by the norm of union vector.
+                    actual_weights = weights / norm
+                elif self.weights_normalization == "max":
+                    norm, i = weights.max(0)
+                    weight_grads[i] = 0
+                    weight_grads /= norm
+                    actual_weights = weights / norm
+                else:
+                    assert self.weights_normalization == "none"
+                    actual_weights = weights
 
             if self.weights_parametrization == "sigmoid":
                 weight_grads *= weights * torch.sigmoid(-logits)
@@ -180,13 +203,12 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                 weight_grads /= torch.cosh(logits).square() + self.eps
             elif self.weights_parametrization == "abs":
                 weight_grads = torch.where(logits >= 0, weight_grads, -weight_grads)  # torch.sign freezes at zero.
-            elif self.weights_parametrization == "softabs":
-                weight_grads = softabs_deriv(logits) * weight_grads
             elif self.weights_parametrization == "exp":
                 weight_grads *= weights
-            else:
-                assert self.weights_parametrization == "softplus"
+            elif  self.weights_parametrization == "softplus":
                 weight_grads *= torch.sigmoid(logits)
+            else:
+                assert self.weights_parametrization == "linear"
             if self.clip_hp_grad is not None:
                 grad_norm = torch.linalg.norm(weight_grads)
                 if grad_norm > self.clip_hp_grad:
@@ -194,6 +216,11 @@ class CorrHPOptimizer(torch.optim.Optimizer):
 
             # Compute model grads.
             closure(self.downstream_weight, 1, *actual_weights, stage=HPO_STAGE_FINAL)
+
+            if self.closed_form:
+                for w, v in zip(self.param_groups[0]["params"], actual_weights):
+                    w.data.copy_(v)
+                weight_grads = [None] * self.n_weights
 
             # Set weights grads.
             for w, g in zip(self.param_groups[0]["params"], weight_grads):
@@ -216,7 +243,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
         super().load_state_dict(state_dict)
         self.base_optimizer.param_groups = self.param_groups
 
-    def _gather_grads(self, apply_optimizer_correction=False):
+    def _gather_grads(self, apply_optimizer_correction=False, normalize=False):
         grads = []
         for group in self.param_groups[1:]:
             for p in group["params"]:
@@ -247,6 +274,9 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                 pass  # No need for correction.
             else:
                 raise NotImplementedError(f"Can't apply correction to {type(self.base_optimizer).__name__}")
+        if normalize:
+            norm = torch.stack([g.square().sum() for g in grads]).sum().sqrt() + self.eps
+            grads = [g / norm for g in grads]
         return grads
 
 
