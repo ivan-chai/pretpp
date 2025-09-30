@@ -103,10 +103,10 @@ class CorrHPOptimizer(torch.optim.Optimizer):
 
     def _update_grads_cache(self, grads, stage=None):
         assert stage in self._grads_cache
-        momentum = self.downstream_momentum if stage == hpo_stage_downstream else self.momentum
+        momentum = self.downstream_momentum if stage == HPO_STAGE_DOWNSTREAM else self.momentum
         if (self._grads_cache[stage] is not None) and momentum:
             assert len(self._grads_cache[stage]) == len(grads)
-            self._grads_cache[stage] = [g_old * m + g * (1 - m) for g_old, g in zip(self._grads_cache[stage], grads)]
+            self._grads_cache[stage] = [g_old * momentum + g * (1 - momentum) for g_old, g in zip(self._grads_cache[stage], grads)]
         else:
             self._grads_cache[stage] = grads
         return self._grads_cache[stage]
@@ -120,9 +120,9 @@ class CorrHPOptimizer(torch.optim.Optimizer):
         closure = torch.enable_grad()(closure)  # the closure should do a full forward-backward pass
         downstream_weight = 1
         loss_weights = [0] * self.n_weights
-        closure(downstream_weight, 0, *loss_weights, stage=hpo_stage_downstream)
+        closure(downstream_weight, 0, *loss_weights, stage=HPO_STAGE_DOWNSTREAM)
         self._update_grads_cache(self._gather_grads(normalize=self.normalize_down_grad),
-                                 stage=hpo_stage_downstream)
+                                 stage=HPO_STAGE_DOWNSTREAM)
 
     def remove_cache(self, stage=None):
         if stage is None:
