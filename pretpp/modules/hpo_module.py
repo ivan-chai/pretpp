@@ -87,7 +87,7 @@ class HPOModule(BaseModule):
         if self.tune_on_val and dataloader_idx == 1:
             opt.cache_downstream(closure)
         else:
-            opt.hpo_step(closure)
+            opt.hpo_step(closure, use_cached_downstream=self.tune_on_val)
             hpo_grads = [w.grad for w in self.loss_weights.values() if w.grad is not None]
             if hpo_grads:
                 hpo_grads = torch.stack(hpo_grads)
