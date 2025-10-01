@@ -130,14 +130,18 @@ class CorrHPOptimizer(torch.optim.Optimizer):
         else:
             self._grads_cache[stage] = None
 
-    def _get_weights_norm(self, weights):
+    def _get_scale_norm(self, weights):
         if self.weights_normalization == "sum":
-            return weights.sum() + self.eps
+            scale = self.n_weights
+            norm = weights.sum() + self.eps
         elif self.weights_normalization == "norm":
-            return torch.linalg.norm(weights) + self.eps
+            scale = math.sqrt(self.n_weights)
+            norm = torch.linalg.norm(weights) + self.eps
         else:
             assert self.weights_normalization == "none"
-            return 1
+            scale = 1
+            norm = 1
+        return scale, norm
 
     def hpo_step(self, closure=None, use_cached_downstream=False):
         """Make a single step.
@@ -202,29 +206,30 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                     for j, v in enumerate(loss_grads):
                         grad_sum[j] += v * w
                 if compute_norms:
-                    norms[i] = torch.stack([g.square().sum() for g in loss_grads]).sum().sqrt()
+                    norms[i] = torch.stack([g.square().sum() for g in loss_grads]).sum().sqrt() + self.eps
 
             if self.algorithm in {"closed-form", "closed-form-fast"}:
                 if self.algorithm == "closed-form":
                     raise NotImplementedError("Full closed-form is not implemented.")
-                actual_weights = products / norms.square()
-                actual_weights /= self._get_weights_norm(actual_weights)
                 assert self.weights_parametrization == "linear"
+                actual_weights = products / norms.square()
+                scale, norm = self._get_scale_norm(actual_weights)
+                actual_weights *= scale / norm
             else:
                 assert self.algorithm == "sgd"
-                norm = self._get_weights_norm(weights)
-                actual_weights = weights / norm
+                scale, norm = self._get_scale_norm(weights)
+                actual_weights = scale * weights / norm
                 if self.weights_normalization == "sum":
                     product = sum([dg @ lg for dg, lg in zip(down_grads, grad_sum)])
                     weight_grads = -products / norm + product / norm ** 2
-                    weight_grads *= len(weights)  # Scale by the number of weights.
+                    weight_grads *= scale  # Scale by the number of weights.
                 elif self.weights_normalization == "norm":
                     product = sum([dg @ lg for dg, lg in zip(down_grads, grad_sum)])
                     weight_grads = -products / norm + weights * product / (norm ** 3)
-                    weight_grads *= math.sqrt(len(weights))  # Scale by the norm of union vector.
+                    weight_grads *= scale  # Scale by the norm of union vector.
                 else:
-                    weight_grads = -products
                     assert self.weights_normalization == "none"
+                    weight_grads = -products
 
                 if self.weights_parametrization == "sigmoid":
                     weight_grads *= weights * torch.sigmoid(-logits)
