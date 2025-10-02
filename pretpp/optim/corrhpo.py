@@ -313,7 +313,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                     if self.weights_normalization == "sum":
                         scale = self.n_weights / (actual_weights.sum() + self.eps)
                     elif self.weights_normalization == "norm":
-                        scale = math.sqrt(self.n_weights) * (torch.linalg.norm(actual_weights) + self.eps)
+                        scale = math.sqrt(self.n_weights) / (torch.linalg.norm(actual_weights) + self.eps)
                     else:
                         assert self.weights_normalization == "none"
                         scale = 1
