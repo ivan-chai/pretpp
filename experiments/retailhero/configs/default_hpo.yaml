@@ -18,9 +18,10 @@ module:
     - loss_0_netto
     - loss_0_regular_points_received
   hpo_params:
+    algorithm: closed-form
+    ema: 0.99
     weights_parametrization: abs
-    apply_optimizer_correction: true
-    clip_hp_grad: 0.1
+    weights_normalization: norm
   downstream_loss: loss_1_target
   loss_projection_partial:
     _target_: pretpp.nn.CatHead

@@ -14,9 +14,10 @@ module:
     - loss_0_timestamps
     - loss_0_labels
   hpo_params:
-    clip_hp_grad: 0.1
-  hp_group_params:
-    lr: 0.01
+    algorithm: closed-form
+    ema: 0.99
+    weights_parametrization: abs
+    weights_normalization: norm
   downstream_loss: loss_1_target
   loss_projection_partial:
     _target_: pretpp.nn.CatHead

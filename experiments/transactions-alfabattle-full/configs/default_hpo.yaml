@@ -29,12 +29,12 @@ module:
     - loss_0_weekofyear
     - loss_0_log_amount
     - loss_0_log_hour_diff
+
   hpo_params:
-    clip_hp_grad: 0.1
+    algorithm: closed-form
+    ema: 0.99
     weights_parametrization: abs
-    apply_optimizer_correction: true
-  hp_group_params:
-    lr: 0.01
+    weights_normalization: norm
   downstream_loss: loss_1_target
   loss_projection_partial:
     _target_: pretpp.nn.CatHead

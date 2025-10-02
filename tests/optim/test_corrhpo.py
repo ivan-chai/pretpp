@@ -4,7 +4,7 @@ import torch
 from unittest import TestCase, main
 
 from pretpp.optim import CorrHPOptimizer, HPO_STAGE_DOWNSTREAM, HPO_STAGE_FINAL
-from pretpp.optim.corrhpo import find_closest_unit_norm
+from pretpp.optim.corrhpo import find_closest_unit_norm, quadratic_program_positive
 
 
 def f1(x):
@@ -51,6 +51,20 @@ class TestCorrHPOptimizer(TestCase):
 
         weights = find_closest_unit_norm(v, target)
         self.assertAlmostEqual(torch.linalg.norm(weights - weights_gt).item(), 0, places=2)
+        
+    def test_quadratic_program(self):
+        torch.manual_seed(0)
+        # Test random.
+        dim = 5
+        v = torch.eye(dim).double()
+        c = torch.randn(dim, dim).double()
+        c = c @ c.T
+        v = c @ v
+        weights_gt = 5 * torch.rand(dim).double()  # Positive.
+        target = v @ weights_gt
+
+        weights = quadratic_program_positive(v @ v.T, - v @ target)
+        self.assertAlmostEqual(torch.linalg.norm(weights - weights_gt).item(), 0, places=2)
 
     def test_gradient(self):
         torch.manual_seed(0)
@@ -75,6 +89,7 @@ class TestCorrHPOptimizer(TestCase):
                                             torch.optim.Adam,
                                             weights_parametrization=parametrization,
                                             weights_normalization=normalization,
+                                            normalize_down_grad=False,
                                             eps=0,
                                             lr=0)
 

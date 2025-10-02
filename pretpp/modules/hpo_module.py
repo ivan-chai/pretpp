@@ -10,7 +10,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 
 from hotpp.data import PaddedBatch
 from pretpp.nn import IdentityHead
-from ..optim import CorrHPOptimizer, HPO_STAGE_DOWNSTREAM, HPO_STAGE_FINAL
+from ..optim import CorrHPOptimizer, HPO_STAGE_DOWNSTREAM, HPO_STAGE_FREE, HPO_STAGE_FINAL
 from .base_module import BaseModule
 
 
@@ -81,6 +81,8 @@ class HPOModule(BaseModule):
                 metrics.update({f"hpo_{name}": w.item() for name, w in zip(self.hpo_losses, weights)})
                 if self.gradient_clip_val is not None:
                     self.clip_gradients(opt, gradient_clip_val=self.gradient_clip_val, gradient_clip_algorithm=self.trainer.gradient_clip_algorithm)
+            elif stage == HPO_STAGE_FREE:
+                metrics[f"hpo_grad_norm_free"] = self._get_grad_norm(warn_empty_grads=False)
             else:
                 assert isinstance(stage, int)
                 metrics[f"hpo_grad_norm_weight_{stage}"] = self._get_grad_norm(warn_empty_grads=False)

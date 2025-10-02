@@ -3,7 +3,7 @@ import numpy as np
 import torch
 from copy import deepcopy
 from torch.optim.lr_scheduler import LambdaLR
-from scipy.optimize import bisect
+from scipy.optimize import bisect, minimize
 
 
 HPO_STAGE_DOWNSTREAM = "downstream"
@@ -25,7 +25,6 @@ def _find_lambda_closest_unit_norm(cov, b, eps=1e-6, steps=100):
     if len(s) == 0:
         return 0
 
-    # Minimize sum(beta^2 / (s + x)^2).
     func = lambda x: (beta_sq / (s + x) ** 2).sum() - 1
     start = -s_min + eps
     if func(start) < 0:
@@ -43,8 +42,8 @@ def find_closest_unit_norm(basis, target, eps=1e-6, steps=100):
     zero_mask = torch.linalg.norm(basis, dim=1) < eps
     zero_index = zero_mask.nonzero()[0, 0].item() if zero_mask.any() else None
 
-    cov = (basis @ basis.T).cpu().float().numpy()  # (W, W).
-    b = (basis @ target).cpu().float().numpy()  # (W).
+    cov = (basis @ basis.T).cpu().double().numpy()  # (W, W).
+    b = (basis @ target).cpu().double().numpy()  # (W).
     l = _find_lambda_closest_unit_norm(cov, b)
     reg = np.eye(len(cov))
     weights = np.linalg.lstsq(cov + l * reg, b)[0]
@@ -53,6 +52,33 @@ def find_closest_unit_norm(basis, target, eps=1e-6, steps=100):
         assert abs(weights[zero_index]) < eps
         weights[zero_index] = np.sqrt(max(0, 1 - np.sum(weights ** 2)))
     return torch.from_numpy(weights).to(device=basis.device)
+
+
+def quadratic_program_positive(C, b, steps=100,
+                               method="SLSQP"):  #SLSQP.
+    """Minimize 0.5 x^T C x + b^T x with positive x."""
+    device = C.device
+    dim = len(C)
+    C = C.cpu().double().numpy()
+    b = b.cpu().double().numpy()
+    func = lambda x: 0.5 * x.T @ C @ x + b @ x
+    jac = lambda x: C @ x + b
+    hess = lambda x: C
+    eye = np.eye(dim)
+    cons = {
+        "type": "ineq",
+        "fun": lambda x: x,
+        "jac": lambda x: eye
+    }
+    opt = {
+        "disp": False,
+        "maxiter": steps
+    }
+    x0 = np.ones(dim) / dim
+    weights = minimize(func, x0, jac=jac, constraints=cons,
+                       method=method, options=opt)["x"]
+    weights = np.clip(weights, a_min=0, a_max=None)
+    return torch.from_numpy(weights).to(device)
 
 
 class CorrHPOptimizer(torch.optim.Optimizer):
@@ -66,7 +92,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
         weights_parametrization: Either "linear", "tanh", "abs", or "sigmoid".
         weights_normalization: Whether to normalize weights by their sum or not ("sum", "norm", or "none").
         algorithm: Either "sgd", "closed-form" or "closed-form-fast".
-        momentum: Use momentum for gradient smoothing. Can be dictionary with "main" and "downstream" keys
+        ema: Use momentum for gradient smoothing. Can be dictionary with "main" and "downstream" keys
             for the main and downstream losses respectively.
         apply_optimizer_correction: Try to approximate an actual optimizer step rather than simple SGD.
         normalize_down_grad: Estimate only the dirrection of the downstream loss gradient.
@@ -94,9 +120,9 @@ class CorrHPOptimizer(torch.optim.Optimizer):
     NOTE: Free term is responsible for the part of the loss that must to be tuned.
     """
     def __init__(self, params, base_optimizer_cls, downstream_weight="merge",
-                 weights_parametrization="linear", weights_normalization="norm",
-                 algorithm="sgd", momentum=0,
-                 apply_optimizer_correction=False, normalize_down_grad=False,
+                 weights_parametrization="abs", weights_normalization="norm",
+                 algorithm="sgd", ema=0,
+                 apply_optimizer_correction=False, normalize_down_grad=True,
                  clip_hp_grad=None, eps=1e-6, **kwargs):
         params = list(params)
         if len(params) < 2 or not isinstance(params[0], dict):
@@ -104,7 +130,8 @@ class CorrHPOptimizer(torch.optim.Optimizer):
         if algorithm not in {"sgd", "closed-form", "closed-form-fast"}:
             raise ValueError(f"Unexpected algorithm: {algorithm}")
         if (algorithm in {"closed-form", "closed-form-fast"}) and (weights_parametrization != "linear"):
-            raise ValueError("Closed-form approach is compatible with linear parametrization only.")
+            if not (algorithm == "closed-form" and weights_parametrization == "abs"):
+                raise ValueError("Closed-form approach is compatible with linear parametrization only.")
         if weights_parametrization not in ["linear", "abs", "tanh", "sigmoid"]:
             raise ValueError(f"Unknown weights parametrization method: {weights_parametrization}")
         if weights_normalization not in ["sum", "norm", "none"]:
@@ -127,14 +154,15 @@ class CorrHPOptimizer(torch.optim.Optimizer):
         self.weights_normalization = weights_normalization
         self.algorithm = algorithm
         try:
-            momentum = dict(momentum)
+            momentum = dict(ema)
+            if set(momentum.keys()) != {"main", "downstream"}:
+                raise ValueError(f"Expected dictionary with 'main' and 'downstream' keys.")
+            self.main_momentum = momentum["main"]
+            self.downstream_momentum = momentum["downstream"]
         except TypeError:
-            momentum = float(momentum)
-            momentum = {"main": momentum, "downstream": momentum}
-        if set(momentum.keys()) != {"main", "downstream"}:
-            raise ValueError(f"Expected dictionary with 'main' and 'downstream' keys.")
-        self.momentum = momentum["main"]
-        self.downstream_momentum = momentum["downstream"]
+            momentum = float(ema)
+            self.main_momentum = momentum
+            self.downstream_momentum = momentum
         self.apply_optimizer_correction = apply_optimizer_correction
         self.normalize_down_grad = normalize_down_grad
         self.clip_hp_grad = clip_hp_grad
@@ -150,7 +178,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
 
     def _update_grads_cache(self, grads, stage=None):
         assert stage in self._grads_cache
-        momentum = self.downstream_momentum if stage == HPO_STAGE_DOWNSTREAM else self.momentum
+        momentum = self.downstream_momentum if stage == HPO_STAGE_DOWNSTREAM else self.main_momentum
         if (self._grads_cache[stage] is not None) and momentum:
             assert len(self._grads_cache[stage]) == len(grads)
             self._grads_cache[stage] = self._grads_cache[stage] * momentum + grads * (1 - momentum)
@@ -236,7 +264,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                 free_weight = 1
                 closure(downstream_weight, free_weight, *loss_weights, stage=HPO_STAGE_FREE)
                 free_grads = self._gather_grads(apply_optimizer_correction=self.apply_optimizer_correction)
-                if self.momentum:
+                if self.main_momentum:
                     free_grads = self._update_grads_cache(free_grads, stage=HPO_STAGE_FREE)
 
             # Caches for normalization differentiation.
@@ -261,7 +289,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                 closure(downstream_weight, free_weight, *loss_weights, stage=i)
                 loss_weights[i] = 0
                 loss_grads = self._gather_grads(apply_optimizer_correction=self.apply_optimizer_correction)
-                if self.momentum:
+                if self.main_momentum:
                     loss_grads = self._update_grads_cache(loss_grads, stage=i)
                 if compute_products:
                     products[i] = down_grads @ loss_grads
@@ -272,20 +300,36 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                 if store_all_grads:
                     all_grads.append(loss_grads)
 
+            free_weight = 1
             if self.algorithm == "closed-form":
-                assert self.weights_parametrization == "linear"
                 all_grads = torch.stack(all_grads, 0)  # (W, P).
-                target = down_grads - free_grads
-                if self.weights_normalization == "none":
+                main_grads_norm = (torch.linalg.norm(all_grads).square() + torch.linalg.norm(free_grads).square()).sqrt() + self.eps
+                all_grads /= main_grads_norm
+                target = down_grads - free_grads / main_grads_norm
+                if self.weights_parametrization == "abs":
                     cov = all_grads @ all_grads.T  # (W, W).
-                    reg = torch.eye(self.n_weights, device=cov.device, dtype=cov.dtype)
-                    actual_weights = torch.linalg.solve(cov + self.eps * reg, all_grads @ target)
-                elif self.weights_normalization == "norm":
-                    # Track only target direction.
-                    target = target / torch.linalg.norm(target)
-                    actual_weights = find_closest_unit_norm(all_grads, target)
+                    product = all_grads @ target
+                    actual_weights = quadratic_program_positive(cov, -product)
+                    if self.weights_normalization == "sum":
+                        scale = self.n_weights / (actual_weights.sum() + self.eps)
+                    elif self.weights_normalization == "norm":
+                        scale = math.sqrt(self.n_weights) * (torch.linalg.norm(actual_weights) + self.eps)
+                    else:
+                        assert self.weights_normalization == "none"
+                        scale = 1
+                    actual_weights = scale * actual_weights
+                    free_weight = scale
                 else:
-                    raise NotImplementedError(f"{self.weights_normalization} normalization in the closed-form algorithm")
+                    assert self.weights_parametrization == "linear"
+                    if self.weights_normalization == "none":
+                        cov = all_grads @ all_grads.T  # (W, W).
+                        reg = torch.eye(self.n_weights, device=cov.device, dtype=cov.dtype)
+                        product = all_grads @ target
+                        actual_weights = torch.linalg.solve(cov + self.eps * reg, product)
+                    elif self.weights_normalization == "norm":
+                        actual_weights = find_closest_unit_norm(all_grads, target)
+                    else:
+                        raise NotImplementedError(f"{self.weights_normalization} normalization in the closed-form algorithm")
             elif self.algorithm == "closed-form-fast":
                 assert self.weights_parametrization == "linear"
                 actual_weights = products / norms.square()
@@ -322,7 +366,6 @@ class CorrHPOptimizer(torch.optim.Optimizer):
 
             # Compute model grads.
             downstream_weight = self.downstream_weight
-            free_weight = 1
             closure(self.downstream_weight, free_weight, *actual_weights, stage=HPO_STAGE_FINAL)
 
             if self.algorithm in {"closed-form", "closed-form-fast"}:
