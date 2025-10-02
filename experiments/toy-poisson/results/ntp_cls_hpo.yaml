@@ -1,0 +1,13 @@
+date: '2025-09-10 16:16:01'
+test/cls_batch-accuracy-target: 0.7639999985694885
+test/downstream: 0.7843999862670898
+test/loss: 1.8764846324920654
+test/loss_cls_target: 0.6011084318161011
+test/loss_next_item_labels: 0.9813929796218872
+test/loss_next_item_timestamps: 0.2939830422401428
+val/cls_batch-accuracy-target: 0.7639999985694885
+val/downstream: 0.7965999841690063
+val/loss: 1.8055301904678345
+val/loss_cls_target: 0.5462303757667542
+val/loss_next_item_labels: 0.962916374206543
+val/loss_next_item_timestamps: 0.2963833212852478
