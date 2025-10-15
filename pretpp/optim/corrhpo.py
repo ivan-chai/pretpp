@@ -219,7 +219,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                  weights_parametrization="abs", weights_normalization="norm",
                  algorithm="sgd", ema=0,
                  apply_optimizer_correction=False, normalize_down_grad=True,
-                 clip_hp_grad=None, eps=1e-6, **kwargs):
+                 clip_hp_grad=None, clip_hp_grad_cov=1, eps=1e-6, **kwargs):
         params = list(params)
         if len(params) < 2 or not isinstance(params[0], dict):
             raise ValueError("Expected at least two param groups with the first group being loss weights.")
@@ -262,10 +262,15 @@ class CorrHPOptimizer(torch.optim.Optimizer):
         self.apply_optimizer_correction = apply_optimizer_correction
         self.normalize_down_grad = normalize_down_grad
         self.clip_hp_grad = clip_hp_grad
+        self.clip_hp_grad_cov = clip_hp_grad_cov
         self.eps = eps
 
         # todo: use optimizer state for gradient caches.
         self._grads_cache = {HPO_STAGE_DOWNSTREAM: None, HPO_STAGE_FREE: None} | {i: None for i in range(self.n_weights)}
+        if algorithm == "closed-form-ce":
+            if self.main_momentum < 1e-6:
+                raise ValueError("EMA must be used for closed-form-ce")
+            self._grads_cache.update({f"cov_{k}": None for k in self._grads_cache})
 
     def step(self, closure, inner=False):
         if not inner:
@@ -280,6 +285,12 @@ class CorrHPOptimizer(torch.optim.Optimizer):
             self._grads_cache[stage] = self._grads_cache[stage] * momentum + grads * (1 - momentum)
         else:
             self._grads_cache[stage] = grads
+        if self.algorithm == "closed-form-ce":
+            delta_sq = (torch.linalg.norm(grads - self._grads_cache[stage]) / math.sqrt(grads.numel())).square()
+            if (self._grads_cache[f"cov_{stage}"] is not None) and momentum:
+                self._grads_cache[f"cov_{stage}"] = self._grads_cache[f"cov_{stage}"] * momentum + delta_sq * (1 - momentum)
+            else:
+                self._grads_cache[f"cov_{stage}"] = delta_sq
         return self._grads_cache[stage]
 
     def cache_downstream(self, closure=None):
@@ -301,6 +312,17 @@ class CorrHPOptimizer(torch.optim.Optimizer):
             self._grads_cache = {name: None for name in self._grads_cache}
         else:
             self._grads_cache[stage] = None
+            if self.algorithm == "closed-form-ce":
+                self._grads_cache[f"cov_{stage}"]= None
+
+    @property
+    def metrics(self):
+        result = {}
+        if self.algorithm == "closed-form-ce":
+            for k, v in self._grads_cache.items():
+                if not isinstance(k, int) and k.startswith("cov_"):
+                    result[k] = v.item()
+        return result
 
     def _get_scale_norm(self, weights):
         if self.weights_normalization == "sum":
@@ -408,12 +430,17 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                                                           eps=self.eps)
             elif self.algorithm == "closed-form-ce":
                 all_grads = torch.stack(all_grads, 0)  # (W, P).
+                all_grads_covs = torch.stack([self._grads_cache[f"cov_{i}"] for i in range(self.n_weights)], 0)  # (W).
                 main_grads_norm = (torch.linalg.norm(all_grads).square() + torch.linalg.norm(free_grads).square()).sqrt() + self.eps
                 all_grads /= main_grads_norm
+                all_grads_covs /= main_grads_norm ** 2
+                if self.clip_hp_grad_cov is not None:
+                    all_grads_covs.clip_(max=self.clip_hp_grad_cov)
                 target = down_grads - free_grads / main_grads_norm
                 actual_weights, free_weight = closed_form_ce(all_grads, target,
                                                              parametrization=self.weights_parametrization,
                                                              normalization=self.weights_normalization,
+                                                             grad_covs=all_grads_covs,
                                                              eps=self.eps)
             elif self.algorithm == "closed-form-fast":
                 assert self.weights_parametrization == "linear"
