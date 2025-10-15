@@ -141,8 +141,6 @@ def closed_form(all_grads, target, parametrization, normalization, eps):
                 actual_weights = torch.linalg.solve(cov + eps * reg, product)
             elif normalization == "norm":
                 actual_weights = find_closest_unit_norm(all_grads, target)
-                actual_weights = actual_weights.clip(min=0) # DEBUG.
-                actual_weights = actual_weights / (torch.linalg.norm(actual_weights) + eps)  # DEBUG.
             else:
                 raise NotImplementedError(f"{normalization} normalization in the closed-form algorithm")
             free_weight = 1
