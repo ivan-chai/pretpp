@@ -116,6 +116,54 @@ def normal_ce_solve(C, b, r, covs, eps=1e-6, positive=False):
     return torch.from_numpy(weights).to(device)
 
 
+def normal_ce_cov_solve(C, b, r, covs, eps=1e-6, positive=False):
+    """Minimize sum log s^2_i + |w^T @ C @ w - 2 (w, b) + r|, where s^2 = sum w^2_i s^2_i.
+
+    Log s^2 is approximated near the smallest covariance.
+    """
+    device = C.device
+    dim = len(C)
+    C = C.cpu().double().numpy()
+    b = b.cpu().double().numpy()
+    r = r.item()
+    center = covs.mean(0) + eps  # (P).
+    scaled_covs = covs / center - 1  # (N, P).
+    scaled_sums = scaled_covs.sum(1).cpu().double().numpy()  # (N).
+    scaled_sq_sums = scaled_covs.square().sum(1).cpu().double().numpy()  # (N).
+    scaled_cross = (scaled_covs @ scaled_covs.T).cpu().double().numpy()  # (N, N).
+    def func(x):
+        x_sq = x ** 2
+        log_s2 = x_sq @ scaled_sums - 0.5 * x_sq.T @ scaled_cross @ x_sq
+        delta_norm_sq = x.T @ C @ x - 2 * np.dot(x, b) + r
+        value = log_s2 + delta_norm_sq
+        grads = 2 * x * scaled_sums - 2 * x * (scaled_cross @ x_sq) + 2 * (C @ x - b)
+        return value, grads
+    x0 = np.ones(dim)
+    cons = [
+        {
+            "type": "eq",
+            "fun": lambda x: (x ** 2).sum() - 1,
+            "jac": lambda x: 2 * x
+        }
+    ]
+    opt = {
+        "disp": False
+    }
+    if positive:
+        eye = np.eye(dim)
+        cons.append({
+            "type": "ineq",
+            "fun": lambda x: x,
+            "jac": lambda x: eye
+        })
+    weights = minimize(func, x0, jac=True, constraints=cons,
+                       method="SLSQP", options=opt)["x"]
+    if positive:
+        weights = np.clip(weights, a_min=0, a_max=None)
+    weights = weights / (np.linalg.norm(weights) + eps)
+    return torch.from_numpy(weights).to(device)
+
+
 def closed_form(all_grads, target, parametrization, normalization, eps):
     n_weights = len(all_grads)
     with torch.autocast("cuda", enabled=False):
@@ -154,7 +202,7 @@ def closed_form_ce(all_grads, target, parametrization, normalization, eps, grad_
         grad_covs = torch.ones(len(all_grads), dtype=all_grads.dtype, device=all_grads.device)
     cov = all_grads @ all_grads.T  # (W, W).
     product = all_grads @ target
-    target_norm_sq = target.T @ target
+    target_norm_sq = target @ target
     # covs: (N).
     n_weights = len(all_grads)
     with torch.autocast("cuda", enabled=False):
@@ -177,6 +225,33 @@ def closed_form_ce(all_grads, target, parametrization, normalization, eps, grad_
     return actual_weights, free_weight
 
 
+def closed_form_ce_cov(all_grads, target, parametrization, normalization, eps, grad_covs):
+    if normalization != "norm":
+        raise ValueError("Only norm parametrization can be used with closed-form-ce-cov")
+    if grad_covs.shape != all_grads.shape:
+        raise ValueError("Need diagonal covariances with shape (N, P)")
+    # TODO: Min or Average?
+    #denum = grad_covs.min(0)[0].sqrt() + eps  # (P).
+    denum = grad_covs.mean(0)[0].sqrt() + eps  # (P).
+
+    scaled_grads = all_grads / denum
+    scaled_target = target / denum
+    cov = scaled_grads @ scaled_grads.T  # (W, W).
+    product = scaled_grads @ scaled_target  # (W).
+    target_norm_sq = scaled_target @ scaled_target
+    n_weights = len(all_grads)
+    with torch.autocast("cuda", enabled=False):
+        if parametrization == "abs":
+            solver = partial(normal_ce_cov_solve, positive=True)
+        elif parametrization == "linear":
+            solver = normal_ce_cov_solve
+        else:
+            raise NotImplementedError(f"Unsupported parametrization: {parametrization}.")
+        actual_weights = solver(cov, product, target_norm_sq, grad_covs)
+    free_weight = 1
+    return actual_weights, free_weight
+
+
 class CorrHPOptimizer(torch.optim.Optimizer):
     """Correlated Hyperparameter Optimizer.
 
@@ -187,7 +262,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
             The "merge" value means inserting downstream gradients for the weights, not updated by the main loss.
         weights_parametrization: Either "linear", "tanh", "abs", or "sigmoid".
         weights_normalization: Whether to normalize weights by their sum or not ("sum", "norm", or "none").
-        algorithm: Either "sgd", "closed-form", "closed-form-fast", "closed-form-ce", or "none" to disable HPO.
+        algorithm: Either "sgd", "closed-form", "closed-form-fast", "closed-form-ce", "closed-form-ce-cov", or "none" to disable HPO.
         ema: Use momentum for gradient smoothing. Can be dictionary with "main" and "downstream" keys
             for the main and downstream losses respectively.
         apply_optimizer_correction: Try to approximate an actual optimizer step rather than simple SGD.
@@ -223,10 +298,10 @@ class CorrHPOptimizer(torch.optim.Optimizer):
         params = list(params)
         if len(params) < 2 or not isinstance(params[0], dict):
             raise ValueError("Expected at least two param groups with the first group being loss weights.")
-        if algorithm not in {"sgd", "closed-form", "closed-form-fast", "closed-form-ce", "none"}:
+        if algorithm not in {"sgd", "closed-form", "closed-form-fast", "closed-form-ce", "closed-form-ce-cov", "none"}:
             raise ValueError(f"Unexpected algorithm: {algorithm}")
-        if (algorithm in {"closed-form", "closed-form-fast", "closed-form-ce"}) and (weights_parametrization != "linear"):
-            if not (algorithm in {"closed-form", "closed-form-ce"} and weights_parametrization == "abs"):
+        if (algorithm in {"closed-form", "closed-form-fast", "closed-form-ce", "closed-form-ce-cov"}) and (weights_parametrization != "linear"):
+            if not (algorithm in {"closed-form", "closed-form-ce", "closed-form-ce-cov"} and weights_parametrization == "abs"):
                 raise ValueError("Closed-form approach is compatible with linear parametrization only.")
         if weights_parametrization not in ["linear", "abs", "tanh", "sigmoid"]:
             raise ValueError(f"Unknown weights parametrization method: {weights_parametrization}")
@@ -267,7 +342,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
 
         # todo: use optimizer state for gradient caches.
         self._grads_cache = {HPO_STAGE_DOWNSTREAM: None, HPO_STAGE_FREE: None} | {i: None for i in range(self.n_weights)}
-        if algorithm == "closed-form-ce":
+        if algorithm in {"closed-form-ce", "closed-form-ce-cov"}:
             if self.main_momentum < 1e-6:
                 raise ValueError("EMA must be used for closed-form-ce")
             self._grads_cache.update({f"cov_{k}": None for k in self._grads_cache})
@@ -285,8 +360,8 @@ class CorrHPOptimizer(torch.optim.Optimizer):
             self._grads_cache[stage] = self._grads_cache[stage] * momentum + grads * (1 - momentum)
         else:
             self._grads_cache[stage] = grads
-        if self.algorithm == "closed-form-ce":
-            delta_sq = (torch.linalg.norm(grads - self._grads_cache[stage]) / math.sqrt(grads.numel())).square()
+        if self.algorithm in {"closed-form-ce", "closed-form-ce-cov"}:
+            delta_sq = (grads - self._grads_cache[stage]).square()
             if (self._grads_cache[f"cov_{stage}"] is not None) and momentum:
                 self._grads_cache[f"cov_{stage}"] = self._grads_cache[f"cov_{stage}"] * momentum + delta_sq * (1 - momentum)
             else:
@@ -312,16 +387,16 @@ class CorrHPOptimizer(torch.optim.Optimizer):
             self._grads_cache = {name: None for name in self._grads_cache}
         else:
             self._grads_cache[stage] = None
-            if self.algorithm == "closed-form-ce":
+            if self.algorithm in {"closed-form-ce", "closed-form-ce-cov"}:
                 self._grads_cache[f"cov_{stage}"]= None
 
     @property
     def metrics(self):
         result = {}
-        if self.algorithm == "closed-form-ce":
+        if self.algorithm in {"closed-form-ce", "closed-form-ce-cov"}:
             for k, v in self._grads_cache.items():
                 if not isinstance(k, int) and k.startswith("cov_"):
-                    result[k] = v.item()
+                    result[k] = v.mean().item()
         return result
 
     def _get_scale_norm(self, weights):
@@ -377,7 +452,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                 down_grads = down_train_grads
             assert down_grads is not None
 
-            if self.algorithm in {"closed-form", "closed-form-ce", "none"}:
+            if self.algorithm in {"closed-form", "closed-form-ce", "closed-form-ce-cov", "none"}:
                 downstream_weight = 0
                 free_weight = 1
                 closure(downstream_weight, free_weight, *loss_weights, stage=HPO_STAGE_FREE)
@@ -395,7 +470,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
             compute_norms = self.algorithm == "closed-form-fast"
             if compute_norms:
                 norms = torch.zeros_like(weights)
-            store_all_grads = self.algorithm in {"closed-form", "closed-form-ce"}
+            store_all_grads = self.algorithm in {"closed-form", "closed-form-ce", "closed-form-ce-cov"}
             if store_all_grads:
                 all_grads = []
 
@@ -430,7 +505,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                                                           eps=self.eps)
             elif self.algorithm == "closed-form-ce":
                 all_grads = torch.stack(all_grads, 0)  # (W, P).
-                all_grads_covs = torch.stack([self._grads_cache[f"cov_{i}"] for i in range(self.n_weights)], 0)  # (W).
+                all_grads_covs = torch.stack([self._grads_cache[f"cov_{i}"].mean() for i in range(self.n_weights)], 0)  # (W).
                 main_grads_norm = (torch.linalg.norm(all_grads).square() + torch.linalg.norm(free_grads).square()).sqrt() + self.eps
                 all_grads /= main_grads_norm
                 all_grads_covs /= main_grads_norm ** 2
@@ -442,6 +517,20 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                                                              normalization=self.weights_normalization,
                                                              grad_covs=all_grads_covs,
                                                              eps=self.eps)
+            elif self.algorithm == "closed-form-ce-cov":
+                all_grads = torch.stack(all_grads, 0)  # (W, P).
+                all_grads_covs = torch.stack([self._grads_cache[f"cov_{i}"] for i in range(self.n_weights)], 0)  # (W, P).
+                main_grads_norm = (torch.linalg.norm(all_grads).square() + torch.linalg.norm(free_grads).square()).sqrt() + self.eps
+                all_grads /= main_grads_norm
+                all_grads_covs /= main_grads_norm ** 2
+                if self.clip_hp_grad_cov is not None:
+                    all_grads_covs.clip_(max=self.clip_hp_grad_cov)
+                target = down_grads - free_grads / main_grads_norm
+                actual_weights, free_weight = closed_form_ce_cov(all_grads, target,
+                                                                 parametrization=self.weights_parametrization,
+                                                                 normalization=self.weights_normalization,
+                                                                 grad_covs=all_grads_covs,
+                                                                 eps=self.eps)
             elif self.algorithm == "closed-form-fast":
                 assert self.weights_parametrization == "linear"
                 actual_weights = products / norms.square()
@@ -483,7 +572,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
             downstream_weight = self.downstream_weight
             closure(self.downstream_weight, free_weight, *actual_weights, stage=HPO_STAGE_FINAL)
 
-            if self.algorithm in {"closed-form", "closed-form-ce", "closed-form-fast"}:
+            if self.algorithm in {"closed-form", "closed-form-ce", "closed-form-ce-cov", "closed-form-fast"}:
                 for w, v in zip(self.param_groups[0]["params"], actual_weights):
                     w.data.copy_(v)
                     w.grad = None
