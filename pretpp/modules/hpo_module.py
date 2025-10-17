@@ -95,6 +95,7 @@ class HPOModule(BaseModule):
                 hpo_grads = torch.stack(hpo_grads)
                 hpo_grad_norm = torch.linalg.norm(hpo_grads)
                 metrics["hpo_grad_norm"] = hpo_grad_norm
+            metrics.update(opt.metrics)
             self._log_metrics("train", len(x), final_loss, losses, metrics, single_batch_metrics=None)
 
         # Make scheduler step if necessary.
