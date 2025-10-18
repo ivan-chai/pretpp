@@ -415,6 +415,8 @@ class CorrHPOptimizer(torch.optim.Optimizer):
             for k, v in self._grads_cache.items():
                 if not isinstance(k, int) and k.startswith("cov_"):
                     result[k] = v.mean().item()
+        if (self.algorithm in {"closed-form-avg"}) and (HPO_COV in self._grads_cache):
+            result["hpo_cov"] = self._grads_cache[HPO_COV].mean().item()
         return result
 
     def _get_scale_norm(self, weights):
@@ -534,7 +536,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                     # Stabilize precision.
                     cov = cov.double()
                     bias = bias.double()
-                    problem_scale = cov.mean().item()
+                    problem_scale = cov.abs().mean().item()
                     if problem_scale < 1e-8:
                         actual_weights = torch.zeros_like(weights)
                     else:
