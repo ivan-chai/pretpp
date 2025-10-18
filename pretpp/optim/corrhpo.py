@@ -538,7 +538,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                     bias = bias.double()
                     problem_scale = cov.abs().mean().item()
                     if problem_scale < 1e-8:
-                        actual_weights = torch.zeros_like(weights)
+                        actual_weights = torch.ones_like(weights)
                     else:
                         cov = cov / problem_scale
                         bias = bias / problem_scale
