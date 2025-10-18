@@ -535,6 +535,11 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                 scale, norm = self._get_scale_norm(actual_weights)
                 actual_weights = scale * actual_weights / norm
                 free_weight = scale / norm  # TODO: check.
+                if torch.linalg.norm(actual_weights) < self.eps:
+                    actual_weights.fill_(1)
+                    scale, norm = self._get_scale_norm(actual_weights)
+                    actual_weights = scale * actual_weights / norm
+                    free_weight = 1
             elif self.algorithm == "closed-form-ce":
                 all_grads = torch.stack(all_grads, 0)  # (W, P).
                 all_grads_covs = torch.stack([self._grads_cache[f"cov_{i}"].mean() for i in range(self.n_weights)], 0)  # (W).
