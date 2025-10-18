@@ -524,14 +524,27 @@ class CorrHPOptimizer(torch.optim.Optimizer):
             elif self.algorithm == "closed-form-avg":
                 all_grads = torch.stack(all_grads, 0)  # (W, P).
                 target = down_grads - free_grads
-                cov = all_grads @ all_grads.T
-                bias = all_grads @ target
+                prods = all_grads @ target  # (W).
+                t_norm_sq = torch.linalg.norm(target) ** 2
+                cov = prods[:, None] @ prods[None, :]  # (W, W).
+                bias = - t_norm_sq * prods
                 cov = self._update_grads_cache(cov, stage=HPO_COV)
                 bias = self._update_grads_cache(bias, stage=HPO_BIAS)
-                if self.weights_parametrization == "abs":
-                    actual_weights = quadratic_program_positive(cov, -bias)
-                else:
-                    actual_weights = torch.linalg.solve(cov, bias)
+                with torch.autocast("cuda", enabled=False):
+                    # Stabilize precision.
+                    cov = cov.double()
+                    bias = bias.double()
+                    problem_scale = cov.mean().item()
+                    if problem_scale < 1e-8:
+                        actual_weights = torch.zeros_like(weights)
+                    else:
+                        cov = cov / problem_scale
+                        bias = bias / problem_scale
+                        if self.weights_parametrization == "abs":
+                            actual_weights = quadratic_program_positive(cov, bias)
+                        else:
+                            actual_weights = torch.linalg.solve(cov, -bias)
+                    actual_weights = actual_weights.to(all_grads.dtype)
                 scale, norm = self._get_scale_norm(actual_weights)
                 actual_weights = scale * actual_weights / norm
                 free_weight = scale / norm  # TODO: check.
