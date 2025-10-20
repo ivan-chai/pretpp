@@ -18,20 +18,6 @@ HPO_BIAS = "bias"
 HPO_WEIGHTS = "weights"
 
 
-def gather_all_tensors(result):
-    if not torch.distributed.is_available() or not torch.distributed.is_initialized():
-        return [result]
-    group = torch.distributed.group.WORLD
-    result = result.contiguous()
-    world_size = torch.distributed.get_world_size(group)
-    if world_size == 1:
-        return [result]
-    gathered_result = [torch.zeros_like(result) for _ in range(world_size)]
-    torch.distributed.barrier(group=group)
-    torch.distributed.all_gather(gathered_result, result, group)
-    return gathered_result
-
-
 def _find_lambda_closest_unit_norm(cov, b, eps=1e-6, steps=100):
     """Solve ||inv(C + x I) b|| = 1."""
     dim = len(cov)
@@ -553,8 +539,6 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                 cov = all_grads @ all_grads_target_sq.T  # (W, W).
                 bias = -all_grads @ target_q
                 assert cov.ndim == 2 and bias.ndim == 1
-                cov = torch.stack(gather_all_tensors(cov)).mean(0)
-                bias = torch.stack(gather_all_tensors(bias)).mean(0)
                 cov = self._update_grads_cache(cov, stage=HPO_COV)
                 bias = self._update_grads_cache(bias, stage=HPO_BIAS)
                 with torch.autocast("cuda", enabled=False):
