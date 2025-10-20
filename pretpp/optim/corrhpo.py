@@ -15,6 +15,7 @@ HPO_STAGE_FINAL = "final"
 HPO_ERROR = "error"
 HPO_COV = "cov"
 HPO_BIAS = "bias"
+HPO_WEIGHTS = "weights"
 
 
 def _find_lambda_closest_unit_norm(cov, b, eps=1e-6, steps=100):
@@ -272,7 +273,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
         weights_normalization: Whether to normalize weights by their sum or not ("sum", "norm", or "none").
         algorithm: Either "sgd", "closed-form", "closed-form-fast", "closed-form-avg", "closed-form-ce", "closed-form-ce-cov", "closed-form-err", or "none" to disable HPO.
         ema: Use momentum for gradient smoothing. Can be dictionary with "main" and "downstream" keys
-            for the main and downstream losses respectively.
+            for the main and downstream losses respectively. An additional "weights" key can be provided to control weights smoothing in closed-form algorithms.
         apply_optimizer_correction: Try to approximate an actual optimizer step rather than simple SGD.
         normalize_down_grad: Estimate only the dirrection of the downstream loss gradient.
         clip_hp_grad: Clipping value for hyperparameters gradients.
@@ -334,14 +335,18 @@ class CorrHPOptimizer(torch.optim.Optimizer):
         self.algorithm = algorithm
         try:
             momentum = dict(ema)
-            if set(momentum.keys()) != {"main", "downstream"}:
-                raise ValueError(f"Expected dictionary with 'main' and 'downstream' keys.")
+            if "weights" not in momentum:
+                momentum["weights"] = 0
+            if set(momentum.keys()) != {"main", "downstream", "weights"}:
+                raise ValueError(f"Expected dictionary with 'main', 'downstream', and 'weights' keys.")
             self.main_momentum = momentum["main"]
             self.downstream_momentum = momentum["downstream"]
+            self.weights_momentum = momentum["weights"]
         except TypeError:
             momentum = float(ema)
             self.main_momentum = momentum
             self.downstream_momentum = momentum
+            self.weights_momentum = 0
         self.apply_optimizer_correction = apply_optimizer_correction
         self.normalize_down_grad = normalize_down_grad
         self.clip_hp_grad = clip_hp_grad
@@ -350,7 +355,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
 
         # todo: use optimizer state for gradient caches.
         if algorithm == "closed-form-avg":
-            self._grads_cache = {HPO_STAGE_DOWNSTREAM: None, HPO_COV: None, HPO_BIAS: None}
+            self._grads_cache = {HPO_STAGE_DOWNSTREAM: None, HPO_COV: None, HPO_BIAS: None, HPO_WEIGHTS: None}
         else:
             self._grads_cache = {HPO_STAGE_DOWNSTREAM: None, HPO_STAGE_FREE: None} | {i: None for i in range(self.n_weights)}
             if algorithm in {"closed-form-ce", "closed-form-ce-cov"}:
@@ -362,6 +367,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                     raise ValueError("EMA must be used for closed-form-err")
                 self._grads_cache[HPO_ERROR] = None
                 self._grads_cache[f"cov_{HPO_ERROR}"] = None
+            self._grads_cache[HPO_WEIGHTS] = None
 
     def step(self, closure, inner=False):
         if not inner:
@@ -650,6 +656,9 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                 assert self.algorithm == "none"
                 scale, norm = self._get_scale_norm(weights)
                 actual_weights = scale * weights / norm
+
+            if self.weights_momentum:
+                actual_weights = self._update_grads_cache(actual_weights, stage=HPO_WEIGHTS)
 
             # Compute model grads.
             downstream_weight = self.downstream_weight
