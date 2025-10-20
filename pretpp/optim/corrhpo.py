@@ -335,8 +335,6 @@ class CorrHPOptimizer(torch.optim.Optimizer):
         self.algorithm = algorithm
         try:
             momentum = dict(ema)
-            if "weights" not in momentum:
-                momentum["weights"] = 0
             if set(momentum.keys()) != {"main", "downstream", "weights"}:
                 raise ValueError(f"Expected dictionary with 'main', 'downstream', and 'weights' keys.")
             self.main_momentum = momentum["main"]
@@ -346,7 +344,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
             momentum = float(ema)
             self.main_momentum = momentum
             self.downstream_momentum = momentum
-            self.weights_momentum = 0
+            self.weights_momentum = momentum
         self.apply_optimizer_correction = apply_optimizer_correction
         self.normalize_down_grad = normalize_down_grad
         self.clip_hp_grad = clip_hp_grad
@@ -531,11 +529,16 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                                                           eps=self.eps)
             elif self.algorithm == "closed-form-avg":
                 all_grads = torch.stack(all_grads, 0)  # (W, P).
-                target = down_grads - free_grads
-                prods = all_grads @ target  # (W).
-                t_norm_sq = torch.linalg.norm(target) ** 2
-                cov = prods[:, None] @ prods[None, :]  # (W, W).
-                bias = - t_norm_sq * prods
+                main_grads_norm = (torch.linalg.norm(all_grads).square() + torch.linalg.norm(free_grads).square()).sqrt() + self.eps
+                all_grads /= main_grads_norm
+                target = down_grads - free_grads / main_grads_norm  # (P).
+
+                target_sq = target.square()
+                target_q = target * target_sq
+                all_grads_target_sq = all_grads * target_sq
+                cov = all_grads @ all_grads_target_sq.T  # (W, W).
+                bias = -all_grads @ target_q
+                assert cov.ndim == 2 and bias.ndim == 1
                 cov = self._update_grads_cache(cov, stage=HPO_COV)
                 bias = self._update_grads_cache(bias, stage=HPO_BIAS)
                 with torch.autocast("cuda", enabled=False):
@@ -700,7 +703,8 @@ class CorrHPOptimizer(torch.optim.Optimizer):
         super().load_state_dict(state_dict)
         self.base_optimizer.param_groups = self.param_groups
         p = self.param_groups[0]["params"][0]
-        self._grads_cache.update({k: v.to(device=p.device, dtype=p.dtype) for k, v in state_dict.get("grads_cache", {}).items()})
+        self._grads_cache.update({k: (v.to(device=p.device, dtype=p.dtype) if v is not None else None)
+                                  for k, v in state_dict.get("grads_cache", {}).items()})
 
     def _gather_grads(self, apply_optimizer_correction=False, normalize=False):
         grads = []
