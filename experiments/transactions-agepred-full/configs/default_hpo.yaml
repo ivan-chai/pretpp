@@ -15,10 +15,7 @@ module:
     - loss_0_labels
     - loss_0_log_amount
   hpo_params:
-    algorithm: closed-form
     ema: 0.99
-    weights_parametrization: abs
-    weights_normalization: norm
   downstream_loss: loss_1_target
   loss_projection_partial:
     _target_: pretpp.nn.CatHead
