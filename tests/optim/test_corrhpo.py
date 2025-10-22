@@ -4,7 +4,7 @@ import torch
 from unittest import TestCase, main
 
 from pretpp.optim import CorrHPOptimizer, HPO_STAGE_DOWNSTREAM, HPO_STAGE_FINAL
-from pretpp.optim.corrhpo import find_closest_unit_norm, quadratic_program_positive
+from pretpp.optim.solvers import solve_lstsq_unit_norm, closed_form_unit_norm, closed_form_spherical, solve_qp
 
 
 def f1(x):
@@ -24,7 +24,7 @@ def downstream(x):
 
 
 class TestCorrHPOptimizer(TestCase):
-    def test_find_closest_unit_norm(self):
+    def test_solve_lstsq_unit_norm(self):
         torch.manual_seed(0)
         # Test random.
         dim = 5
@@ -36,7 +36,7 @@ class TestCorrHPOptimizer(TestCase):
         weights_gt /= torch.linalg.norm(weights_gt)
         target = v @ weights_gt
 
-        weights = find_closest_unit_norm(v, target)
+        weights = solve_lstsq_unit_norm(v, target)
         self.assertAlmostEqual(torch.linalg.norm(weights - weights_gt).item(), 0, places=2)
 
         # Test small vector weights.
@@ -49,7 +49,7 @@ class TestCorrHPOptimizer(TestCase):
         weights_gt[0] = 1 - (weights_gt[1:] ** 2).sum()
         target = v @ weights_gt
 
-        weights = find_closest_unit_norm(v, target)
+        weights = solve_lstsq_unit_norm(v, target)
         self.assertAlmostEqual(torch.linalg.norm(weights - weights_gt).item(), 0, places=2)
         
     def test_quadratic_program(self):
@@ -63,7 +63,7 @@ class TestCorrHPOptimizer(TestCase):
         weights_gt = 5 * torch.rand(dim).double()  # Positive.
         target = v @ weights_gt
 
-        weights = quadratic_program_positive(v @ v.T, - v @ target)
+        weights = solve_qp(v @ v.T, - v @ target, positive=True)
         self.assertAlmostEqual(torch.linalg.norm(weights - weights_gt).item(), 0, places=2)
 
     def test_gradient(self):
@@ -72,7 +72,7 @@ class TestCorrHPOptimizer(TestCase):
         alpha = torch.nn.Parameter(torch.rand([]))
         beta = torch.nn.Parameter(torch.rand([]))
 
-        def closure(down, free, alpha, beta, stage=None):
+        def closure(down, alpha, beta, stage=None):
             optimizer.zero_grad()
             if down > 0:
                 v = down * downstream(x)
@@ -87,6 +87,7 @@ class TestCorrHPOptimizer(TestCase):
                 optimizer = CorrHPOptimizer([{"params": [alpha, beta]},
                                              {"params": [x]}],
                                             torch.optim.Adam,
+                                            algorithm="sgd",
                                             weights_parametrization=parametrization,
                                             weights_normalization=normalization,
                                             normalize_down_grad=False,
@@ -128,8 +129,11 @@ class TestCorrHPOptimizer(TestCase):
 
     def test_optimizer(self):
         torch.manual_seed(0)
-        for algorithm in ["sgd", "closed-form-fast", "closed-form"]:
+        for algorithm in ["sgd", "closed-form", "closed-form-sphere"]:
             for normalization in (["none", "sum", "norm"] if algorithm == "sgd" else ["none", "norm"]):
+                if (algorithm == "closed-form") and (normalization != "norm"):
+                    # Not implemented.
+                    continue
                 for parametrization in (["sigmoid", "tanh", "abs"] if algorithm == "sgd" else ["linear"]):
                     x = torch.nn.Parameter(torch.randn([]))
                     alpha = torch.nn.Parameter(torch.rand([]))
@@ -144,13 +148,13 @@ class TestCorrHPOptimizer(TestCase):
                                                 lr=0.01)
 
                     for step in range(2000):
-                        def closure(down, free, alpha, beta, stage=None):
+                        def closure(down, alpha, beta, stage=None):
                             optimizer.zero_grad()
                             if down > 0:
                                 v = down * downstream(x)
                             else:
                                 v = 0
-                            if alpha > 0 or beta > 0 or free > 0:
+                            if alpha > 0 or beta > 0:
                                 v = v + loss(x, alpha, beta)
                             v.backward()
                         optimizer.hpo_step(closure)
