@@ -49,6 +49,8 @@ class HPOModule(BaseModule):
             k: torch.nn.Parameter(torch.zeros([]))
             for k in self.hpo_losses
         })
+        self.register_buffer("n_weights_updates", torch.zeros([], dtype=torch.long))
+        self.register_buffer("avg_weights", torch.zeros(len(self.hpo_losses)))
         self.gradient_clip_val = None
 
     @BaseModule.trainer.setter
@@ -80,6 +82,11 @@ class HPOModule(BaseModule):
                 metrics.update({f"hpo_{name}": w.item() for name, w in zip(self.hpo_losses, weights)})
                 if self.gradient_clip_val is not None:
                     self.clip_gradients(opt, gradient_clip_val=self.gradient_clip_val, gradient_clip_algorithm=self.trainer.gradient_clip_algorithm)
+                self.n_weights_updates += 1
+                self.avg_weights *= (self.n_weights_updates - 1) / self.n_weights_updates
+                for i, w in enumerate(weights):
+                    self.avg_weights[i] += w / self.n_weights_updates
+                metrics.update({f"hpo_avg_{name}": self.avg_weights[i] for i, name in enumerate(self.hpo_losses)})
             else:
                 assert isinstance(stage, int)
                 metrics[f"hpo_grad_norm_weight_{stage}"] = self._get_grad_norm(warn_empty_grads=False)

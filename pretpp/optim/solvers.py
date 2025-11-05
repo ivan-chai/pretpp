@@ -4,7 +4,7 @@ import numpy as np
 from functools import partial
 from numbers import Number
 
-from scipy.optimize import bisect, minimize
+from scipy.optimize import bisect, minimize, linprog
 
 
 def _find_lambda_closest_unit_norm_np(cov, b, eps=1e-6, steps=100):
@@ -221,7 +221,74 @@ def closed_form_spherical(basis, target, covs=None, cov_err=0, positive=False, e
     log_scale = scale
 
     weights = solve_ce(C, b, r, covs, cov_err, dim=len(target), log_scale=log_scale, eps=eps, positive=positive)
-#    if weights[1] > 30 * weights[0]:
-#        import ipdb
-#        ipdb.set_trace()
     return weights
+
+
+# TODO: faster, more ITERS.
+@torch.autocast(device_type="cuda", enabled=False)
+@torch.no_grad()
+def closed_form_fw(basis, target, positive=False, normalization="sum", eps=1e-6, max_iter=100):
+    """"Find a combination of basis vectors that is close to a scaled target.
+
+    Args:
+        basis: Basis vectors with shape (W, P).
+        target: Target vector with shape (P).
+        positive: Find positive weights.
+        normalization: Either "sum", "norm", or "none".
+
+    Returns:
+        Weights with shape (W) and an optimal target scale S.
+    """
+    n_weights = len(basis)
+
+    C = (basis @ basis.T).cpu().numpy()  # (W, W).
+    b = (basis @ target).cpu().numpy()  # (W).
+    r = (target @ target).item()
+
+    cov = np.empty((n_weights + 1, n_weights + 1), dtype=np.double)
+    cov[:n_weights, :n_weights] = C
+    cov[:n_weights, n_weights] = -b
+    cov[n_weights, :n_weights] = -b
+    cov[n_weights, n_weights] = r
+
+    max_scale = 10 * torch.linalg.norm(basis, dim=1).max().item() / (torch.linalg.norm(target).item() + eps)
+
+    if positive:
+        bounds = [(0, None)] * n_weights + [(0, max_scale)]
+    else:
+        bounds = [(None, None)] * n_weights + [(0, max_scale)]
+    if normalization == "none":
+        A_eq = None
+        b_eq = None
+    elif normalization == "sum":
+        A_eq = np.ones((1, n_weights + 1))
+        A_eq[0, -1] = 0
+        b_eq = np.ones(1)
+    else:
+        raise NotImplementedError(f"Normalization: {normalization}")
+
+    # Apply Frank-Wolfe optimization.
+    x = np.full((n_weights + 1), 1 / n_weights)
+    x[-1] = 1  # Target scale.
+
+    for k in range(max_iter):
+        # Step 1.
+        grad = cov @ x
+        r = linprog(grad, A_eq=A_eq, b_eq=b_eq, bounds=bounds)
+        if not r.success:
+            raise RuntimeError(f"Linprog failed: {r.status}")
+        s = r.x
+
+        # Step 2.
+        delta = s - x
+        delta_c = (delta[None] @ cov)[0]  # (W).
+        a = delta_c @ delta  # Non-negative.
+        b = delta_c @ x
+        alpha = - b / (a + eps)
+        alpha = min(alpha, 1)
+        alpha = max(alpha, 0)
+
+        # Step 3.
+        x = x + alpha * (s - x)
+
+    return torch.from_numpy(x[:-1]).to(device=target.device, dtype=target.dtype), float(x[-1])
