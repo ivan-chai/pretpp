@@ -58,7 +58,7 @@ def solve_qp(C, b, steps=100, method="SLSQP", eps=1e-6,
 
     Args:
       positive: Whether to add x > 0 constraint or not.
-      norm: Whether to add |x| = 1 constraint or not.
+      norm: Whether to add |x| = 1 constraint or not. Boolean or a number of features to normalize.
     """
     dtype = C.dtype
     device = C.device
@@ -76,10 +76,14 @@ def solve_qp(C, b, steps=100, method="SLSQP", eps=1e-6,
             "jac": lambda x: eye
         })
     if norm:
+        if isinstance(norm, bool):
+            norm_size = n
+        else:
+            norm_size = int(norm)
         cons.append({
             "type": "eq",
-            "fun": lambda x: (x ** 2).sum() - 1,
-            "jac": lambda x: 2 * x
+            "fun": lambda x: (x[:norm_size] ** 2).sum() - 1,
+            "jac": lambda x: 2 * np.concatenate([x[:norm_size], np.zeros_like(x[norm_size:])])
         })
     opt = {
         "disp": False,
@@ -91,16 +95,17 @@ def solve_qp(C, b, steps=100, method="SLSQP", eps=1e-6,
     if positive:
         weights = np.clip(weights, a_min=0, a_max=None)
     if norm:
-        scale = np.linalg.norm(weights)
+        scale = np.linalg.norm(weights[:norm_size])
         if scale < eps:
             weights = np.ones_like(weights)
-            scale = np.linalg.norm(weights)
-        weights = weights / (scale + eps)
+            weights = np.concatenate([np.ones_like(weights[:norm_size]), weights[norm_size:]])
+            scale = np.linalg.norm(weights[:norm_size])
+        weights = np.concatenate([weights[:norm_size] / (scale + eps), weights[norm_size:]])
     return torch.from_numpy(weights).to(dtype=dtype, device=device)
 
 
 def solve_ce(C, b, r, covs, cov_err, dim, log_scale=1, steps=100, method="SLSQP", eps=1e-6,
-             positive=False):
+             positive=False, norm=False):
     """Minimize d log s^2 + (x^T C x + 2 * b^T x + r) / s^2, where s^2 = sum w^2_i covs_i + cov_err.
 
     Args:
@@ -132,6 +137,13 @@ def solve_ce(C, b, r, covs, cov_err, dim, log_scale=1, steps=100, method="SLSQP"
             "jac": lambda x: eye
         })
 
+    if norm:
+        cons.append({
+            "type": "eq",
+            "fun": lambda x: (x ** 2).sum() - 1,
+            "jac": lambda x: 2 * x
+        })
+
     opt = {
         "disp": False,
         "maxiter": steps
@@ -146,7 +158,7 @@ def solve_ce(C, b, r, covs, cov_err, dim, log_scale=1, steps=100, method="SLSQP"
 
 @torch.autocast(device_type="cuda", enabled=False)
 @torch.no_grad()
-def closed_form_unit_norm(basis, target, covs=None, positive=False, eps=1e-6):
+def closed_form(basis, target, covs=None, positive=False, norm=False, scale_target=False, eps=1e-6):
     """"Find a combination of basis vectors that is close to target.
 
     Args:
@@ -164,6 +176,8 @@ def closed_form_unit_norm(basis, target, covs=None, positive=False, eps=1e-6):
         raise ValueError("Covariances must be number or vector.")
     if isinstance(covs, Number):
         scales = 1  # Scale doesn't affect the result.
+        scaled_basis = basis
+        scaled_target = target
     else:
         scales = covs.sqrt()
         mean_scale = scales.mean().item()
@@ -171,22 +185,35 @@ def closed_form_unit_norm(basis, target, covs=None, positive=False, eps=1e-6):
             scales = 1
         else:
             scales /= (mean_scale + eps)
-    scaled_basis = basis / scales
-    scaled_target = target / scales
-    C = scaled_basis @ scaled_basis.T  # (W, W).
-    b = -(scaled_basis @ scaled_target)  # (W).
+        scaled_basis = basis / scales
+        scaled_target = target / scales
+    if scale_target:
+        n_weights = len(basis)
+        prods = -(scaled_basis @ scaled_target)
+        C = torch.empty((n_weights + 1, n_weights + 1), dtype=basis.dtype, device=basis.device)
+        C[:n_weights, :n_weights] = scaled_basis @ scaled_basis.T  # (W, W).
+        C[:n_weights, n_weights] = prods
+        C[n_weights, :n_weights] = prods
+        C[n_weights, n_weights] = target @ target
+        b = torch.zeros_like(C[0])
+    else:
+        C = scaled_basis @ scaled_basis.T  # (W, W).
+        b = -(scaled_basis @ scaled_target)  # (W).
 
     scale = C.mean() + eps
     C /= scale
     b /= scale
 
-    weights = solve_qp(C, b, eps=eps, positive=positive)
+    norm_size = len(basis) if norm else False
+    weights = solve_qp(C, b, eps=eps, positive=positive, norm=norm_size)
+    if scale_target:
+        weights = weights[:-1]
     return weights
 
 
 @torch.autocast(device_type="cuda", enabled=False)
 @torch.no_grad()
-def closed_form_spherical(basis, target, covs=None, cov_err=0, positive=False, eps=1e-6):
+def closed_form_spherical(basis, target, covs=None, cov_err=0, positive=False, norm=False, eps=1e-6):
     """"Find a combination of basis vectors that is close to target.
 
     NOTE: This solver works only with spherical distributions.
@@ -220,14 +247,14 @@ def closed_form_spherical(basis, target, covs=None, cov_err=0, positive=False, e
     cov_err = cov_err / scale
     log_scale = scale
 
-    weights = solve_ce(C, b, r, covs, cov_err, dim=len(target), log_scale=log_scale, eps=eps, positive=positive)
+    weights = solve_ce(C, b, r, covs, cov_err, dim=len(target), log_scale=log_scale, eps=eps, positive=positive, norm=norm)
     return weights
 
 
 # TODO: faster, more ITERS.
 @torch.autocast(device_type="cuda", enabled=False)
 @torch.no_grad()
-def closed_form_fw(basis, target, positive=False, normalization="sum", eps=1e-6, max_iter=100):
+def closed_form_fw(basis, target, positive=False, normalization="sum", scale_target=True, eps=1e-6, max_iter=100):
     """"Find a combination of basis vectors that is close to a scaled target.
 
     Args:
@@ -235,6 +262,7 @@ def closed_form_fw(basis, target, positive=False, normalization="sum", eps=1e-6,
         target: Target vector with shape (P).
         positive: Find positive weights.
         normalization: Either "sum", "norm", or "none".
+        scale_target: Allow scaling of a target vector.
 
     Returns:
         Weights with shape (W) and an optimal target scale S.
@@ -245,35 +273,51 @@ def closed_form_fw(basis, target, positive=False, normalization="sum", eps=1e-6,
     b = (basis @ target).cpu().numpy()  # (W).
     r = (target @ target).item()
 
-    cov = np.empty((n_weights + 1, n_weights + 1), dtype=np.double)
-    cov[:n_weights, :n_weights] = C
-    cov[:n_weights, n_weights] = -b
-    cov[n_weights, :n_weights] = -b
-    cov[n_weights, n_weights] = r
+    if scale_target:
+        cov = np.empty((n_weights + 1, n_weights + 1), dtype=np.double)
+        cov[:n_weights, :n_weights] = C
+        cov[:n_weights, n_weights] = -b
+        cov[n_weights, :n_weights] = -b
+        cov[n_weights, n_weights] = r
+    else:
+        cov = C
 
     max_scale = 10 * torch.linalg.norm(basis, dim=1).max().item() / (torch.linalg.norm(target).item() + eps)
+    extra_param_num = int(bool(scale_target))
 
-    if positive:
-        bounds = [(0, None)] * n_weights + [(0, max_scale)]
-    else:
-        bounds = [(None, None)] * n_weights + [(0, max_scale)]
     if normalization == "none":
         A_eq = None
         b_eq = None
+        norms = torch.linalg.norm(basis, dim=1).cpu().numpy()  # (W).
+        max_weights = np.clip(np.abs(b) / (norms ** 2 + eps), 1, None)
     elif normalization == "sum":
-        A_eq = np.ones((1, n_weights + 1))
-        A_eq[0, -1] = 0
+        A_eq = np.ones((1, n_weights + extra_param_num))
+        if scale_target:
+            A_eq[0, -1] = 0
         b_eq = np.ones(1)
+        max_weights = [None] * n_weights
     else:
         raise NotImplementedError(f"Normalization: {normalization}")
 
+
+    if positive:
+        bounds = [(0, w) for w in max_weights]
+    else:
+        bounds = [(-w, w) for w in max_weights]
+    if scale_target:
+        bounds = bounds + [(0, max_scale)]
+
     # Apply Frank-Wolfe optimization.
-    x = np.full((n_weights + 1), 1 / n_weights)
-    x[-1] = 1  # Target scale.
+    x = np.full((n_weights + extra_param_num), 1 / n_weights)
+    if scale_target:
+        x[-1] = 1  # Target scale.
 
     for k in range(max_iter):
         # Step 1.
-        grad = cov @ x
+        if scale_target:
+            grad = cov @ x
+        else:
+            grad = cov @ x - b
         r = linprog(grad, A_eq=A_eq, b_eq=b_eq, bounds=bounds)
         if not r.success:
             raise RuntimeError(f"Linprog failed: {r.status}")
@@ -282,13 +326,19 @@ def closed_form_fw(basis, target, positive=False, normalization="sum", eps=1e-6,
         # Step 2.
         delta = s - x
         delta_c = (delta[None] @ cov)[0]  # (W).
-        a = delta_c @ delta  # Non-negative.
-        b = delta_c @ x
-        alpha = - b / (a + eps)
+        ca = delta_c @ delta  # Non-negative.
+        if scale_target:
+            cb = delta_c @ x
+        else:
+            cb = delta_c @ x - b @ delta
+        alpha = - 2 * cb / (ca + eps)
         alpha = min(alpha, 1)
         alpha = max(alpha, 0)
 
         # Step 3.
         x = x + alpha * (s - x)
 
-    return torch.from_numpy(x[:-1]).to(device=target.device, dtype=target.dtype), float(x[-1])
+    if scale_target:
+        return torch.from_numpy(x[:-1]).to(device=target.device, dtype=target.dtype), float(x[-1])
+    else:
+        return torch.from_numpy(x).to(device=target.device, dtype=target.dtype), 1
