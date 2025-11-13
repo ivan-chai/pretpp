@@ -81,7 +81,11 @@ data_module:
     max_length: 512
     position: last
   #global_target_fields: target
-  train_path: data/train.parquet
+  train_path:
+    - data/train.parquet/fold=0
+    - data/train.parquet/fold=1
+    - data/train.parquet/fold=2
+    - data/train.parquet/fold=3
   #val_path: data/test.parquet
   test_path: data/test.parquet
 
