@@ -82,7 +82,7 @@ data_module:
     position: last
   #global_target_fields: target
   train_path: data/train.parquet
-  #val_path: data/test.parquet
+  val_path: data/test.parquet
   test_path: data/test.parquet
 
 metric: null
