@@ -13,14 +13,14 @@ rnn_inference_context: 1200
 rnn_inference_context_step: 200
 rnn_min_length: 256
 
-transformer_hidden_size: 512
+transformer_hidden_size: 256
 transformer_inter_size: 1024
 transformer_heads: 4
-transformer_layers: 10
-transformer_context: 256
-transformer_positions: 2400
+transformer_layers: 4
+transformer_context: 300
+transformer_positions: 300
 transformer_dropout: 0.1
-transformer_min_length: 128
+transformer_min_length: 4
 transformer_cls_token:
   timestamps: -1
   labels: ${num_classes}  # Use final label for CLS.
@@ -73,12 +73,12 @@ data_module:
   num_workers: 4
   train_params:
     min_required_length: 2
-    max_length: 1200
+    max_length: 300
   val_params:
-    max_length: 512
+    max_length: 300
     position: last
   test_params:
-    max_length: 512
+    max_length: 300
     position: last
   #global_target_fields: target
   train_path: data/train.parquet
