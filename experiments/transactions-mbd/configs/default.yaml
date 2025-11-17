@@ -126,36 +126,47 @@ module:
         labels:  # mcc.
           in: ${num_classes}
           out: 24
+          clip: true
         event_subtype:
           in: 70
           out: 24
+          clip: true
         currency:
           in: 10
           out: 4
+          clip: true
         src_type11:
           in: 85
           out: 24
+          clip: true
         src_type12:
           in: 380
           out: 24
+          clip: true
         dst_type11:
           in: 90
           out: 24
+          clip: true
         dst_type12:
           in: 500
           out: 12
+          clip: true
         src_type21:  # MY.
           in: 10002
           out: 64
+          clip: true
         src_type22:
           in: 90
           out: 24
+          clip: true
         src_type31:  # MY.
           in: 2406
           out: 32
+          clip: true
         src_type32:
           in: 91
           out: 24
+          clip: true
       numeric_values:
         timestamps: identity
         amount: identity
