@@ -25,6 +25,7 @@ class HistoryTokenTransformer(SimpleTransformer):
 
     def embed(self, x, timestamps):
         x = PaddedBatch(self.input_projection(x.payload), x.seq_lens)  # (B, L, D).
+        x, timestamps = self.add_sos(x, timestamps)
 
         with self.strategy(timestamps, embedding=True) as strategy:
             x, timestamps, attention_mask = strategy.apply(x, timestamps)
@@ -67,6 +68,7 @@ class HistoryTokenTransformer(SimpleTransformer):
         b, l = x.shape
         device = x.device
         x = PaddedBatch(self.input_projection(x.payload), x.seq_lens)  # (B, L, D).
+        x, timestamps = self.add_sos(x, timestamps)
 
         with self.strategy(timestamps) as strategy:
             x, timestamps, attention_mask = strategy.apply(x, timestamps)  # (B, L', D).
@@ -79,5 +81,6 @@ class HistoryTokenTransformer(SimpleTransformer):
             else:
                 outputs, _ = self.transform(x, attention_mask=attention_mask)  # (B, L', D).
             outputs = strategy.extract_outputs(outputs)
+        outputs = self.remove_sos(outputs)
         states = None
         return outputs, states
