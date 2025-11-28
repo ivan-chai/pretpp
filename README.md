@@ -77,6 +77,12 @@ Fine-tune:
 CUDA_VISIBLE_DEVICES=0 python3 -m hotpp.train_multiseed --config-dir configs --config-name transformer_ft_multi base_name=next_item_transformer
 ```
 
+# Troubleshooting
+If you encounter problems with downstream evaluation, such as seeing the message “waiting XX unfinished evaluation jobs” while CPU usage remains at zero, try setting the following environment variable:
+```bash
+export OMP_NUM_THREADS=1
+```
+
 # Citation
 ```
 @article{karpukhin2025httransformer,
