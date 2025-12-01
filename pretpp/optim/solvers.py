@@ -7,6 +7,11 @@ from numbers import Number
 from scipy.optimize import bisect, minimize, linprog
 
 
+def _zero_last(x):
+    x[-1] = 0
+    return x
+
+
 def _find_lambda_closest_unit_norm_np(cov, b, eps=1e-6, steps=100):
     """Solve ||inv(C + x I) b|| = 1."""
     dim = len(cov)
@@ -104,7 +109,7 @@ def solve_qp(C, b, steps=100, method="SLSQP", eps=1e-6,
     return torch.from_numpy(weights).to(dtype=dtype, device=device)
 
 
-def solve_ce(C, b, r, covs, cov_err, dim, log_scale=1, steps=100, method="SLSQP", eps=1e-6,
+def solve_ce(C, b, r, covs, cov_err, dim, log_scale=1, scaled=False, steps=100, method="SLSQP", eps=1e-6,
              positive=False, norm=False):
     """Minimize d log s^2 + (x^T C x + 2 * b^T x + r) / s^2, where s^2 = sum w^2_i covs_i + cov_err.
 
@@ -125,6 +130,15 @@ def solve_ce(C, b, r, covs, cov_err, dim, log_scale=1, steps=100, method="SLSQP"
         delta_norm_sq = x.T @ C @ x + 2 * np.dot(x, b) + r
         value = dim * log_scale * math.log(s2) + delta_norm_sq / s2
         grads = 2 * dim * log_scale / s2 * (x * covs) + 2 / (s2 ** 2 + eps) * ((C @ x + b) * s2 - delta_norm_sq * x * covs)
+        if scaled:
+            value -= dim * math.log(x[-1] ** 2 + eps)
+            lx = x[-1]
+            if abs(lx) < eps:
+                if lx > 0:
+                    lx += eps
+                else:
+                    lx -= eps
+            grads[-1] -= 2 * dim / lx
         return value, grads
     x0 = np.ones(n) / n
 
@@ -136,12 +150,21 @@ def solve_ce(C, b, r, covs, cov_err, dim, log_scale=1, steps=100, method="SLSQP"
             "fun": lambda x: x,
             "jac": lambda x: eye
         })
+    elif scaled:
+        eye_last = np.zeros(n)
+        eye_last[-1] = 1
+        cons.append({
+            "type": "ineq",
+            "fun": lambda x: x[-1],
+            "jac": lambda x: eye_last
+        })
 
     if norm:
+        size = n - 1 if scaled else n
         cons.append({
             "type": "eq",
-            "fun": lambda x: (x ** 2).sum() - 1,
-            "jac": lambda x: 2 * x
+            "fun": lambda x: (x[:size] ** 2).sum() - 1,
+            "jac": lambda x: _zero_last(2 * x)
         })
 
     opt = {
@@ -153,6 +176,8 @@ def solve_ce(C, b, r, covs, cov_err, dim, log_scale=1, steps=100, method="SLSQP"
                        method="SLSQP", options=opt)["x"]
     if positive:
         weights = np.clip(weights, a_min=0, a_max=None)
+    elif scaled:
+        weights[-1] = max(0, weights[-1])
     return torch.from_numpy(weights).to(dtype=dtype, device=device)
 
 
@@ -213,7 +238,7 @@ def closed_form(basis, target, covs=None, positive=False, norm=False, scale_targ
 
 @torch.autocast(device_type="cuda", enabled=False)
 @torch.no_grad()
-def closed_form_spherical(basis, target, covs=None, cov_err=0, positive=False, norm=False, eps=1e-6):
+def closed_form_spherical(basis, target, covs=None, cov_err=0, positive=False, norm=False, scale_target=False, eps=1e-6):
     """"Find a combination of basis vectors that is close to target.
 
     NOTE: This solver works only with spherical distributions.
@@ -236,18 +261,33 @@ def closed_form_spherical(basis, target, covs=None, cov_err=0, positive=False, n
         covs = torch.full_like(basis[:, 0], covs)
     if isinstance(cov_err, Number):
         cov_err = torch.full_like(target[0], cov_err)
-    C = basis @ basis.T  # (W, W).
-    b = -(basis @ target)  # (W).
-    r = target @ target  # Scalar
+    if scale_target:
+        n_weights = len(basis)
+        prods = -(basis @ target)
+        C = torch.empty((n_weights + 1, n_weights + 1), dtype=basis.dtype, device=basis.device)
+        C[:n_weights, :n_weights] = basis @ basis.T  # (W, W).
+        C[:n_weights, n_weights] = prods
+        C[n_weights, :n_weights] = prods
+        C[n_weights, n_weights] = target @ target
+        b = torch.zeros_like(C[0])
+        r = torch.zeros_like(C[0, 0])
+        covs = torch.cat([covs, torch.zeros_like(covs[:1])])
+    else:
+        C = basis @ basis.T  # (W, W).
+        b = -(basis @ target)  # (W).
+        r = target @ target  # Scalar
 
-    scale = (covs.mean() + cov_err).item()
-    if scale < eps:
-        scale = 1
-    covs = covs / scale
-    cov_err = cov_err / scale
-    log_scale = scale
+#    scale = (covs.mean() + cov_err).item()
+#    if scale < eps:
+#        scale = 1
+#    covs = covs / scale
+#    cov_err = cov_err / scale
+#    log_scale = scale
+    log_scale = 1
 
-    weights = solve_ce(C, b, r, covs, cov_err, dim=len(target), log_scale=log_scale, eps=eps, positive=positive, norm=norm)
+    weights = solve_ce(C, b, r, covs, cov_err, dim=len(target), log_scale=log_scale, scaled=scale_target, eps=eps, positive=positive, norm=norm)
+    if scale_target:
+        weights = weights[:-1]
     return weights
 
 
@@ -342,3 +382,31 @@ def closed_form_fw(basis, target, positive=False, normalization="sum", scale_tar
         return torch.from_numpy(x[:-1]).to(device=target.device, dtype=target.dtype), float(x[-1])
     else:
         return torch.from_numpy(x).to(device=target.device, dtype=target.dtype), 1
+
+
+@torch.autocast(device_type="cuda", enabled=False)
+@torch.no_grad()
+def closed_form_trmse(basis, target, covs=None, positive=False, eps=1e-6):
+    """"Find a combination of basis vectors that is close to target.
+
+    Args:
+        basis: Basis vectors with shape (W, P).
+        target: Target vector with shape (P).
+        covs: Scale vector with shape (W) or a matrix with shape (W, P) or a number for basis vectors.
+        positive: Find positive weights.
+
+    Returns:
+        Weights with shape (W).
+    """
+    if covs is None:
+        covs = 1
+    elif (not isinstance(covs, Number)) and (covs.shape != basis[:, 0].shape):
+        raise ValueError("Covariances must be number or vector.")
+    C = basis @ basis.T  # (W, W).
+    b = -(basis @ target)  # (W).
+
+    if covs is not None:
+        C = C + basis.shape[1] * torch.diag(covs)
+
+    weights = solve_qp(C, b, eps=eps, positive=positive)
+    return weights
