@@ -25,7 +25,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
             The "merge" value means inserting downstream gradients for the weights, not updated by the main loss.
         weights_parametrization: Either "linear", "tanh", "abs", or "sigmoid".
         weights_normalization: Whether to normalize weights by their sum or not ("sum", "norm", or "none").
-        algorithm: Either "sgd", "closed-form[-sphere]", "closed-form-trmse", "closed-form-mse[-scaled]", "closed-form-pos-uni[-scaled]", "closed-form-nearest", or "none" to disable HPO.
+        algorithm: Either "sgd", "closed-form[-sphere]", "closed-form-trmse[-proj]", "closed-form-mse[-scaled]", "closed-form-pos-uni[-scaled]", "closed-form-nearest", or "none" to disable HPO.
         ema: Use momentum for gradient smoothing. Can be dictionary with "main" and "downstream" keys
             for the main and downstream losses respectively. An additional "weights" key can be provided to control
             weights smoothing in closed-form algorithms.
@@ -60,7 +60,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
         params = list(params)
         if len(params) < 2 or not isinstance(params[0], dict):
             raise ValueError("Expected at least two param groups with the first group being loss weights.")
-        if algorithm not in {"sgd", "closed-form", "closed-form-sphere", "closed-form-trmse", "closed-form-mse", "closed-form-mse-scaled", "closed-form-pos-uni", "closed-form-pos-uni-scaled", "closed-form-nearest", "none"}:
+        if algorithm not in {"sgd", "closed-form", "closed-form-sphere", "closed-form-trmse", "closed-form-trmse-proj", "closed-form-mse", "closed-form-mse-scaled", "closed-form-pos-uni", "closed-form-pos-uni-scaled", "closed-form-nearest", "none"}:
             raise ValueError(f"Unexpected algorithm: {algorithm}")
         if algorithm.startswith("closed-form") and (weights_parametrization not in {"linear", "abs"}):
             raise ValueError("Closed-form approach is compatible with linear and abs parametrizations only.")
@@ -367,6 +367,11 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                     scale = 1
                 actual_weights = scale * actual_weights
             elif self.algorithm.startswith("closed-form-trmse"):
+                if self.algorithm == "closed-form-trmse":
+                    proj = False
+                else:
+                    assert self.algorithm == "closed-form-trmse-proj"
+                    proj = True
                 if self.weights_parametrization == "abs":
                     positive = True
                 else:
@@ -395,10 +400,19 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                     target_norm = torch.ones_like(down_grads[0])
                     target = down_grads
 
+                if proj:
+                    scale = target / (target.mean() + self.eps)  # (P).
+                    all_grads *= scale
+                    target = target * scale
+                    all_grads_covs *= scale.square()
+
                 actual_weights = closed_form_trmse(all_grads, target,
-                                                   covs=all_grads_covs.sum(1),  # (W).
+                                                   covs=all_grads_covs,
                                                    positive=positive,
                                                    eps=self.eps)
+
+                if torch.linalg.norm(actual_weights) < self.eps:
+                    actual_weights = torch.ones_like(actual_weights)
 
                 # Apply scaling.
                 if self.weights_normalization == "norm":

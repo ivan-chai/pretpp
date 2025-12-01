@@ -392,7 +392,7 @@ def closed_form_trmse(basis, target, covs=None, positive=False, eps=1e-6):
     Args:
         basis: Basis vectors with shape (W, P).
         target: Target vector with shape (P).
-        covs: Scale vector with shape (W) or a matrix with shape (W, P) or a number for basis vectors.
+        covs: Scale vector with shape (W, P) or a number for basis vectors.
         positive: Find positive weights.
 
     Returns:
@@ -400,13 +400,13 @@ def closed_form_trmse(basis, target, covs=None, positive=False, eps=1e-6):
     """
     if covs is None:
         covs = 1
-    elif (not isinstance(covs, Number)) and (covs.shape != basis[:, 0].shape):
-        raise ValueError("Covariances must be number or vector.")
+    elif (not isinstance(covs, Number)) and (covs.shape != basis.shape):
+        raise ValueError("Covariances must be number or matrix.")
     C = basis @ basis.T  # (W, W).
     b = -(basis @ target)  # (W).
 
     if covs is not None:
-        C = C + basis.shape[1] * torch.diag(covs)
+        C = C + torch.diag(covs.sum(1))
 
     weights = solve_qp(C, b, eps=eps, positive=positive)
     return weights
