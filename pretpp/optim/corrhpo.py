@@ -370,11 +370,6 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                 else:
                     assert self.weights_parametrization == "linear"
                     positive = False
-                if self.weights_normalization == "norm":
-                    unit_norm = True
-                else:
-                    assert self.weights_normalization == "none"
-                    unit_norm = False
                 dim = len(down_grads)
 
                 # Gather and normalize.
@@ -384,6 +379,9 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                 actual_weights = closed_form_trmse(all_grads, target,
                                                    positive=positive,
                                                    eps=self.eps)
+
+                if torch.linalg.norm(actual_weights) < self.eps:
+                    actual_weights = torch.ones_like(actual_weights)
 
                 # Apply scaling.
                 if self.weights_normalization == "norm":
