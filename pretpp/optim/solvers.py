@@ -386,7 +386,7 @@ def closed_form_fw(basis, target, positive=False, normalization="sum", scale_tar
 
 @torch.autocast(device_type="cuda", enabled=False)
 @torch.no_grad()
-def closed_form_trmse(basis, target, covs, positive=False, eps=1e-6):
+def closed_form_trmse(basis, target, covs=None, positive=False, eps=1e-6):
     """"Find a combination of basis vectors that is close to target.
 
     Args:
@@ -398,7 +398,7 @@ def closed_form_trmse(basis, target, covs, positive=False, eps=1e-6):
     Returns:
         Weights with shape (W).
     """
-    if covs.shape != basis.shape:
+    if (covs is not None) and (covs.shape != basis.shape):
         raise ValueError("Covariances must be a matrix with shape (W, P).")
     C = basis @ basis.T  # (W, W).
     b = -(basis @ target)  # (W).
