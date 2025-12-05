@@ -277,13 +277,12 @@ def closed_form_spherical(basis, target, covs=None, cov_err=0, positive=False, n
         b = -(basis @ target)  # (W).
         r = target @ target  # Scalar
 
-#    scale = (covs.mean() + cov_err).item()
-#    if scale < eps:
-#        scale = 1
-#    covs = covs / scale
-#    cov_err = cov_err / scale
-#    log_scale = scale
-    log_scale = 1
+    scale = (covs.mean() + cov_err).item()
+    if scale < eps:
+        scale = 1
+    covs = covs / scale
+    cov_err = cov_err / scale
+    log_scale = scale
 
     weights = solve_ce(C, b, r, covs, cov_err, dim=len(target), log_scale=log_scale, scaled=scale_target, eps=eps, positive=positive, norm=norm)
     if scale_target:
