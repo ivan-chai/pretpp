@@ -403,7 +403,7 @@ def closed_form_trmse(basis, target, covs=None, positive=False, eps=1e-6):
     b = -(basis @ target)  # (W).
 
     if covs is not None:
-        C = C + torch.diag(covs.sum(1))
+        C = C + 2 * torch.diag(covs.sum(1))
 
     weights = solve_qp(C, b, eps=eps, positive=positive)
     if positive and (not weights.isfinite().all()):
