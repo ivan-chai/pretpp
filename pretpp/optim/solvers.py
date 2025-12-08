@@ -39,6 +39,39 @@ def _find_lambda_closest_unit_norm_np(cov, b, eps=1e-6, steps=100):
     return x
 
 
+class ProcrustesSolver:
+    """Senushkin D. et al. Independent component alignment for multi-task learning // CVPR 2023."""
+    @staticmethod
+    @torch.autocast("cuda", enabled=False)
+    def apply(grads, unit_scale=False):
+
+        assert len(grads.shape) == 3, \
+            f"Invalid shape of 'grads': {grads.shape}. Only 3D tensors are applicable"
+
+        with torch.no_grad():
+
+            cov_grad_matrix_e = torch.matmul(grads.permute(0, 2, 1), grads)
+            cov_grad_matrix_e = cov_grad_matrix_e.mean(0)
+
+            singulars, basis = torch.linalg.eigh(cov_grad_matrix_e, UPLO="U")
+            tol = torch.max(singulars) * max(cov_grad_matrix_e.shape[-2:]) * torch.finfo().eps
+            rank = sum(singulars > tol)
+
+            order = torch.argsort(singulars, dim=-1, descending=True)
+            singulars, basis = singulars[order][:rank], basis[:, order][:, :rank]
+
+            if unit_scale:
+                weights = basis
+            else:
+                weights = basis * torch.sqrt(singulars[-1]).view(1, -1)
+            weights = weights / torch.sqrt(singulars).view(1, -1)
+            # weights = weights / singulars.view(1, -1)
+            weights = torch.matmul(weights, basis.T)
+            grads = torch.matmul(grads, weights.unsqueeze(0))
+
+            return grads, weights, singulars
+
+
 def solve_lstsq_unit_norm(basis, target, eps=1e-6, steps=100):
     """Solve Ax=B with |x| = 1."""
     # Handle a special case with zero basis.

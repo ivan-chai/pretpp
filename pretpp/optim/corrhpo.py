@@ -5,7 +5,7 @@ from copy import deepcopy
 from numbers import Number
 from torch.optim.lr_scheduler import LambdaLR
 
-from .solvers import closed_form, closed_form_spherical, closed_form_fw, closed_form_trmse
+from .solvers import closed_form, closed_form_spherical, closed_form_fw, closed_form_trmse, ProcrustesSolver
 
 
 HPO_STAGE_DOWNSTREAM = "downstream"
@@ -31,6 +31,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
             weights smoothing in closed-form algorithms.
         ema_interleaved: Update gradients one at a step.
         apply_optimizer_correction: Try to approximate an actual optimizer step rather than simple SGD.
+        mtl: Apply gradients correction from multi-task learning (either False/None or "amtl").
         clip_hp_grad: Clipping value for hyperparameters gradients.
         kwargs: Base optimizer parameters.
 
@@ -56,7 +57,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                  weights_parametrization="abs", weights_normalization="norm",
                  algorithm="closed-form-sphere", ema=0, ema_interleaved=False,
                  normalize_down_grad=False, apply_optimizer_correction=False,
-                 clip_hp_grad=None, eps=1e-6, **kwargs):
+                 mtl=None, clip_hp_grad=None, eps=1e-6, **kwargs):
         params = list(params)
         if len(params) < 2 or not isinstance(params[0], dict):
             raise ValueError("Expected at least two param groups with the first group being loss weights.")
@@ -98,6 +99,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
 
         self.normalize_down_grad = normalize_down_grad
         self.apply_optimizer_correction = apply_optimizer_correction
+        self.mtl = mtl
         self.clip_hp_grad = clip_hp_grad
         self.eps = eps
 
@@ -251,6 +253,17 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                 if store_all_grads:
                     all_grads.append(loss_grads)
 
+            if store_all_grads:
+                if self.mtl is not None:
+                    assert self.mtl == "amtl"
+                    all_grads = torch.stack(all_grads, 1)  # (P, W).
+                    all_grads, _, _ = ProcrustesSolver.apply(all_grads[None], False)
+                    all_grads = all_grads[0].T  # (W, P).
+                else:
+                    all_grads = torch.stack(all_grads, 0)  # (W, P).
+            else:
+                assert not self.mtl
+
             if self.algorithm == "sgd":
                 scale, norm = self._get_scale_norm(weights)
                 actual_weights = scale * weights / norm
@@ -297,8 +310,6 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                 dim = len(down_grads)
 
                 # Gather and normalize.
-                all_grads = torch.stack(all_grads, 0)  # (W, P).
-
                 all_grads_covs = [self._grads_cache[f"cov_{i}"] for i in range(self.n_weights)]
                 if any([c is None for c in all_grads_covs]):
                     all_grads_covs = torch.zeros_like(all_grads)  # (W, P).
@@ -373,7 +384,6 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                 dim = len(down_grads)
 
                 # Gather and normalize.
-                all_grads = torch.stack(all_grads, 0)  # (W, P).
                 target = down_grads
 
                 actual_weights = closed_form_trmse(all_grads, target,
@@ -411,8 +421,6 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                 dim = len(down_grads)
 
                 # Gather and normalize.
-                all_grads = torch.stack(all_grads, 0)  # (W, P).
-
                 all_grads_covs = [self._grads_cache[f"cov_{i}"] for i in range(self.n_weights)]
                 if any([c is None for c in all_grads_covs]):
                     all_grads_covs = torch.zeros_like(all_grads)  # (W, P).
@@ -453,7 +461,6 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                 dim = len(down_grads)
 
                 # Gather and normalize.
-                all_grads = torch.stack(all_grads, 0)  # (W, P).
                 target = down_grads
                 covs = all_grads @ target  # (W).
                 positive = covs > 0
@@ -477,7 +484,6 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                 dim = len(down_grads)
 
                 # Gather and normalize.
-                all_grads = torch.stack(all_grads, 0)  # (W, P).
                 target = down_grads
                 covs = all_grads @ target  # (W).
                 actual_weights = torch.nn.functional.one_hot(torch.argmax(covs), self.n_weights).float()
