@@ -231,7 +231,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
             compute_grad_sum = (self.algorithm == "sgd") and (self.weights_normalization in {"sum", "norm"})
             if compute_grad_sum:
                 grad_sum = torch.zeros_like(down_grads)
-            store_all_grads = self.algorithm.startswith("closed-form")
+            store_all_grads = self.algorithm.startswith("closed-form") or self.mtl
             if store_all_grads:
                 all_grads = []
 
@@ -520,6 +520,16 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                 assert self.algorithm == "none"
                 for w, v in zip(self.param_groups[0]["params"], actual_weights):
                     w.grad = None
+
+            if self.mtl:
+                offset = 0
+                grad = actual_weights @ all_grads + self.downstream_weight * down_grads
+                for group in self.param_groups[1:]:
+                    for p in group["params"]:
+                        numel = p.numel()
+                        p.grad = grad[offset:offset + numel].reshape(p.shape)
+                        offset += numel
+                assert offset == len(grad)
 
             if self.downstream_merge:
                 offset = 0
