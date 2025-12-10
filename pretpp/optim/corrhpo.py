@@ -25,6 +25,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
             The "merge" value means inserting downstream gradients for the weights, not updated by the main loss.
         weights_parametrization: Either "linear", "tanh", "abs", or "sigmoid".
         weights_normalization: Whether to normalize weights by their sum or not ("sum", "norm", or "none").
+        weights_smoothing: Mix weights with uniform distribution with a given weight.
         algorithm: Either "sgd", "closed-form[-sphere]", "closed-form-trmse[-proj]", "closed-form-mse", "closed-form-pos-uni", "closed-form-nearest", or "none" to disable HPO.
         ema: Use momentum for gradient smoothing. Can be dictionary with "main" and "downstream" keys
             for the main and downstream losses respectively. An additional "weights" key can be provided to control
@@ -54,8 +55,8 @@ class CorrHPOptimizer(torch.optim.Optimizer):
     ```
     """
     def __init__(self, params, base_optimizer_cls, downstream_weight="merge",
-                 weights_parametrization="abs", weights_normalization="norm",
-                 algorithm="closed-form-sphere", ema=0, ema_interleaved=False,
+                 weights_parametrization="abs", weights_normalization="norm", algorithm="closed-form-sphere",
+                 weights_smoothing=0, ema=0, ema_interleaved=False,
                  normalize_down_grad=False, apply_optimizer_correction=False,
                  mtl=None, clip_hp_grad=None, eps=1e-6, **kwargs):
         params = list(params)
@@ -85,6 +86,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
             self.downstream_weight = float(downstream_weight)
         self.weights_parametrization = weights_parametrization
         self.weights_normalization = weights_normalization
+        self.weights_smoothing = weights_smoothing
         self.algorithm = algorithm
         if isinstance(ema, Number):
             ema = {k: ema for k in ["main", "downstream"]}
@@ -504,6 +506,9 @@ class CorrHPOptimizer(torch.optim.Optimizer):
 
             if self.algorithm.startswith("closed-form") and self.weights_momentum:
                 actual_weights = self._update_grads_cache(actual_weights, stage=HPO_WEIGHTS)
+
+            if self.weights_smoothing > 0:
+                actual_weights = self.weights_smoothing * torch.ones_like(actual_weights) + (1 - self.weights_smoothing) * actual_weights
 
             # Compute model grads.
             downstream_weight = self.downstream_weight
