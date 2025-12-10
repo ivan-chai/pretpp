@@ -26,6 +26,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
         weights_parametrization: Either "linear", "tanh", "abs", or "sigmoid".
         weights_normalization: Whether to normalize weights by their sum or not ("sum", "norm", or "none").
         weights_smoothing: Mix weights with uniform distribution with a given weight.
+        fix_zero_weights: Whether to replace zero weights with uniform distribution or not.
         algorithm: Either "sgd", "closed-form[-sphere]", "closed-form-trmse[-proj]", "closed-form-mse", "closed-form-pos-uni", "closed-form-nearest", or "none" to disable HPO.
         ema: Use momentum for gradient smoothing. Can be dictionary with "main" and "downstream" keys
             for the main and downstream losses respectively. An additional "weights" key can be provided to control
@@ -56,7 +57,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
     """
     def __init__(self, params, base_optimizer_cls, downstream_weight="merge",
                  weights_parametrization="abs", weights_normalization="norm", algorithm="closed-form-sphere",
-                 weights_smoothing=0, ema=0, ema_interleaved=False,
+                 weights_smoothing=0, fix_zero_weights=False, ema=0, ema_interleaved=False,
                  normalize_down_grad=False, apply_optimizer_correction=False,
                  mtl=None, clip_hp_grad=None, eps=1e-6, **kwargs):
         params = list(params)
@@ -87,6 +88,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
         self.weights_parametrization = weights_parametrization
         self.weights_normalization = weights_normalization
         self.weights_smoothing = weights_smoothing
+        self.fix_zero_weights = fix_zero_weights
         self.algorithm = algorithm
         if isinstance(ema, Number):
             ema = {k: ema for k in ["main", "downstream"]}
@@ -370,6 +372,9 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                     self._grads_cache[key] = error
                     self._grads_cache[cov_key] = err_cov_new
 
+                if self.fix_zero_weights and (torch.linalg.norm(actual_weights) < self.eps):
+                    actual_weights = torch.ones_like(actual_weights)
+
                 # Apply scaling.
                 if self.weights_normalization == "norm":
                     scale = math.sqrt(self.n_weights) / (torch.linalg.norm(actual_weights) + self.eps)
@@ -392,7 +397,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                                                    positive=positive,
                                                    eps=self.eps)
 
-                if torch.linalg.norm(actual_weights) < self.eps:
+                if self.fix_zero_weights and (torch.linalg.norm(actual_weights) < self.eps):
                     actual_weights = torch.ones_like(actual_weights)
 
                 # Apply scaling.

@@ -310,8 +310,10 @@ def closed_form_spherical(basis, target, covs=None, cov_err=0, positive=False, n
         b = -(basis @ target)  # (W).
         r = target @ target  # Scalar
 
+    covs = covs.double()
+    cov_err = cov_err.double()
     scale = (covs.mean() + cov_err).item()
-    if scale < eps:
+    if scale < eps ** 2:
         scale = 1
     covs = covs / scale
     cov_err = cov_err / scale
