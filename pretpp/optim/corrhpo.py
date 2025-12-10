@@ -452,7 +452,7 @@ class CorrHPOptimizer(torch.optim.Optimizer):
                                                    positive=positive,
                                                    eps=self.eps)
 
-                if torch.linalg.norm(actual_weights) < self.eps:
+                if self.fix_zero_weights and (torch.linalg.norm(actual_weights) < self.eps):
                     actual_weights = torch.ones_like(actual_weights)
 
                 # Apply scaling.
