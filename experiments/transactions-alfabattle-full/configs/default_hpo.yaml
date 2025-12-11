@@ -29,9 +29,11 @@ module:
     - loss_0_weekofyear
     - loss_0_log_amount
     - loss_0_log_hour_diff
-
   hpo_params:
-    ema: 0.99
+    ema:
+      main: 0.99
+      downstream: 0.99
+      weights: 0
   downstream_loss: loss_1_target
   loss_projection_partial:
     _target_: pretpp.nn.CatHead
