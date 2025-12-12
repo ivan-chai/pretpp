@@ -25,6 +25,15 @@ def to_logit(x, eps=1e-3):
     return math.log(y + esp) - math.log(1 - y + eps)
 
 
+def to_sequence_length(x, length, padding=0):
+    if x.shape[1] >= length:
+        return x[:, :length]
+    padding_shape = list(x.shape)
+    padding_shape[1] = length - x.shape[1]
+    padding = torch.full(padding_shape, padding, dtype=x.dtype, device=x.device)
+    return torch.cat([x, padding], 1)
+
+
 class HPOModule(BaseModule):
     """Tune loss weights using SGD.
 
@@ -49,6 +58,7 @@ class HPOModule(BaseModule):
         self.register_buffer("n_weights_updates", torch.zeros([], dtype=torch.long))
         self.register_buffer("avg_weights", torch.zeros(len(self.hpo_losses)))
         self.gradient_clip_val = None
+        self.max_sequence_length = None
 
     @BaseModule.trainer.setter
     def trainer(self, trainer):
@@ -56,16 +66,35 @@ class HPOModule(BaseModule):
         trainer.gradient_clip_val = None
         BaseModule.trainer.fset(self, trainer)
 
+        if self.max_sequence_length is None:
+            datamodule = trainer.datamodule
+            for split in trainer.datamodule.splits:
+                self.max_sequence_length = max(self.max_sequence_length or 0, getattr(trainer.datamodule, f"{split}_data").max_length)
+
     def training_step(self, batch, batch_idx):
         dataloader_idx = batch[0].payload.get("_dataloader_idx", None)
         if self.tune_on_val and ((dataloader_idx is None) or (dataloader_idx > 1)):
             raise ValueError(f"When tune_on_val is used, there must be exact 2 dataloaders. Got {dataloader_idx}")
 
+        opt = self.optimizers()
+        if opt.encoder_decoder and not self.max_sequence_length:
+            raise RuntimeError("Failed to fetch the maximum sequence length.")
+
         x, y = batch
         inputs, targets = self._loss.prepare_batch(x, y)
-        outputs, losses, metrics = self._compute_loss(inputs, targets)
+        if opt.encoder_decoder:
+            if self._loss.aggregate:
+                embeddings = PaddedBatch(self._embed_impl(inputs).unsqueeze(1),
+                                         torch.ones_like(inputs.seq_lens))  # (B, 1, D).
+            else:
+                embeddings, _ = self.forward(inputs)
+            z = PaddedBatch(embeddings.payload.detach().clone(), embeddings.seq_lens)
+            z.payload.requires_grad = True
+            outputs = self._loss_projection(z)  # (B, L, D).
+            losses, metrics = self._loss(outputs, targets)
+        else:
+            outputs, losses, metrics = self._compute_loss(inputs, targets)
 
-        opt = self.optimizers()
         def closure(down, weights, retain_graph=False, stage=None):
             opt.zero_grad()
             assert len(weights) == len(self.hpo_losses)
@@ -75,11 +104,21 @@ class HPOModule(BaseModule):
                 metrics["hpo_grad_norm_downstream"] = self._get_grad_norm(warn_empty_grads=False)
             elif isinstance(stage, int):
                 metrics[f"hpo_grad_norm_weight_{stage}"] = self._get_grad_norm(warn_empty_grads=False)
+            if opt.encoder_decoder:
+                return to_sequence_length(z.payload.grad, self.max_sequence_length).flatten()
+
+        if opt.encoder_decoder:
+            def closure_encoder(z_grad):
+                opt.zero_grad()
+                to_sequence_length(embeddings.payload, self.max_sequence_length).flatten().backward(z_grad)
+        else:
+            closure_encoder = None
+
         if self.tune_on_val and dataloader_idx == 1:
             opt.cache_downstream(closure)
         else:
             grad_clip_fn = lambda: self.clip_gradients(opt, gradient_clip_val=self.gradient_clip_val, gradient_clip_algorithm=self.trainer.gradient_clip_algorithm) if self.gradient_clip_val is not None else None
-            final_weights = opt.hpo_step(closure, use_cached_downstream=self.tune_on_val,
+            final_weights = opt.hpo_step(closure, closure_encoder, use_cached_downstream=self.tune_on_val,
                                          after_backward_hook=grad_clip_fn)
             metrics.update({f"hpo_{name}": w.item() for name, w in zip(self.hpo_losses, final_weights)})
 
@@ -119,9 +158,11 @@ class HPOModule(BaseModule):
             config.scheduler.step()
 
     def configure_optimizers(self):
-        model_params = [v for k, v in self.named_parameters() if v.requires_grad and k != "loss_weights"]
+        model_params = [v for k, v in self.named_parameters() if v.requires_grad and k != "loss_weights" and not k.startswith("_loss")]
+        loss_params = [v for k, v in self.named_parameters() if v.requires_grad and k != "loss_weights" and k.startswith("_loss")]
         params = [
             {"params": [self.loss_weights]},
+            {"params": loss_params},
             {"params": model_params}
         ]
         if self.hp_group_params is not None:
