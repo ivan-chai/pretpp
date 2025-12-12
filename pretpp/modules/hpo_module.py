@@ -10,7 +10,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 
 from hotpp.data import PaddedBatch
 from pretpp.nn import IdentityHead
-from ..optim import CorrHPOptimizer, HPO_STAGE_DOWNSTREAM, HPO_STAGE_FINAL
+from aligned_hpo import AlignedHPOptimizer, HPO_STAGE_DOWNSTREAM
 from .base_module import BaseModule
 
 
@@ -40,15 +40,12 @@ class HPOModule(BaseModule):
         super().__init__(seq_encoder, loss, **kwargs)
         self.automatic_optimization = False
         # Register loss parameters.
-        self.hpo_losses = hpo_losses
+        self.hpo_losses = list(hpo_losses)
         self.downstream_loss = downstream_loss
         self.hpo_params = hpo_params
         self.hp_group_params = hp_group_params
         self.tune_on_val = tune_on_val
-        self.loss_weights = torch.nn.ParameterDict({
-            k: torch.nn.Parameter(torch.zeros([]))
-            for k in self.hpo_losses
-        })
+        self.loss_weights = torch.nn.Parameter(torch.ones([len(hpo_losses)]))
         self.register_buffer("n_weights_updates", torch.zeros([], dtype=torch.long))
         self.register_buffer("avg_weights", torch.zeros(len(self.hpo_losses)))
         self.gradient_clip_val = None
@@ -67,40 +64,37 @@ class HPOModule(BaseModule):
         x, y = batch
         inputs, targets = self._loss.prepare_batch(x, y)
         outputs, losses, metrics = self._compute_loss(inputs, targets)
-        final_loss = next(iter(losses.values())).clone()
 
         opt = self.optimizers()
-        def closure(down, *weights, stage=None):
+        def closure(down, weights, retain_graph=False, stage=None):
             opt.zero_grad()
             assert len(weights) == len(self.hpo_losses)
             loss = sum([w * losses[k] for k, w in zip(self.hpo_losses, weights)], down * losses[self.downstream_loss])
-            self.manual_backward(loss, retain_graph=stage != HPO_STAGE_FINAL)
+            self.manual_backward(loss, retain_graph=retain_graph)
             if stage == HPO_STAGE_DOWNSTREAM:
                 metrics["hpo_grad_norm_downstream"] = self._get_grad_norm(warn_empty_grads=False)
-            elif stage == HPO_STAGE_FINAL:
-                final_loss.copy_(loss)
-                metrics.update({f"hpo_{name}": w.item() for name, w in zip(self.hpo_losses, weights)})
-                if self.gradient_clip_val is not None:
-                    self.clip_gradients(opt, gradient_clip_val=self.gradient_clip_val, gradient_clip_algorithm=self.trainer.gradient_clip_algorithm)
-                self.n_weights_updates += 1
-                self.avg_weights *= (self.n_weights_updates - 1) / self.n_weights_updates
-                for i, w in enumerate(weights):
-                    self.avg_weights[i] += w / self.n_weights_updates
-                metrics.update({f"hpo_avg_{name}": self.avg_weights[i] for i, name in enumerate(self.hpo_losses)})
-            else:
-                assert isinstance(stage, int)
+            elif isinstance(stage, int):
                 metrics[f"hpo_grad_norm_weight_{stage}"] = self._get_grad_norm(warn_empty_grads=False)
         if self.tune_on_val and dataloader_idx == 1:
             opt.cache_downstream(closure)
         else:
-            opt.hpo_step(closure, use_cached_downstream=self.tune_on_val)
-            hpo_grads = [w.grad for w in self.loss_weights.values() if w.grad is not None]
+            grad_clip_fn = lambda: self.clip_gradients(opt, gradient_clip_val=self.gradient_clip_val, gradient_clip_algorithm=self.trainer.gradient_clip_algorithm) if self.gradient_clip_val is not None else None
+            final_weights = opt.hpo_step(closure, use_cached_downstream=self.tune_on_val,
+                                         after_backward_hook=grad_clip_fn)
+            metrics.update({f"hpo_{name}": w.item() for name, w in zip(self.hpo_losses, final_weights)})
+
+            self.n_weights_updates += 1
+            self.avg_weights *= (self.n_weights_updates - 1) / self.n_weights_updates
+            self.avg_weights += final_weights / self.n_weights_updates
+            metrics.update({f"hpo_avg_{name}": self.avg_weights[i] for i, name in enumerate(self.hpo_losses)})
+
+            hpo_grads = self.loss_weights.grad
             if hpo_grads:
                 hpo_grads = torch.stack(hpo_grads)
                 hpo_grad_norm = torch.linalg.norm(hpo_grads)
                 metrics["hpo_grad_norm"] = hpo_grad_norm
             metrics.update(opt.metrics)
-            self._log_metrics("train", len(x), final_loss, losses, metrics, single_batch_metrics=None)
+            self._log_metrics("train", len(x), None, losses, metrics, single_batch_metrics=None)
 
         # Make scheduler step if necessary.
         for config in self.trainer.lr_scheduler_configs:
@@ -125,15 +119,16 @@ class HPOModule(BaseModule):
             config.scheduler.step()
 
     def configure_optimizers(self):
-        model_params = [v for k, v in self.named_parameters() if v.requires_grad and not k.startswith("loss_weights.")]
+        model_params = [v for k, v in self.named_parameters() if v.requires_grad and k != "loss_weights"]
         params = [
-            {"params": [self.loss_weights[k] for k in self.hpo_losses]},
+            {"params": [self.loss_weights]},
             {"params": model_params}
         ]
         if self.hp_group_params is not None:
             params[0].update(self.hp_group_params)
-        optimizer = CorrHPOptimizer(params, self._optimizer_partial,
-                                    **(self.hpo_params or {}))
+        optimizer = AlignedHPOptimizer(params, self._optimizer_partial,
+                                       weights_names=self.hpo_losses,
+                                       **(self.hpo_params or {}))
         if self._lr_scheduler_partial is None:
             return optimizer
         else:
@@ -143,5 +138,5 @@ class HPOModule(BaseModule):
                 "interval": getattr(scheduler, "default_interval", "epoch")
             }
             if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                scheduler["monitor"] = "val/loss"
+                scheduler["monitor"] = "val/loss"  # TODO: get metric from trainer.
             return [optimizer], [scheduler]

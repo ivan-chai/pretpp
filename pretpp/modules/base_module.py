@@ -339,9 +339,9 @@ class BaseModule(pl.LightningModule):
             for k, v in sorted(single_batch_metrics.items()):
                 log_values[f"{split}/{k}"] = v
 
-        log_values_bar = {
-            f"{split}/loss": loss
-        }
+        log_values_bar = {}
+        if loss is not None:
+            log_values_bar[f"{split}/loss"] = loss
         if mean_seq_len is not None:
             log_values_bar["sequence_length"] = mean_seq_len
 
