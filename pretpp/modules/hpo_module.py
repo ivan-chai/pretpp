@@ -110,7 +110,8 @@ class HPOModule(BaseModule):
         if opt.encoder_decoder:
             def closure_encoder(z_grad):
                 opt.zero_grad()
-                to_sequence_length(embeddings.payload, self.max_sequence_length).flatten().backward(z_grad)
+                target_tensor = to_sequence_length(embeddings.payload, self.max_sequence_length).flatten()
+                self.manual_backward(target_tensor, z_grad)
         else:
             closure_encoder = None
 
