@@ -23,7 +23,7 @@ transformer_dropout: 0.1
 transformer_min_length: 4
 transformer_cls_token:
   timestamps: -1
-  labels: ${num_classes}  # Use final label for CLS.
+  #labels: ${num_classes}  # Use final label for CLS.
   currency: 0
   operation_kind: 0
   operation_type: 0
@@ -57,7 +57,7 @@ data_module:
   _target_: hotpp.data.HotppDataModule
   fields:
     - timestamps
-    - labels
+    #- labels
     - amount
     - event_subtype
     - currency
@@ -70,6 +70,7 @@ data_module:
     - src_type31
     - src_type32
   batch_size: 512
+  id_field: client_id
   num_workers: 4
   train_params:
     min_required_length: 2
@@ -82,8 +83,8 @@ data_module:
     position: last
   #global_target_fields: target
   train_path: data/train.parquet
-  val_path: data/test.parquet
-  test_path: data/test.parquet
+  val_path: data/valid.parquet
+  test_path: data/valid.parquet
 
 metric: null
 
@@ -123,10 +124,10 @@ module:
       _target_: hotpp.nn.Embedder
       use_batch_norm: false
       embeddings:
-        labels:  # mcc.
-          in: ${num_classes}
-          out: 24
-          clip: true
+        #labels:  # mcc.
+          #in: ${num_classes}
+          #out: 24
+          #clip: true
         event_subtype:
           in: 70
           out: 24

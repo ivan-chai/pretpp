@@ -44,6 +44,8 @@ transformer_history_token_frequency: 0.3
 transformer_history_token_probability: 0.5
 transformer_recmem_chunk_size: 256
 
+downstream_report: /dowstream_logs
+
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
   project: pretpp-mbd-mini-full
@@ -75,13 +77,20 @@ data_module:
     min_required_length: 2
     max_length: 300
     cache_size: null
+    mbd: true
   val_params:
     max_length: 300
     position: last
+    mbd: true
   test_params:
     max_length: 300
     position: last
-  #global_target_fields: target
+    mbd: true
+  global_target_fields: 
+    - target_1
+    - target_2
+    - target_3
+    - target_4
   train_path: data/train.parquet
   val_path: data/valid.parquet #was first test 
   test_path: data/valid.parquet #was first valid
@@ -184,7 +193,7 @@ module:
     _target_: torch.optim.lr_scheduler.StepLR
     step_size: 10
     gamma: 0.8
-  #downstream_validation_config: configs/downstream.yaml
+  downstream_validation_config: configs/downstream.yaml
   val_metric: ${metric}
   test_metric: ${metric}
 
@@ -193,7 +202,7 @@ trainer:
   devices: 1
   max_epochs: 60
   enable_checkpointing: true
-  precision: 16-mixed
+  precision: bf16 
   gradient_clip_val: 1  # Increases training stability.
   check_val_every_n_epoch: 3
   model_selection:

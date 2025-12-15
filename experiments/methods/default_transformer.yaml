@@ -7,8 +7,8 @@ module:
     _target_: hotpp.nn.Encoder
     embedder:
       embeddings:
-        labels:
-          in: ${num_classes_plus1}  # Add CLS token.
+        #labels:
+          #in: ${num_classes_plus1}  # Add CLS token.
     model_partial:
       _target_: hotpp.nn.SimpleTransformer
       _partial_: true

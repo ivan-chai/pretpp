@@ -7,6 +7,6 @@ module:
         max_delta: ${max_time_delta}
         smoothing: 1
         grad_scale: null
-      labels:
-        _target_: hotpp.losses.CrossEntropyLoss
-        num_classes: ${num_classes}
+      #labels:
+        #_target_: hotpp.losses.CrossEntropyLoss
+        #num_classes: ${num_classes}
