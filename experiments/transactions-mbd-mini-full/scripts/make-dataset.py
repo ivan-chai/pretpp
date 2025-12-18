@@ -47,6 +47,7 @@ def make_from_folds(folds, data_root, targets_root, dst, n_partitions):
         targets = result_df
         part = part.join(targets, on="client_id", how="inner")
         dataset = dataset.union(part) if dataset is not None else part
+    # Compute log_amount.
     udf = F.udf(lambda x: [math.log(abs(v) + 1) for v in x], ArrayType(FloatType(), False))
     dataset = dataset.withColumn("log_amount", udf(F.col("amount")))
     # Scale event_time by 4 days.
