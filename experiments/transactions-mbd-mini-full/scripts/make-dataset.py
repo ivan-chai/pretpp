@@ -43,7 +43,7 @@ def make_from_folds(folds, data_root, targets_root, dst, n_partitions):
             transformed_tables.append(df_mon_renamed)
         result_df = base_df
         for table in transformed_tables:
-            result_df = result_df.join(table, on="client_id", how="inner")
+            result_df = result_df.join(table, on="client_id", how="left")
         targets = result_df
         part = part.join(targets, on="client_id", how="inner")
         dataset = dataset.union(part) if dataset is not None else part
