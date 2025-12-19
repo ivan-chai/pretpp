@@ -26,12 +26,12 @@ def to_logit(x, eps=1e-3):
 
 
 def to_sequence_length(x, length, padding=0):
-    if x.shape[1] >= length:
-        return x[:, :length]
+    if x.shape[-2] >= length:
+        return x[..., :length, :]
     padding_shape = list(x.shape)
-    padding_shape[1] = length - x.shape[1]
+    padding_shape[-2] = length - x.shape[-2]
     padding = torch.full(padding_shape, padding, dtype=x.dtype, device=x.device)
-    return torch.cat([x, padding], 1)
+    return torch.cat([x, padding], -2)
 
 
 class HPOModule(BaseModule):
@@ -45,7 +45,7 @@ class HPOModule(BaseModule):
         tune_on_val: Use validation data for hyperparameter tuning.
     """
     def __init__(self, seq_encoder, loss, hpo_losses, downstream_loss,
-                 hpo_params=None, hp_group_params=None, tune_on_val=False, **kwargs):
+                 hpo_params=None, hp_group_params=None, tune_on_val=False, tune_on_heads=False, **kwargs):
         super().__init__(seq_encoder, loss, **kwargs)
         self.automatic_optimization = False
         # Register loss parameters.
@@ -54,6 +54,7 @@ class HPOModule(BaseModule):
         self.hpo_params = hpo_params
         self.hp_group_params = hp_group_params
         self.tune_on_val = tune_on_val
+        self.tune_on_heads = tune_on_heads
         self.loss_weights = torch.nn.Parameter(torch.ones([len(hpo_losses)]))
         self.register_buffer("n_weights_updates", torch.zeros([], dtype=torch.long))
         self.register_buffer("avg_weights", torch.zeros(len(self.hpo_losses)))
@@ -105,13 +106,28 @@ class HPOModule(BaseModule):
             elif isinstance(stage, int):
                 metrics[f"hpo_grad_norm_weight_{stage}"] = self._get_grad_norm(warn_empty_grads=False)
             if opt.encoder_decoder:
-                return to_sequence_length(z.payload.grad, self.max_sequence_length).flatten()
+                b, _, d = z.payload.shape
+#                if stage == HPO_STAGE_DOWNSTREAM:
+#                    counts = z.seq_len_mask.bool().sum(0)  # (L).
+#                    grads = z.payload.grad.sum(0) / counts.clip(min=1).unsqueeze(-1)  # (L, D).
+#                    mask = to_sequence_length((counts > 0).unsqueeze(-1), self.max_sequence_length)[None].repeat(b, 1, d)  # (B, L, D).
+#                    grads = grads.unsqueeze(0).repeat(b, 1, 1)  # (B, L, D).
+#                else:
+                grads = z.payload.grad  # (B, L, D).
+                mask = to_sequence_length(z.seq_len_mask.bool().unsqueeze(-1), self.max_sequence_length).repeat(1, 1, d)  # (B, L, D).
+                grads = to_sequence_length(grads, self.max_sequence_length)  # (B, L, D).
+                assert grads.shape == mask.shape, (z.payload.shape, z.seq_len_mask.shape, grads.shape, mask.shape)
+                return grads.flatten(), mask.flatten()
 
         if opt.encoder_decoder:
             def closure_encoder(z_grad):
                 opt.zero_grad()
-                target_tensor = to_sequence_length(embeddings.payload, self.max_sequence_length).flatten()
-                self.manual_backward(target_tensor, z_grad)
+                b, _, d = z.payload.shape
+                z_grad = z_grad.reshape(b, -1, d)
+                if z_grad.shape[1] >= embeddings.shape[1]:
+                    self.manual_backward(embeddings.payload, z_grad[:, :embeddings.shape[1]])
+                else:
+                    self.manual_backward(embeddings.payload[:, :z_grad.shape[1]], z_grad)
         else:
             closure_encoder = None
 
@@ -168,8 +184,14 @@ class HPOModule(BaseModule):
         ]
         if self.hp_group_params is not None:
             params[0].update(self.hp_group_params)
+        if self.tune_on_heads:
+            params.insert(1, {"params": []})
+            shared_decoder_group = 2
+        else:
+            shared_decoder_group = None
         optimizer = AlignedHPOptimizer(params, self._optimizer_partial,
                                        weights_names=self.hpo_losses,
+                                       shared_decoder_group=shared_decoder_group,
                                        **(self.hpo_params or {}))
         if self._lr_scheduler_partial is None:
             return optimizer
