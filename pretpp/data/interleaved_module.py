@@ -128,13 +128,16 @@ class InterleavedDataModule(HotppDataModule):
                          "pin_memory": torch.cuda.is_available()}
         loader_params.update(self.train_loader_params)
         cache_size = loader_params.pop("cache_size", 4096)
+        parallelize = loader_params.pop("parallelize", "files")
         seed = loader_params.pop("seed", 0)
 
         train_dataset = ShuffledDistributedDataset(self.train_data, rank=rank, world_size=world_size,
                                                    cache_size=cache_size,
+                                                   parallelize=parallelize,
                                                    seed=seed)
         val_dataset = ShuffledDistributedDataset(self.val_data, rank=rank, world_size=world_size,
                                                  cache_size=cache_size,
+                                                 parallelize=parallelize,
                                                  seed=seed)
 
         train_loader = torch.utils.data.DataLoader(
@@ -157,7 +160,9 @@ class InterleavedDataModule(HotppDataModule):
         world_size = self.trainer.world_size if world_size is None else world_size
         loader_params = {"pin_memory": torch.cuda.is_available()}
         loader_params.update(self.val_loader_params)
-        dataset = ShuffledDistributedDataset(self.val_data, rank=rank, world_size=world_size)  # Disable shuffle.
+        parallelize = loader_params.pop("parallelize", "files")
+        dataset = ShuffledDistributedDataset(self.val_data, rank=rank, world_size=world_size,
+                                             parallelize=parallelize)  # Disable shuffle.
         loader = torch.utils.data.DataLoader(
             dataset=dataset,
             collate_fn=dataset.dataset.collate_fn,
@@ -170,7 +175,9 @@ class InterleavedDataModule(HotppDataModule):
         world_size = self.trainer.world_size if world_size is None else world_size
         loader_params = {"pin_memory": torch.cuda.is_available()}
         loader_params.update(self.test_loader_params)
-        dataset = ShuffledDistributedDataset(self.test_data, rank=rank, world_size=world_size)
+        parallelize = loader_params.pop("parallelize", "files")
+        dataset = ShuffledDistributedDataset(self.test_data, rank=rank, world_size=world_size,
+                                             parallelize=parallelize)  # Disable shuffle.
         loader = torch.utils.data.DataLoader(
             dataset=dataset,
             collate_fn=dataset.dataset.collate_fn,
