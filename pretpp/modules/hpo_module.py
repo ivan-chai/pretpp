@@ -43,9 +43,11 @@ class HPOModule(BaseModule):
         hpo_params: Parameters of the HP optimizer.
         hp_group_params: Specific parameters for weights optimization (lr etc.).
         tune_on_val: Use validation data for hyperparameter tuning.
+        use_masks: Whether to use masks for padding or not.
     """
     def __init__(self, seq_encoder, loss, hpo_losses, downstream_loss,
-                 hpo_params=None, hp_group_params=None, tune_on_val=False, tune_on_heads=False, **kwargs):
+                 hpo_params=None, hp_group_params=None, tune_on_val=False, tune_on_heads=False, use_masks=True,
+                 **kwargs):
         super().__init__(seq_encoder, loss, **kwargs)
         self.automatic_optimization = False
         # Register loss parameters.
@@ -55,6 +57,7 @@ class HPOModule(BaseModule):
         self.hp_group_params = hp_group_params
         self.tune_on_val = tune_on_val
         self.tune_on_heads = tune_on_heads
+        self.use_masks = use_masks
         self.loss_weights = torch.nn.Parameter(torch.ones([len(hpo_losses)]))
         self.register_buffer("n_weights_updates", torch.zeros([], dtype=torch.long))
         self.register_buffer("avg_weights", torch.zeros(len(self.hpo_losses)))
@@ -107,17 +110,14 @@ class HPOModule(BaseModule):
                 metrics[f"hpo_grad_norm_weight_{stage}"] = self._get_grad_norm(warn_empty_grads=False)
             if opt.encoder_decoder:
                 b, _, d = z.payload.shape
-#                if stage == HPO_STAGE_DOWNSTREAM:
-#                    counts = z.seq_len_mask.bool().sum(0)  # (L).
-#                    grads = z.payload.grad.sum(0) / counts.clip(min=1).unsqueeze(-1)  # (L, D).
-#                    mask = to_sequence_length((counts > 0).unsqueeze(-1), self.max_sequence_length)[None].repeat(b, 1, d)  # (B, L, D).
-#                    grads = grads.unsqueeze(0).repeat(b, 1, 1)  # (B, L, D).
-#                else:
                 grads = z.payload.grad  # (B, L, D).
-                mask = to_sequence_length(z.seq_len_mask.bool().unsqueeze(-1), self.max_sequence_length).repeat(1, 1, d)  # (B, L, D).
                 grads = to_sequence_length(grads, self.max_sequence_length)  # (B, L, D).
-                assert grads.shape == mask.shape, (z.payload.shape, z.seq_len_mask.shape, grads.shape, mask.shape)
-                return grads.flatten(), mask.flatten()
+                if self.use_masks:
+                    mask = to_sequence_length(z.seq_len_mask.bool().unsqueeze(-1), self.max_sequence_length).repeat(1, 1, d)  # (B, L, D).
+                    assert grads.shape == mask.shape, (z.payload.shape, z.seq_len_mask.shape, grads.shape, mask.shape)
+                    return grads.flatten(), mask.flatten()
+                else:
+                    return grads.flatten()
 
         if opt.encoder_decoder:
             def closure_encoder(z_grad):
