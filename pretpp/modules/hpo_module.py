@@ -42,11 +42,13 @@ class HPOModule(BaseModule):
         downstream_loss: The name of the downstream loss.
         hpo_params: Parameters of the HP optimizer.
         hp_group_params: Specific parameters for weights optimization (lr etc.).
+        loss_group_params: Specific parameters for loss optimization (lr etc.).
         tune_on_val: Use validation data for hyperparameter tuning.
         use_masks: Whether to use masks for padding or not.
     """
     def __init__(self, seq_encoder, loss, hpo_losses, downstream_loss,
-                 hpo_params=None, hp_group_params=None, tune_on_val=False, tune_on_heads=False, use_masks=True,
+                 hpo_params=None, hp_group_params=None, loss_group_params=None,
+                 tune_on_val=False, tune_on_heads=False, use_masks=True,
                  **kwargs):
         super().__init__(seq_encoder, loss, **kwargs)
         self.automatic_optimization = False
@@ -55,6 +57,7 @@ class HPOModule(BaseModule):
         self.downstream_loss = downstream_loss
         self.hpo_params = hpo_params
         self.hp_group_params = hp_group_params
+        self.loss_group_params = loss_group_params
         self.tune_on_val = tune_on_val
         self.tune_on_heads = tune_on_heads
         self.use_masks = use_masks
@@ -184,6 +187,8 @@ class HPOModule(BaseModule):
         ]
         if self.hp_group_params is not None:
             params[0].update(self.hp_group_params)
+        if self.loss_group_params is not None:
+            params[1].update(self.loss_group_params)
         if self.tune_on_heads:
             params.insert(1, {"params": []})
             shared_decoder_group = 2
