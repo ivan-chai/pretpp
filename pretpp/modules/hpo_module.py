@@ -44,6 +44,7 @@ class HPOModule(BaseModule):
         hp_group_params: Specific parameters for weights optimization (lr etc.).
         loss_group_params: Specific parameters for loss optimization (lr etc.).
         tune_on_val: Use validation data for hyperparameter tuning.
+        tune_on_heads: Use projections to tune HPO weights.
         use_masks: Whether to use masks for padding or not.
     """
     def __init__(self, seq_encoder, loss, hpo_losses, downstream_loss,
