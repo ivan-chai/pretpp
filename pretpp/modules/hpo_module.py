@@ -111,7 +111,7 @@ class HPOModule(BaseModule):
             if stage == HPO_STAGE_DOWNSTREAM:
                 metrics["hpo_grad_norm_downstream"] = self._get_grad_norm(warn_empty_grads=False)
             elif isinstance(stage, int):
-                metrics[f"hpo_grad_norm_weight_{stage}"] = self._get_grad_norm(warn_empty_grads=False)
+                metrics[f"hpo_grad_norm_weight_{self.hpo_losses[stage]}"] = self._get_grad_norm(warn_empty_grads=False)
             if opt.encoder_decoder:
                 b, _, d = z.payload.shape
                 grads = z.payload.grad  # (B, L, D).
