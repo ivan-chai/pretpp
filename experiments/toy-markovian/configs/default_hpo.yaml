@@ -9,11 +9,11 @@ data_module:
 
 module:
   _target_: pretpp.modules.HPOModule
-  tune_on_val: true
   hpo_losses:
     - loss_0_timestamps
     - loss_0_labels
   hpo_params:
+    tune_on_val: true
     ema: 0.99
   downstream_loss: loss_1_target
   loss_projection_partial:

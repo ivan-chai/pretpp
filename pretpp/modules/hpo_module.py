@@ -43,13 +43,12 @@ class HPOModule(BaseModule):
         hpo_params: Parameters of the HP optimizer.
         hp_group_params: Specific parameters for weights optimization (lr etc.).
         loss_group_params: Specific parameters for loss optimization (lr etc.).
-        tune_on_val: Use validation data for hyperparameter tuning.
         tune_on_heads: Use projections to tune HPO weights.
         use_masks: Whether to use masks for padding or not.
     """
     def __init__(self, seq_encoder, loss, hpo_losses, downstream_loss,
                  hpo_params=None, hp_group_params=None, loss_group_params=None,
-                 tune_on_val=False, tune_on_heads=False, use_masks=True,
+                 tune_on_heads=False, use_masks=True,
                  **kwargs):
         super().__init__(seq_encoder, loss, **kwargs)
         self.automatic_optimization = False
@@ -59,7 +58,6 @@ class HPOModule(BaseModule):
         self.hpo_params = hpo_params
         self.hp_group_params = hp_group_params
         self.loss_group_params = loss_group_params
-        self.tune_on_val = tune_on_val
         self.tune_on_heads = tune_on_heads
         self.use_masks = use_masks
         self.loss_weights = torch.nn.Parameter(torch.ones([len(hpo_losses)]))
@@ -81,10 +79,9 @@ class HPOModule(BaseModule):
 
     def training_step(self, batch, batch_idx):
         dataloader_idx = batch[0].payload.get("_dataloader_idx", None)
-        if self.tune_on_val and ((dataloader_idx is None) or (dataloader_idx > 1)):
-            raise ValueError(f"When tune_on_val is used, there must be exact 2 dataloaders. Got {dataloader_idx}")
-
         opt = self.optimizers()
+        if opt.tune_on_val and ((dataloader_idx is None) or (dataloader_idx > 1)):
+            raise ValueError(f"When tune_on_val is used, there must be exact 2 dataloaders. Got {dataloader_idx}")
         if opt.encoder_decoder and not self.max_sequence_length:
             raise RuntimeError("Failed to fetch the maximum sequence length.")
 
@@ -135,12 +132,11 @@ class HPOModule(BaseModule):
         else:
             closure_encoder = None
 
-        if self.tune_on_val and dataloader_idx == 1:
-            opt.cache_downstream(closure)
+        grad_clip_fn = lambda: self.clip_gradients(opt, gradient_clip_val=self.gradient_clip_val, gradient_clip_algorithm=self.trainer.gradient_clip_algorithm) if self.gradient_clip_val is not None else None
+        if opt.tune_on_val and dataloader_idx == 1:
+            opt.val_step(closure, after_backward_hook=grad_clip_fn)
         else:
-            grad_clip_fn = lambda: self.clip_gradients(opt, gradient_clip_val=self.gradient_clip_val, gradient_clip_algorithm=self.trainer.gradient_clip_algorithm) if self.gradient_clip_val is not None else None
-            final_weights = opt.hpo_step(closure, closure_encoder, use_cached_downstream=self.tune_on_val,
-                                         after_backward_hook=grad_clip_fn)
+            final_weights = opt.hpo_step(closure, closure_encoder, after_backward_hook=grad_clip_fn)
             metrics.update({f"hpo_{name}": w.item() for name, w in zip(self.hpo_losses, final_weights)})
 
             self.n_weights_updates += 1
