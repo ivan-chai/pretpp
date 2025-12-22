@@ -43,12 +43,9 @@ class HPOModule(BaseModule):
         hpo_params: Parameters of the HP optimizer.
         hp_group_params: Specific parameters for weights optimization (lr etc.).
         loss_group_params: Specific parameters for loss optimization (lr etc.).
-        tune_on_heads: Use projections to tune HPO weights.
-        use_masks: Whether to use masks for padding or not.
     """
     def __init__(self, seq_encoder, loss, hpo_losses, downstream_loss,
                  hpo_params=None, hp_group_params=None, loss_group_params=None,
-                 tune_on_heads=False, use_masks=True,
                  **kwargs):
         super().__init__(seq_encoder, loss, **kwargs)
         self.automatic_optimization = False
@@ -58,8 +55,6 @@ class HPOModule(BaseModule):
         self.hpo_params = hpo_params
         self.hp_group_params = hp_group_params
         self.loss_group_params = loss_group_params
-        self.tune_on_heads = tune_on_heads
-        self.use_masks = use_masks
         self.loss_weights = torch.nn.Parameter(torch.ones([len(hpo_losses)]))
         self.register_buffer("n_weights_updates", torch.zeros([], dtype=torch.long))
         self.register_buffer("avg_weights", torch.zeros(len(self.hpo_losses)))
@@ -113,12 +108,7 @@ class HPOModule(BaseModule):
                 b, _, d = z.payload.shape
                 grads = z.payload.grad  # (B, L, D).
                 grads = to_sequence_length(grads, self.max_sequence_length)  # (B, L, D).
-                if self.use_masks:
-                    mask = to_sequence_length(z.seq_len_mask.bool().unsqueeze(-1), self.max_sequence_length).repeat(1, 1, d)  # (B, L, D).
-                    assert grads.shape == mask.shape, (z.payload.shape, z.seq_len_mask.shape, grads.shape, mask.shape)
-                    return grads.flatten(), mask.flatten()
-                else:
-                    return grads.flatten()
+                return grads.flatten()
 
         if opt.encoder_decoder:
             def closure_encoder(z_grad):
@@ -186,14 +176,9 @@ class HPOModule(BaseModule):
             params[0].update(self.hp_group_params)
         if self.loss_group_params is not None:
             params[1].update(self.loss_group_params)
-        if self.tune_on_heads:
-            params.insert(1, {"params": []})
-            shared_decoder_group = 2
-        else:
-            shared_decoder_group = None
         optimizer = AlignedHPOptimizer(params, self._optimizer_partial,
                                        weights_names=self.hpo_losses,
-                                       shared_decoder_group=shared_decoder_group,
+                                       shared_decoder_group=None,
                                        **(self.hpo_params or {}))
         if self._lr_scheduler_partial is None:
             return optimizer
