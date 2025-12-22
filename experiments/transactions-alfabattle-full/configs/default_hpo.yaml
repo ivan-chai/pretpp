@@ -122,6 +122,7 @@ module:
             grad_scale: null  # 0.22 * 15
       - _target_: pretpp.losses.ClassificationLoss
         drop_nans: true
+        apply_to_all_outputs: true
         targets:
           target:
             num_classes: ${num_downstream_classes}
