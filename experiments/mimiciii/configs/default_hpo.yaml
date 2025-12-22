@@ -17,17 +17,24 @@ module:
     tune_on_val: true
     ema: 0.99
   downstream_loss: loss_1_target
+  shared_prefix: _loss_projection.0.
   loss_projection_partial:
-    _target_: pretpp.nn.CatHead
+    _target_: pretpp.nn.StackHead
     _partial_: true
-    infer_output_size_index: 0
     head_partials:
-      - ${head}
       - _target_: hotpp.nn.Head
         _partial_: true
-        output_size: ${num_downstream_classes}
-        hidden_dims: [128]
-        use_batch_norm: true
+        output_size: 256
+      - _target_: pretpp.nn.CatHead
+        _partial_: true
+        infer_output_size_index: 0
+        head_partials:
+          - ${head}
+          - _target_: hotpp.nn.Head
+            _partial_: true
+            output_size: ${num_downstream_classes}
+            hidden_dims: [128]
+            use_batch_norm: true
   loss:
     _target_: pretpp.losses.HybridLoss
     prediction_loss: 1
