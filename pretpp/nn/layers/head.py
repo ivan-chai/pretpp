@@ -135,3 +135,22 @@ class CatHead(torch.nn.ModuleList):
             if (output.seq_lens != x.seq_lens).any():
                 raise RuntimeError("Heads output lengths mismatch.")
         return PaddedBatch(torch.cat([output.payload for output in outputs], -1), x.seq_lens)
+
+
+class StackHead(torch.nn.Sequential):
+    """Combine multiple heads vertically."""
+    def __init__(self, input_size, output_size=None, head_partials=None):
+        if head_partials is None:
+            raise ValueError("Need head_partials")
+        heads = []
+        for i, partial in enumerate(head_partials):
+            if i < len(head_partials) - 1:
+                heads.append(partial(input_size))
+                input_size = heads[-1].output_size
+            else:
+                heads.append(partial(input_size, output_size=output_size))
+        super().__init__(*heads)
+
+    @property
+    def output_size(self):
+        return self[-1].output_size

@@ -41,11 +41,14 @@ class HPOModule(BaseModule):
         hpo_losses: A list of losses to tune hyperparameters for.
         downstream_loss: The name of the downstream loss.
         hpo_params: Parameters of the HP optimizer.
+        shared_prefix: The prefix for shared parameters weights.
         hp_group_params: Specific parameters for weights optimization (lr etc.).
         loss_group_params: Specific parameters for loss optimization (lr etc.).
+        shared_group_params: Specific parameters for shared weights optimization (lr etc.).
     """
     def __init__(self, seq_encoder, loss, hpo_losses, downstream_loss,
-                 hpo_params=None, hp_group_params=None, loss_group_params=None,
+                 hpo_params=None, shared_prefix=None,
+                 hp_group_params=None, loss_group_params=None, shared_group_params=None,
                  **kwargs):
         super().__init__(seq_encoder, loss, **kwargs)
         self.automatic_optimization = False
@@ -53,8 +56,10 @@ class HPOModule(BaseModule):
         self.hpo_losses = list(hpo_losses)
         self.downstream_loss = downstream_loss
         self.hpo_params = hpo_params
+        self.shared_prefix = shared_prefix
         self.hp_group_params = hp_group_params
         self.loss_group_params = loss_group_params
+        self.shared_group_params = shared_group_params
         self.loss_weights = torch.nn.Parameter(torch.ones([len(hpo_losses)]))
         self.register_buffer("n_weights_updates", torch.zeros([], dtype=torch.long))
         self.register_buffer("avg_weights", torch.zeros(len(self.hpo_losses)))
@@ -165,20 +170,27 @@ class HPOModule(BaseModule):
             config.scheduler.step()
 
     def configure_optimizers(self):
-        model_params = [v for k, v in self.named_parameters() if v.requires_grad and k != "loss_weights" and not k.startswith("_loss")]
-        loss_params = [v for k, v in self.named_parameters() if v.requires_grad and k != "loss_weights" and k.startswith("_loss")]
+        shared_prefix = self.shared_prefix if self.shared_prefix is not None else "<none>"
+        shared_params = [v for k, v in self.named_parameters() if v.requires_grad and k != "loss_weights" and k.startswith(shared_prefix)]
+        if (self.shared_prefix is not None) and (not shared_params):
+            raise ValueError(f"No weights found for prefix: {self.shared_prefix} ({list(self.state_dict())})")
+        loss_params = [v for k, v in self.named_parameters() if v.requires_grad and k != "loss_weights" and not k.startswith(shared_prefix) and k.startswith("_loss")]
+        model_params = [v for k, v in self.named_parameters() if v.requires_grad and k != "loss_weights" and not k.startswith(shared_prefix) and not k.startswith("_loss")]
         params = [
             {"params": [self.loss_weights]},
             {"params": loss_params},
+            {"params": shared_params},
             {"params": model_params}
         ]
         if self.hp_group_params is not None:
             params[0].update(self.hp_group_params)
         if self.loss_group_params is not None:
             params[1].update(self.loss_group_params)
+        if self.shared_group_params is not None:
+            params[2].update(self.shared_group_params)
         optimizer = AlignedHPOptimizer(params, self._optimizer_partial,
                                        weights_names=self.hpo_losses,
-                                       shared_decoder_group=None,
+                                       shared_decoder_group=2,
                                        **(self.hpo_params or {}))
         if self._lr_scheduler_partial is None:
             return optimizer

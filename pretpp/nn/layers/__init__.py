@@ -1,1 +1,1 @@
-from .head import IdentityHead, NormalizationHead, MetricHead, MetricConditionalHead, TransformerHead, CatHead
+from .head import IdentityHead, NormalizationHead, MetricHead, MetricConditionalHead, TransformerHead, CatHead, StackHead
