@@ -44,7 +44,7 @@ transformer_history_token_frequency: 0.3
 transformer_history_token_probability: 0.5
 transformer_recmem_chunk_size: 256
 
-downstream_report: /dowstream_logs
+downstream_report: results/downstream_${name}.yaml
 
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger

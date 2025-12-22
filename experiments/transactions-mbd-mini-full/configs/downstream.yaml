@@ -1,5 +1,5 @@
 data_splits: [train, test]  # Val is equal to test.
-workers: 2
+workers: 16
 total_cpu_count: 15
 log_level: ERROR
 environment:
@@ -10,7 +10,7 @@ target:
     - client_id
   cols_id_type:
     - str
-  col_target: target
+  col_target: target_2
   drop_duplicated_ids: true
 split:
   fit_ids: true
