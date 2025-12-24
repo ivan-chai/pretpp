@@ -4,4 +4,4 @@ defaults:
   - default_mtl
   - _self_
 
-name: ntp_cls_mtl_rnn
+name: mtl_next_item
