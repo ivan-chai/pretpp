@@ -102,7 +102,8 @@ class HPOModule(BaseModule):
 
         def closure(down, weights, retain_graph=False, stage=None):
             opt.zero_grad()
-            z.payload.grad = None
+            if opt.encoder_decoder:
+                z.payload.grad = None
             assert len(weights) == len(self.hpo_losses)
             loss = sum([w * losses[k] for k, w in zip(self.hpo_losses, weights)], down * losses[self.downstream_loss])
             self.manual_backward(loss, retain_graph=retain_graph)
