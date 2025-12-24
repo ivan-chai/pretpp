@@ -192,7 +192,6 @@ class HPOModule(BaseModule):
             params[2].update(self.shared_group_params)
         optimizer = AlignedHPOptimizer(params, self._optimizer_partial,
                                        weights_names=self.hpo_losses,
-                                       shared_decoder_group=2,
                                        **(self.hpo_params or {}))
         if self._lr_scheduler_partial is None:
             return optimizer
