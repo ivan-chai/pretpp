@@ -1,0 +1,7 @@
+defaults:
+  - default
+  - default_rnn
+  - default_mtl
+  - _self_
+
+name: ntp_cls_mtl_rnn

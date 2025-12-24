@@ -1,0 +1,15 @@
+module:
+  _target_: pretpp.modules.MTLModule
+  mtl_losses:
+    - timestamps
+    - labels
+  loss_projection_partial: ${head}
+  loss:
+    _target_: pretpp.losses.NextItemLoss
+    losses:
+      timestamps:
+        _target_: hotpp.losses.TimeMAELoss
+        max_delta: ${max_time_delta}
+      labels:
+        _target_: hotpp.losses.CrossEntropyLoss
+        num_classes: ${num_classes}

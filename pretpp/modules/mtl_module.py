@@ -28,14 +28,13 @@ class MTLModule(BaseModule):
 
     Args:
         mtl_losses: A list of losses to tune hyperparameters for.
-        downstream_loss: The name of the downstream loss.
         mtl_params: Parameters of the HP optimizer.
         shared_prefix: The prefix for shared parameters weights.
         hp_group_params: Specific parameters for weights optimization (lr etc.).
         loss_group_params: Specific parameters for loss optimization (lr etc.).
         shared_group_params: Specific parameters for shared weights optimization (lr etc.).
     """
-    def __init__(self, seq_encoder, loss, mtl_losses, downstream_loss,
+    def __init__(self, seq_encoder, loss, mtl_losses,
                  mtl_params=None, shared_prefix=None,
                  hp_group_params=None, loss_group_params=None, shared_group_params=None,
                  **kwargs):
@@ -157,8 +156,7 @@ class MTLModule(BaseModule):
             params[0].update(self.loss_group_params)
         if self.shared_group_params is not None:
             params[1].update(self.shared_group_params)
-        optimizer = MultiTaskOptimizer(params, self._optimizer_partial,
-                                       weights_names=self.mtl_losses,
+        optimizer = MultiTaskOptimizer(self.mtl_losses, params, self._optimizer_partial,
                                        **(self.mtl_params or {}))
         if self._lr_scheduler_partial is None:
             return optimizer
