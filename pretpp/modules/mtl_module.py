@@ -84,6 +84,8 @@ class MTLModule(BaseModule):
 
         def closure(weights, retain_graph=False, stage=None):
             opt.zero_grad()
+            if opt.encoder_decoder:
+                z.payload.grad = None
             assert len(weights) == len(self.mtl_losses)
             loss = sum([w * losses[k] for k, w in zip(self.mtl_losses, weights)])
             self.manual_backward(loss, retain_graph=retain_graph)
