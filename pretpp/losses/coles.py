@@ -96,7 +96,13 @@ class ColesLoss(BaseLoss):
         new_l = sample_sizes.max().item()
         indices = (offsets[:, :, None] + torch.arange(new_l, device=device)[None, None]).clip(max=l - 1)  # (B, N, L').
 
-        new_inputs = {k: v.repeat_interleave(n) for k, v in inputs.payload.items() if k not in inputs.seq_names}  # (BN).
+        def uni_repeat_interleave(arr, repeats):
+            if isinstance(arr, list):
+                return [x for x in arr for _ in range(repeats)]
+            else:
+                return arr.repeat_interleave(repeats)
+        
+        new_inputs = {k: uni_repeat_interleave(v, n) for k, v in inputs.payload.items() if k not in inputs.seq_names}  # (BN).
         # Need: (B, N, L').
         for k in inputs.seq_names:
             v = inputs.payload[k]  # (B, L).
