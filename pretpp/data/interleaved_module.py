@@ -134,11 +134,13 @@ class InterleavedDataModule(HotppDataModule):
         train_dataset = ShuffledDistributedDataset(self.train_data, rank=rank, world_size=world_size,
                                                    cache_size=cache_size,
                                                    parallelize=parallelize,
-                                                   seed=seed)
+                                                   seed=seed,
+                                                   drop_last=loader_params.get("drop_last", False))
         val_dataset = ShuffledDistributedDataset(self.val_data, rank=rank, world_size=world_size,
                                                  cache_size=cache_size,
                                                  parallelize=parallelize,
-                                                 seed=seed)
+                                                 seed=seed,
+                                                 drop_last=loader_params.get("drop_last", False))
 
         train_loader = torch.utils.data.DataLoader(
             dataset=train_dataset,
