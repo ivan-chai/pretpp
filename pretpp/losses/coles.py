@@ -95,13 +95,12 @@ class ColesLoss(BaseLoss):
 
         new_l = sample_sizes.max().item()
         indices = (offsets[:, :, None] + torch.arange(new_l, device=device)[None, None]).clip(max=l - 1)  # (B, N, L').
-
+        
         def uni_repeat_interleave(arr, repeats):
             if isinstance(arr, list):
                 return [x for x in arr for _ in range(repeats)]
             else:
                 return arr.repeat_interleave(repeats)
-        
         new_inputs = {k: uni_repeat_interleave(v, n) for k, v in inputs.payload.items() if k not in inputs.seq_names}  # (BN).
         # Need: (B, N, L').
         for k in inputs.seq_names:
@@ -136,6 +135,18 @@ class ColesLoss(BaseLoss):
             if outputs.shape[1] != 1:
                 raise NotImplementedError("Expected aggregated embedding with shape (B, 1, C).")
             outputs = outputs.squeeze(1)
+            
+        def name_to_number(arr):
+            name_dict = {}
+            dif_name_count = 0
+            for i, x in enumerate(arr):
+                if name_dict.get(x, 0) == 0:
+                    name_dict[x] = dif_name_count
+                    dif_name_count += 1
+                arr[i] = name_dict[x]
+            return torch.tensor(arr)
+        
+        targets = name_to_number(targets).to(outputs.device)
         loss = self.coles_loss(outputs, targets)
         losses = {"coles": loss}
         metrics = {}
