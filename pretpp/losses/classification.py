@@ -13,8 +13,9 @@ class ClassificationLoss(BaseLoss):
         cls_token: A dictionary with field values for a CLS token (optional, typically for transformer models).
         overwrite_timestamp: Assign the latest timestamp to the CLS token.
         apply_to_all_outputs: Whether to compute loss for global classification targets with aggregated embedding or for each embedding.
+        drop_nans: Exclude elements with nan targets.
     """
-    def __init__(self, targets, cls_token=None, overwrite_timestamp=False, apply_to_all_outputs=False):
+    def __init__(self, targets, cls_token=None, overwrite_timestamp=False, apply_to_all_outputs=False, drop_nans=False):
         super().__init__()
         for name, spec in targets.items():
             if "num_classes" not in spec:
@@ -27,6 +28,7 @@ class ClassificationLoss(BaseLoss):
         self._cls_token = cls_token
         self._overwrite_timestamp = overwrite_timestamp
         self._apply_to_all_outputs = apply_to_all_outputs
+        self._drop_nans = drop_nans
 
     @property
     def input_size(self):
@@ -110,13 +112,22 @@ class ClassificationLoss(BaseLoss):
             if target.ndim != 1:
                 raise NotImplementedError("Only global targets are supported.")
             logits = outputs[name]  # (B, L, D).
+            if self._drop_nans:
+                mask = target.isfinite()
+                if not mask.any():
+                    losses[name] = logits.sum() * 0
+                    continue
+                logits = logits[mask]
+                target = target[mask]
+            else:
+                mask = slice(None, None, None)
             if spec.get("cast", False):
                 target = target.long()
             losses[name] = torch.nn.functional.cross_entropy(logits.flatten(0, -2), target[:, None].repeat(1, logits.shape[1]).flatten())
             if spec.get("weight", 1) != 1:
                 losses[name] = ScaleGradient.apply(losses[name], spec["weight"])
             with torch.no_grad():
-                last_logits = logits.take_along_dim(last, 1).squeeze(1)  # (B, D).
+                last_logits = logits.take_along_dim(last[mask], 1).squeeze(1)  # (B, D).
                 metrics[f"batch-accuracy-{name}"] = (last_logits.argmax(-1) == target).float().mean()
         return losses, metrics
 

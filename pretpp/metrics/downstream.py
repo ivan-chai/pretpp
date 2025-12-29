@@ -30,6 +30,11 @@ class DownstreamMetric:
             target = targets.payload[field]  # (B).
             if (prediction.ndim != 1) or (target.ndim != 1):
                 raise NotImplementedError("Only global classification is implemented.")
+            mask = target.isfinite()
+            if not mask.any():
+                continue
+            target = target[mask]
+            prediction = prediction[mask]
             self.n[field] += len(target)
             self.n_correct[field] += (prediction == target).sum().item()
 

@@ -48,3 +48,9 @@ class BaseLoss(torch.nn.Module):
             Metrics dictionary.
         """
         return {}
+
+    def predict(self, outputs):
+        raise NotImplementedError("The loss doesn't support prediction.")
+
+    def get_prediction_targets(self, targets):
+        return targets
