@@ -10,6 +10,7 @@ module:
         #labels:
           #in: ${num_classes_plus1}  # Add CLS token.
     model_partial:
+      sos: false
       _target_: hotpp.nn.SimpleTransformer
       _partial_: true
       n_positions: ${transformer_positions}

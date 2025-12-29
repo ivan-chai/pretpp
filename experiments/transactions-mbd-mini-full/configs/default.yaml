@@ -23,23 +23,17 @@ transformer_dropout: 0.1
 transformer_min_length: 4
 transformer_cls_token:
   timestamps: -1
-  labels: ${num_classes}  # Use final label for CLS.
   currency: 0
-  operation_kind: 0
-  operation_type: 0
-  operation_type_group: 0
-  card_type: 0
-  ecommerce_flag: 0
-  payment_system: 0
-  income_flag: 0
-  country: 0
-  city: 0
-  mcc_category: 0
-  day_of_week: 0
-  hour: 0
-  weekofyear: 0
-  log_amount: -1
-  log_hour_diff: -1
+  event_subtype: 0
+  src_type11: 0
+  src_type12: 0
+  dst_type11: 0
+  dst_type12: 0
+  src_type21: 0
+  src_type22: 0
+  src_type31: 0
+  src_type32: 0
+  amount: -1
 transformer_history_token_frequency: 0.3
 transformer_history_token_probability: 0.5
 transformer_recmem_chunk_size: 256
@@ -74,11 +68,15 @@ data_module:
   num_workers: 4
   id_field: client_id
   train_params:
+    random_split: 0.95
+    random_part: train
     min_required_length: 2
     max_length: 300
     cache_size: null
     mbd: true
   val_params:
+    random_split: 0.95
+    random_part: val
     max_length: 300
     position: last
     mbd: true
@@ -92,7 +90,7 @@ data_module:
     - target_3
     - target_4
   train_path: data/train.parquet
-  val_path: data/valid.parquet #was first test 
+  val_path: data/train.parquet #was first test 
   test_path: data/valid.parquet #was first valid
 
 metric: null
@@ -199,7 +197,7 @@ module:
 
 trainer:
   accelerator: cuda
-  devices: 1
+  devices: 2
   max_epochs: 60
   enable_checkpointing: true
   precision: bf16 

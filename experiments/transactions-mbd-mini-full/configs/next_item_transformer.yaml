@@ -1,10 +1,13 @@
 defaults:
   - default
-  - default_rnn
+  - default_transformer
   - next_item_loss
   - _self_
 
-name: next_item
+name: next_item_transformer
+
+data_module:
+  batch_size: 256
 
 module:
   _target_: pretpp.modules.BaseModule
