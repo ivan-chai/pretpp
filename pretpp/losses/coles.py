@@ -136,17 +136,20 @@ class ColesLoss(BaseLoss):
                 raise NotImplementedError("Expected aggregated embedding with shape (B, 1, C).")
             outputs = outputs.squeeze(1)
             
-        def name_to_number(arr):
+        def name_to_number(names, device=None):
             name_dict = {}
-            dif_name_count = 0
-            for i, x in enumerate(arr):
-                if name_dict.get(x, 0) == 0:
-                    name_dict[x] = dif_name_count
-                    dif_name_count += 1
-                arr[i] = name_dict[x]
-            return torch.tensor(arr)
+            n_unique = 0
+            result = []
+            for name in names:
+                if name_dict.get(name, 0) == 0:
+                    name_dict[name] = n_unique
+                    n_unique += 1
+                result.append(name_dict[name])
+            return torch.tensor(result, device=device)
         
-        targets = name_to_number(targets).to(outputs.device)
+        if isinstance(targets[0], str):
+            targets = name_to_number(targets, device=outputs.device)
+
         loss = self.coles_loss(outputs, targets)
         losses = {"coles": loss}
         metrics = {}

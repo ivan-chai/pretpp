@@ -45,7 +45,7 @@ def make_from_folds(folds, data_root, targets_root, dst, n_partitions):
         for table in transformed_tables:
             result_df = result_df.join(table, on="client_id", how="left")
         targets = result_df
-        part = part.join(targets, on="client_id", how="inner")
+        part = part.join(targets, on="client_id", how="left")
         dataset = dataset.union(part) if dataset is not None else part
     # Compute log_amount.
     udf = F.udf(lambda x: [math.log(abs(v) + 1) for v in x], ArrayType(FloatType(), False))
