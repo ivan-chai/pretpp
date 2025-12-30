@@ -1,0 +1,31 @@
+defaults:
+  - default
+  - default_transformer
+  - _self_
+
+name: coles
+
+data_module:
+  batch_size: 256
+
+module:
+  _target_: pretpp.modules.BaseModule
+  head_partial:
+    _target_: pretpp.nn.NormalizationHead
+    _partial_: true
+  aggregator:
+    _target_: hotpp.nn.LastAggregator
+  loss_projection_partial: ${nohead}
+  loss:
+    _target_: pretpp.losses.ColesLoss
+    embedding_dim: ${transformer_hidden_size}
+    id_field: client_id
+    min_length: 20
+    max_length: 60
+    n_splits: 5
+    coles_loss:
+      _target_: ptls.frames.coles.losses.ContrastiveLoss
+      margin: 0.5
+      sampling_strategy:
+        _target_: ptls.frames.coles.sampling_strategies.HardNegativePairSelector
+        neg_count: 5
