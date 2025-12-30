@@ -1,13 +1,24 @@
 data_module:
   train_params:
-    drop_nans: target_2
+    drop_nans:
+      - target_1
+      - target_2
+      - target_3
+      - target_4
   val_params:
-    drop_nans: target_2
+    drop_nans:
+      - target_1
+      - target_2
+      - target_3
+      - target_4
 
 metric:
   _target_: pretpp.metrics.DownstreamMetric
   classification_fields:
-    - target_2
+      - target_1
+      - target_2
+      - target_3  
+      - target_4
 
 module:
   _target_: pretpp.modules.BaseModule

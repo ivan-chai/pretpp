@@ -1,8 +1,8 @@
 seed_everything: 42
 num_evaluation_seeds: 3
 
-num_classes: 60
-num_classes_plus1: 61
+num_classes: 55
+num_classes_plus1: 56
 max_time_delta: 8
 max_duration: 8
 num_downstream_classes: 2
@@ -33,7 +33,7 @@ transformer_cls_token:
   src_type22: 0
   src_type31: 0
   src_type32: 0
-  amount: -1
+  log_amount: -1
 transformer_history_token_frequency: 0.3
 transformer_history_token_probability: 0.5
 transformer_recmem_chunk_size: 256
@@ -55,7 +55,7 @@ data_module:
     event_type: labels
   fields:
     - timestamps
-    - amount
+    - log_amount
     - event_subtype
     - labels
     - currency
@@ -135,52 +135,41 @@ module:
       use_batch_norm: false
       embeddings:
         labels:  # mcc.
-          in: ${num_classes}
+          in: ${num_classes_plus1}
           out: 24
-          clip: true
         event_subtype:
-          in: 70
+          in: 62
           out: 24
-          clip: true
         currency:
-          in: 10
+          in: 17
           out: 4
-          clip: true
         src_type11:
-          in: 85
+          in: 77
           out: 24
-          clip: true
         src_type12:
-          in: 380
+          in: 526
           out: 24
-          clip: true
         dst_type11:
-          in: 90
+          in: 133
           out: 24
-          clip: true
         dst_type12:
-          in: 500
+          in: 821
           out: 12
-          clip: true
         src_type21:  # MY.
           in: 10002
           out: 64
-          clip: true
         src_type22:
-          in: 90
+          in: 88
           out: 24
-          clip: true
         src_type31:  # MY.
-          in: 2406
+          in: 2495
           out: 32
-          clip: true
         src_type32:
-          in: 91
+          in: 88
           out: 24
-          clip: true
       numeric_values:
         timestamps: identity
-        amount: identity
+        log_amount: identity
     max_time_delta: ${max_time_delta}
   aggregator:
     _target_: hotpp.nn.LastAggregator
