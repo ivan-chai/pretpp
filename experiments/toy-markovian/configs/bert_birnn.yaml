@@ -1,16 +1,14 @@
 defaults:
   - default
   - default_birnn
-  - mlm_loss@module.loss
+  - bert_loss
   - _self_
 
-name: mlm
+name: bert_birnn
 
 module:
   _target_: pretpp.modules.BaseModule
-  seq_encoder:
-    embedder:
-      embeddings:
-        labels:
-          in: ${num_classes_plus1}
   loss_projection_partial: ${head}
+  loss:
+    coles_loss:
+      embedding_dim: ${rnn_hidden_size}

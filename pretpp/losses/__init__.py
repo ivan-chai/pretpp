@@ -1,3 +1,4 @@
+from .bert import BERTLoss
 from .coles import ColesLoss
 from .classification import ClassificationLoss
 from .detpp import DeTPPLoss

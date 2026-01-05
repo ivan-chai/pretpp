@@ -1,11 +1,14 @@
 defaults:
   - default
   - default_bitransformer
-  - mlm_loss@module.loss
+  - bert_loss
   - _self_
 
-name: mlm
+name: bert_bitransformer
 
 module:
   _target_: pretpp.modules.BaseModule
   loss_projection_partial: ${head}
+  loss:
+    coles_loss:
+      embedding_dim: ${module.seq_encoder.model_partial.n_embd}

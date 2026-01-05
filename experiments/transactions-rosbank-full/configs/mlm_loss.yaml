@@ -1,0 +1,29 @@
+_target_: pretpp.losses.MLMLoss
+timedeltas_field: timedeltas
+eval_fraction: 0.15
+mask_prob: 0.8
+random_prob: 0.1
+losses:
+  timedeltas:
+    _target_: hotpp.losses.MAELoss
+    grad_scale: null
+  labels:
+    _target_: hotpp.losses.CrossEntropyLoss
+    num_classes: ${num_classes_ext}
+    grad_scale: null
+  currency:
+    _target_: hotpp.losses.CrossEntropyLoss
+    num_classes: 68
+    grad_scale: null
+  channel_type:
+    _target_: hotpp.losses.CrossEntropyLoss
+    num_classes: 7
+    grad_scale: null
+  trx_category:
+    _target_: hotpp.losses.CrossEntropyLoss
+    num_classes: 11
+    grad_scale: null
+  log_amount:
+    _target_: hotpp.losses.MAELoss
+    grad_scale: null
+mask_token: ${mask_token}

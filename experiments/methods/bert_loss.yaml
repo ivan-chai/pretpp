@@ -1,0 +1,15 @@
+defaults:
+  - mlm_loss@module.loss.mlm_loss
+  - coles_loss@module.loss.coles_loss
+  - _self_
+
+module:
+  seq_encoder:
+    embedder:
+      embeddings:
+        labels:
+          in: ${num_classes_ext}
+  loss:
+    _target_: pretpp.losses.BERTLoss
+    coles_loss:
+      cls_token: ${cls_token}

@@ -3,6 +3,7 @@ num_evaluation_seeds: 5
 
 num_classes: 205
 num_classes_plus1: 206
+num_classes_ext: 207
 max_time_delta: 8
 max_duration: 8
 num_downstream_classes: 4
@@ -21,13 +22,19 @@ transformer_context: 256
 transformer_positions: 3072
 transformer_dropout: 0.1
 transformer_min_length: 128
-transformer_cls_token:
-  timestamps: -1
-  labels: ${num_classes}  # Use final label for CLS.
-  log_amount: -1
 transformer_history_token_frequency: 0.1
 transformer_history_token_probability: 0.5
 transformer_recmem_chunk_size: 256
+
+cls_token:
+  timestamps: -1
+  labels: ${num_classes}  # Use final label for CLS.
+  log_amount: -1
+mask_token:
+  timestamps: -1
+  timedeltas: -1
+  labels: ${num_classes_plus1}
+  log_amount: -1
 
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger

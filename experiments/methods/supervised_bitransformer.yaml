@@ -8,4 +8,4 @@ name: supervised_bitransformer
 
 module:
   loss:
-    cls_token: ${transformer_cls_token}
+    cls_token: ${cls_token}

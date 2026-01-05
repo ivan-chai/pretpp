@@ -26,4 +26,5 @@ module:
         _target_: torch.nn.functional.gelu
       dropout: ${transformer_dropout}
       causal: True
+      sos: false
     max_context: ${transformer_context}

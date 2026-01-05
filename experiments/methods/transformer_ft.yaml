@@ -14,7 +14,7 @@ module:
 #    model_partial:
 #      dropout: 0.3
   loss:
-    cls_token: ${transformer_cls_token}
+    cls_token: ${cls_token}
   peft_adapter:
     _partial_: true
     _target_: peft.get_peft_model

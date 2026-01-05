@@ -39,6 +39,10 @@ class MLMLoss(BaseLoss):
         self.register_buffer("_augment_type_probs", torch.tensor([unchanged_prob, mask_prob, random_prob], dtype=torch.float))
 
     @property
+    def timedeltas_field(self):
+        return self._timedeltas_field
+
+    @property
     def aggregate(self):
         return False
 
