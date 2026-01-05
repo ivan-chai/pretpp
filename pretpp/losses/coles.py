@@ -4,6 +4,11 @@ from hotpp.data import PaddedBatch
 from .base import BaseLoss
 
 
+CLS_POS_NONE = "none"
+CLS_POS_BEGIN = "begin"
+CLS_POS_END = "end"
+
+
 class ColesLoss(BaseLoss):
     """Contrastive pretrainer.
 
@@ -19,7 +24,7 @@ class ColesLoss(BaseLoss):
     """
     def __init__(self, embedding_dim, coles_loss, id_field="id",
                  n_splits=5, min_length=0.1, max_length=0.9,
-                 cls_token=None, cls_token_begin=False):
+                 cls_token=None, cls_token_begin=False, normalize=True):
         if min_length > max_length:
             raise ValueError("Max length must be greater than min")
         super().__init__()
@@ -31,6 +36,7 @@ class ColesLoss(BaseLoss):
         self.max_length = max_length
         self.cls_token = cls_token
         self.cls_token_begin = cls_token_begin
+        self.normalize = normalize
 
     @property
     def input_size(self):
@@ -40,6 +46,15 @@ class ColesLoss(BaseLoss):
     def aggregate(self):
         # Use aggregation if there is no special token.
         return self.cls_token is None
+
+    @property
+    def cls_token_pos(self):
+        if self.cls_token is None:
+            return CLS_POS_NONE
+        elif self.cls_token_begin:
+            return CLS_POS_BEGIN
+        else:
+            return CLS_POS_END
 
     def prepare_inference_batch(self, inputs):
         """Extract model inputs for inference.
@@ -143,6 +158,8 @@ class ColesLoss(BaseLoss):
             if outputs.shape[1] != 1:
                 raise NotImplementedError("Expected aggregated embedding with shape (B, 1, C).")
             outputs = outputs.squeeze(1)
+        if self.normalize:
+            outputs = torch.nn.functional.normalize(outputs, dim=-1)
         loss = self.coles_loss(outputs, targets)
         losses = {"coles": loss}
         metrics = {}

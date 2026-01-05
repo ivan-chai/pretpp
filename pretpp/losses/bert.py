@@ -2,6 +2,7 @@ import torch
 
 from hotpp.data import PaddedBatch
 from .base import BaseLoss
+from .coles import CLS_POS_NONE, CLS_POS_BEGIN, CLS_POS_END
 from .mlm import MLMLoss
 
 
@@ -13,10 +14,8 @@ class BERTLoss(BaseLoss):
         super().__init__()
         self.mlm_loss = mlm_loss
         self.coles_loss = coles_loss
-        if self.coles_loss.aggregate:
+        if self.coles_loss.cls_token_pos == CLS_POS_NONE:
             raise ValueError("CoLES Loss must use CLS token.")
-        if not self.coles_loss.cls_token_begin:
-            raise ValueError("CoLES Loss must put CLS token at the beginning.")
 
     @property
     def aggregate(self):
@@ -38,18 +37,16 @@ class BERTLoss(BaseLoss):
         """
         splits, coles_targets = self.coles_loss.prepare_batch(inputs, targets=targets)
         # Exclude CLS token and apply masking.
-        splits_truncated = PaddedBatch({k: splits.payload[k][:, 1:] for k in splits.seq_names},
-                                       (splits.seq_lens - 1).clip(min=0))
+        if self.coles_loss.cls_token_pos == CLS_POS_BEGIN:
+            splits_truncated = PaddedBatch({k: splits.payload[k][:, 1:] for k in splits.seq_names},
+                                           (splits.seq_lens - 1).clip(min=0))
+        else:
+            splits_truncated = PaddedBatch({k: splits.payload[k][:, :-1] for k in splits.seq_names},
+                                           (splits.seq_lens - 1).clip(min=0))
         mlm_inputs, targets = self.mlm_loss.prepare_batch(splits_truncated)
 
         # Revert CLS token and built outputs.
-        model_inputs = {k: inputs.payload[k] for k in inputs.payload if k not in inputs.seq_names}
-        for k, v in mlm_inputs.payload.items():
-            if k == self.mlm_loss.timedeltas_field:
-                model_inputs[k] = torch.cat([torch.zeros_like(v[:, :1]), v], 1)
-            else:
-                model_inputs[k] = torch.cat([splits.payload[k][:, :1], v], 1)
-        model_inputs = PaddedBatch(model_inputs, mlm_inputs.seq_lens + 1, seq_names=mlm_inputs.seq_names)
+        model_inputs = self.coles_loss.prepare_inference_batch(mlm_inputs)
         targets.payload[COLES_TARGET_FIELD] = coles_targets
         return model_inputs, targets
 
@@ -70,7 +67,10 @@ class BERTLoss(BaseLoss):
         payload = dict(targets.payload)
         coles_targets = payload.pop(COLES_TARGET_FIELD)
         assert coles_targets is not None
-        outputs_truncated = PaddedBatch(outputs.payload[:, 1:], (outputs.seq_lens - 1).clip(min=0))
+        if self.coles_loss.cls_token_pos == CLS_POS_BEGIN:
+            outputs_truncated = PaddedBatch(outputs.payload[:, 1:], (outputs.seq_lens - 1).clip(min=0))
+        else:
+            outputs_truncated = PaddedBatch(outputs.payload[:, :-1], (outputs.seq_lens - 1).clip(min=0))
         mlm_targets = PaddedBatch(payload, targets.seq_lens, seq_names=targets.seq_names)
 
         mlm_losses, mlm_metrics = self.mlm_loss(outputs_truncated, mlm_targets)
