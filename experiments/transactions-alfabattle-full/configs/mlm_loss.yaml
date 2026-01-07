@@ -1,0 +1,55 @@
+_target_: pretpp.losses.MLMLoss
+timedeltas_field: timedeltas
+losses:
+  timedeltas:
+    _target_: hotpp.losses.MAELoss
+  labels:
+    _target_: hotpp.losses.CrossEntropyLoss
+    num_classes: ${num_classes_ext}
+  currency:
+    _target_: hotpp.losses.CrossEntropyLoss
+    num_classes: 13
+  operation_kind:
+    _target_: hotpp.losses.CrossEntropyLoss
+    num_classes: 9
+#  card_type:
+#    _target_: hotpp.losses.CrossEntropyLoss
+#    num_classes: 177
+#  operation_type:
+#    _target_: hotpp.losses.CrossEntropyLoss
+#    num_classes: 24
+  operation_type_group:
+    _target_: hotpp.losses.CrossEntropyLoss
+    num_classes: 6
+#  ecommerce_flag:
+#    _target_: hotpp.losses.CrossEntropyLoss
+#    num_classes: 5
+#  payment_system:
+#    _target_: hotpp.losses.CrossEntropyLoss
+#    num_classes: 9
+  income_flag:
+    _target_: hotpp.losses.CrossEntropyLoss
+    num_classes: 5
+  country:
+    _target_: hotpp.losses.CrossEntropyLoss
+    num_classes: 26
+#  city:
+#    _target_: hotpp.losses.CrossEntropyLoss
+#    num_classes: 170
+  mcc_category:
+    _target_: hotpp.losses.CrossEntropyLoss
+    num_classes: 30
+#  day_of_week:
+#    _target_: hotpp.losses.CrossEntropyLoss
+#    num_classes: 9
+#  hour:
+#    _target_: hotpp.losses.CrossEntropyLoss
+#    num_classes: 25
+#  weekofyear:
+#    _target_: hotpp.losses.CrossEntropyLoss
+#    num_classes: 55
+  log_amount:
+    _target_: hotpp.losses.MAELoss
+#  log_hour_diff:
+#    _target_: hotpp.losses.MAELoss
+mask_token: ${mask_token}
