@@ -22,7 +22,7 @@ module:
 #    model_partial:
 #      dropout: 0.3
 #  loss:
-#    cls_token: ${transformer_cls_token}
+#    cls_token: ${cls_token}
 #  loss:
 #    apply_to_all_outputs: false
   peft_adapter:
