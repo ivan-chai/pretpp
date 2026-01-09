@@ -21,8 +21,13 @@ transformer_context: 300
 transformer_positions: 2000
 transformer_dropout: 0.1
 transformer_min_length: 4
-transformer_cls_token:
+transformer_history_token_frequency: 0.3
+transformer_history_token_probability: 0.5
+transformer_recmem_chunk_size: 256
+
+cls_token:
   timestamps: -1
+  labels: ${num_classes}  # Use final label for CLS.
   currency: 0
   event_subtype: 0
   src_type11: 0
@@ -34,9 +39,21 @@ transformer_cls_token:
   src_type31: 0
   src_type32: 0
   log_amount: -1
-transformer_history_token_frequency: 0.3
-transformer_history_token_probability: 0.5
-transformer_recmem_chunk_size: 256
+mask_token:
+  timestamps: -1
+  timedeltas: -1
+  labels: ${num_classes_plus1}  # Use final label for CLS.
+  currency: 0
+  event_subtype: 0
+  src_type11: 0
+  src_type12: 0
+  dst_type11: 0
+  dst_type12: 0
+  src_type21: 0
+  src_type22: 0
+  src_type31: 0
+  src_type32: 0
+  log_amount: -1
 
 downstream_report: results/downstream_${name}.yaml
 

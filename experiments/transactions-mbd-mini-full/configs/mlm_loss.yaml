@@ -1,0 +1,41 @@
+_target_: pretpp.losses.MLMLoss
+timedeltas_field: timedeltas
+losses:
+  timedeltas:
+    _target_: hotpp.losses.MAELoss
+  labels:
+    _target_: hotpp.losses.CrossEntropyLoss
+    num_classes: ${num_classes_ext}
+  log_amount:
+    _target_: hotpp.losses.MAELoss
+  event_subtype:
+    _target_: hotpp.losses.CrossEntropyLoss
+    num_classes: 62
+  currency:
+    _target_: hotpp.losses.CrossEntropyLoss
+    num_classes: 17
+  src_type11:
+    _target_: hotpp.losses.CrossEntropyLoss
+    num_classes: 77
+  src_type12:
+    _target_: hotpp.losses.CrossEntropyLoss
+    num_classes: 526
+  dst_type11:
+    _target_: hotpp.losses.CrossEntropyLoss
+    num_classes: 133
+  dst_type12:
+    _target_: hotpp.losses.CrossEntropyLoss
+    num_classes: 821
+  src_type21:
+    _target_: hotpp.losses.CrossEntropyLoss
+    num_classes: 10002
+  src_type22:
+    _target_: hotpp.losses.CrossEntropyLoss
+    num_classes: 88
+  src_type31:
+    _target_: hotpp.losses.CrossEntropyLoss
+    num_classes: 2495
+  src_type32:
+    _target_: hotpp.losses.CrossEntropyLoss
+    num_classes: 88
+mask_token: ${mask_token}

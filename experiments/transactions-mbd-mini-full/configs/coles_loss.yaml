@@ -1,0 +1,11 @@
+_target_: pretpp.losses.ColesLoss
+id_field: client_id
+min_length: 20
+max_length: 60
+n_splits: 5
+coles_loss:
+  _target_: ptls.frames.coles.losses.ContrastiveLoss
+  margin: 0.5
+  sampling_strategy:
+    _target_: ptls.frames.coles.sampling_strategies.HardNegativePairSelector
+    neg_count: 5
