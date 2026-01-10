@@ -1,0 +1,26 @@
+date: '2026-01-09 09:26:24'
+num_seeds: 5
+test/downstream: 0.8498199939727783
+test/downstream-std: 0.007108136881546957
+test/loss: 32.75826530456543
+test/loss-std: 3.014615307246864
+test/loss_coles-coles: 29.71379508972168
+test/loss_coles-coles-std: 2.184913546275715
+test/loss_mlm-labels: 2.7673848390579225
+test/loss_mlm-labels-std: 0.8079883841728153
+test/loss_mlm-timedeltas: 0.040830939635634424
+test/loss_mlm-timedeltas-std: 0.010712121687900065
+test/loss_mlm-types: 0.23625432848930358
+test/loss_mlm-types-std: 0.011576371470777681
+val/downstream: 0.8415599942207337
+val/downstream-std: 0.002993722221521482
+val/loss: 32.320099639892575
+val/loss-std: 2.987272563411427
+val/loss_coles-coles: 29.323747634887695
+val/loss_coles-coles-std: 2.171398038812982
+val/loss_mlm-labels: 2.724911069869995
+val/loss_mlm-labels-std: 0.7948708190223458
+val/loss_mlm-timedeltas: 0.04085373543202877
+val/loss_mlm-timedeltas-std: 0.010777956868246098
+val/loss_mlm-types: 0.2305840402841568
+val/loss_mlm-types-std: 0.011567907768810136

@@ -105,13 +105,13 @@ data_module:
     max_length: 300
     position: last
     mbd: true
-  global_target_fields: 
+  global_target_fields:
     - target_1
     - target_2
     - target_3
     - target_4
   train_path: data/train.parquet
-  val_path: data/train.parquet #was first test 
+  val_path: data/train.parquet #was first test
   test_path: data/valid.parquet #was first valid
 
 metric: null
@@ -208,7 +208,7 @@ module:
 trainer:
   accelerator: cuda
   devices: 1
-  max_epochs: 60
+  max_epochs: 30
   enable_checkpointing: true
   precision: bf16-mixed
   gradient_clip_val: 1  # Increases training stability.
