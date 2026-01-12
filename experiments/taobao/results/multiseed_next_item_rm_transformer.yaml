@@ -1,0 +1,22 @@
+date: '2025-09-19 19:47:29'
+num_seeds: 5
+test/downstream: 0.8448000073432922
+test/downstream-std: 0.012205243440649377
+test/loss: 2.5324809074401857
+test/loss-std: 0.021646388589142432
+test/loss_labels: 2.1563953876495363
+test/loss_labels-std: 0.01979733820968127
+test/loss_timestamps: 0.14435820579528807
+test/loss_timestamps-std: 0.0001819256816882064
+test/loss_types: 0.2317272186279297
+test/loss_types-std: 0.0016994527844303726
+val/downstream: 0.8512400031089783
+val/downstream-std: 0.002149042684149616
+val/loss: 2.493822526931763
+val/loss-std: 0.022002063077350482
+val/loss_labels: 2.1238812446594237
+val/loss_labels-std: 0.020139458906857616
+val/loss_timestamps: 0.1445481389760971
+val/loss_timestamps-std: 0.00017605577670376694
+val/loss_types: 0.2253933310508728
+val/loss_types-std: 0.0017022178816650448
