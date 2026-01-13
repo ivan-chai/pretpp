@@ -1,0 +1,18 @@
+date: '2026-01-12 22:02:23'
+test/downstream: 0.7915999889373779
+test/loss: 1196.6959228515625
+test/loss_coles-coles: 1176.347900390625
+test/loss_mlm-currency: 0.002722606062889099
+test/loss_mlm-dst_type11: 1.4103909730911255
+test/loss_mlm-dst_type12: 1.7776777744293213
+test/loss_mlm-event_subtype: 1.6288310289382935
+test/loss_mlm-labels: 1.6150391101837158
+test/loss_mlm-log_amount: 2.0857508182525635
+test/loss_mlm-src_type11: 0.3734973669052124
+test/loss_mlm-src_type12: 0.5976728796958923
+test/loss_mlm-src_type21: 4.604183673858643
+test/loss_mlm-src_type22: 1.0709081888198853
+test/loss_mlm-src_type31: 3.0614776611328125
+test/loss_mlm-src_type32: 0.907197117805481
+test/loss_mlm-timedeltas: 1.2124253511428833
+val/downstream: 0.8111000061035156
