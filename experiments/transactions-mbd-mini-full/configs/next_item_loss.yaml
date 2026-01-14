@@ -46,10 +46,10 @@ module:
         _target_: hotpp.losses.CrossEntropyLoss
         num_classes: 88
         grad_scale: null
-      src_type31:
-        _target_: hotpp.losses.CrossEntropyLoss
-        num_classes: 2495
-        grad_scale: null
+      #src_type31:
+      #  _target_: hotpp.losses.CrossEntropyLoss
+      #  num_classes: 2495
+      #  grad_scale: null
       src_type32:
         _target_: hotpp.losses.CrossEntropyLoss
         num_classes: 88
