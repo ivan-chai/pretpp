@@ -397,7 +397,7 @@ class DownstreamCheckpointCallback(pl.callbacks.Checkpoint):
                 pl_module.load_state_dict(torch.load(self.best_model_path, weights_only=True)["state_dict"])
 
     def _run_downstream_evaluation(self, trainer, pl_module):
-        datamodule = trainer.datamodule
+        datamodule = trainer.datamodule.with_test_parameters()
         id_field = datamodule.id_field
         target_names = datamodule.train_data.global_target_fields
         splits = self._config.get("data_splits", datamodule.splits)
