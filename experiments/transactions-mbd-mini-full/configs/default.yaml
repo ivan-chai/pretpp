@@ -199,20 +199,20 @@ module:
   lr_scheduler_partial:
     _partial_: true
     _target_: torch.optim.lr_scheduler.StepLR
-    step_size: 10
+    step_size: 5
     gamma: 0.8
-  downstream_validation_config: configs/downstream.yaml
   val_metric: ${metric}
   test_metric: ${metric}
+  downstream_validation_config: configs/downstream.yaml
 
 trainer:
   accelerator: cuda
   devices: 1
-  max_epochs: 30
+  max_epochs: 45
   enable_checkpointing: true
-  precision: bf16-mixed
+  precision: 16-mixed
   gradient_clip_val: 1  # Increases training stability.
-  check_val_every_n_epoch: 3
+  check_val_every_n_epoch: 5
   model_selection:
     metric: val/downstream
     mode: max
