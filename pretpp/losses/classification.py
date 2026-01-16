@@ -129,6 +129,15 @@ class ClassificationLoss(BaseLoss):
             result[name] = outputs[name].take_along_dim(last, 1).squeeze(1).argmax(-1)  # (B).
         return PaddedBatch(result, orig_lengths, seq_names={})
 
+    def predict_log_proba(self, outputs):
+        orig_lengths = outputs.seq_lens
+        outputs, lengths = self._split_outputs(outputs)  # (B, L, D).
+        last = (lengths - 1).clip(min=0)[:, None, None]  # (B, 1, 1).
+        result = {}
+        for name in sorted(set(self._targets) & set(outputs)):
+            result[name] = torch.nn.functional.log_softmax(outputs[name].take_along_dim(last, 1).squeeze(1), dim=-1)  # (B, C).
+        return PaddedBatch(result, orig_lengths, seq_names={})
+
     def _split_outputs(self, outputs):
         """Convert parameters tensor to the dictionary with parameters for each loss."""
         outputs, lengths = outputs.payload, outputs.seq_lens
