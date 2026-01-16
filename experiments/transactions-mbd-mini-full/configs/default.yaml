@@ -12,7 +12,7 @@ rnn_hidden_size: 1024
 rnn_half_hidden_size: 512
 rnn_inference_context: 1200
 rnn_inference_context_step: 200
-rnn_min_length: 256
+rnn_min_length: 4
 
 transformer_hidden_size: 512
 transformer_inter_size: 1024
