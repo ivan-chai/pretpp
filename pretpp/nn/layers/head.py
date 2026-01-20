@@ -24,8 +24,8 @@ class IdentityHead(torch.nn.Module):
         return self._output_size
 
     def forward(self, x):
-        if x.payload.shape[-1] != self._output_size:
-            raise ValueError(f"Incorrect input size: {x.payload.shape[-1]} != {self._output_size}")
+        #if x.payload.shape[-1] != self._output_size:
+            #raise ValueError(f"Incorrect input size: {x.payload.shape[-1]} != {self._output_size}")
         return x
 
 

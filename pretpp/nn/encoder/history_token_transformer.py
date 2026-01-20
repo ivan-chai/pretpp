@@ -14,7 +14,7 @@ class HistoryTokenTransformer(SimpleTransformer):
         embed_layer: The layer to extract HT embeddings from, a list of indices, or `all`. By default, extract
             the output of the final layer.
     """
-    def __init__(self, input_size, strategy_partial, embed_layer=None, **kwargs):
+    def __init__(self, input_size, strategy_partial, embed_layer=None, concat = False, **kwargs):
         super().__init__(input_size, **kwargs)
         self.strategy = strategy_partial(self.n_embd)
         if self.strategy.causal != self.causal:
@@ -22,6 +22,7 @@ class HistoryTokenTransformer(SimpleTransformer):
         if embed_layer == "all":
             embed_layer = list(range(self.n_layer))
         self.embed_layer = embed_layer
+        self.concat = concat
 
     def embed(self, x, timestamps):
         x = PaddedBatch(self.input_projection(x.payload), x.seq_lens)  # (B, L, D).
@@ -52,9 +53,17 @@ class HistoryTokenTransformer(SimpleTransformer):
                     embed_layer = embed_layer % self.n_layer
                     outputs = states[embed_layer]  # (B, L, D).
                     all_outputs.append(outputs)
-                outputs = torch.stack(all_outputs, 0).sum(0)  # (B, L, D).
-                outputs = PaddedBatch(outputs, x.seq_lens)
-            embeddings = strategy.extract_outputs(outputs)  # (B, D).
+                if self.concat:
+                    #print('wtf?????')
+                    embeddings = []
+                    for output in all_outputs:
+                        embeddings.append(strategy.extract_outputs(PaddedBatch(output, x.seq_lens)))
+                    embeddings = torch.concat(embeddings, 1)
+                else:
+                    outputs = torch.stack(all_outputs, 0).sum(0)  # (B, L, D).
+                    outputs = PaddedBatch(outputs, x.seq_lens)
+            if not self.concat:
+                embeddings = strategy.extract_outputs(outputs)  # (B, D).
             assert embeddings.ndim == 2
         return embeddings
 

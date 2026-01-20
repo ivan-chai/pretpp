@@ -1,6 +1,8 @@
 seed_everything: 42
 num_evaluation_seeds: 5
 
+embed_layer: 0
+
 num_classes: 205
 num_classes_plus1: 206
 max_time_delta: 8
@@ -36,7 +38,7 @@ logger:
   save_dir: lightning_logs
 model_path: checkpoints/${name}.ckpt
 report: results/${name}.yaml
-multiseed_report: results/multiseed_${name}.yaml
+multiseed_report: results/multiseed_${embed_layer}_${name}.yaml
 
 data_module:
   _target_: hotpp.data.HotppDataModule
