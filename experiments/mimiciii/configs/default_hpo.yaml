@@ -22,7 +22,7 @@ module:
     - loss_0_types
   hpo_params:
     tune_on_val: true
-    weights_normalization: 0.001
+    weights_normalization: none
     ema:
       main: 0
       downstream: 0
