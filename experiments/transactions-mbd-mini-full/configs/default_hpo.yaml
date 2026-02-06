@@ -1,7 +1,7 @@
 metric:
   _target_: pretpp.metrics.DownstreamMetric
   classification_fields:
-    - target
+    - target_2
 
 data_module:
   _target_: pretpp.data.InterleavedDataModule
@@ -31,7 +31,7 @@ module:
       downstream: 0
       cov: 0.99
       weights: 0.99
-  downstream_loss: loss_1_target
+  downstream_loss: loss_1_target_2
   shared_prefix: _loss_projection.0.
   loss_projection_partial:
     _target_: pretpp.nn.StackHead
