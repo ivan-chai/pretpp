@@ -1,0 +1,20 @@
+defaults:
+  - default_hpo
+  - _self_
+
+module:
+  hpo_losses:
+    - loss_0_timestamps
+    - loss_0_labels
+    - loss_0_log_amount
+    - loss_0_event_subtype
+    - loss_0_currency
+    - loss_0_src_type11
+    - loss_0_src_type12
+    - loss_0_dst_type11
+    - loss_0_dst_type12
+    - loss_0_src_type21
+    - loss_0_src_type22
+    - loss_0_src_type31
+    - loss_0_src_type32
+    - loss_1_target
