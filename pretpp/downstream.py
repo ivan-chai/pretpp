@@ -359,7 +359,7 @@ class DownstreamCheckpointCallback(pl.callbacks.Checkpoint):
             os.mkdir(self._root)
         checkpoint = pl_module.state_dict()
         last_checkpoint_path = os.path.join(self._root, "checkpoint-last.pth")
-        torch.save(checkpoint, last_checkpoint_path)
+        trainer.save_checkpoint(last_checkpoint_path)
         self._fetch_metrics(trainer, pl_module)
 
     def on_validation_epoch_end(self, trainer, pl_module):
