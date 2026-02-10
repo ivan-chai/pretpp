@@ -370,7 +370,6 @@ class DownstreamCheckpointCallback(pl.callbacks.Checkpoint):
             return
         if not os.path.isdir(self._root):
             os.mkdir(self._root)
-        checkpoint = pl_module.state_dict()
         last_checkpoint_path = os.path.join(self._root, "checkpoint-last.pth")
         trainer.save_checkpoint(last_checkpoint_path)
         self._fetch_metrics(trainer, pl_module)
