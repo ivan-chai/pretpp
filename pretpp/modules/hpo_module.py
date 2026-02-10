@@ -68,8 +68,12 @@ class HPOModule(BaseModule):
 
     @BaseModule.trainer.setter
     def trainer(self, trainer):
-        self.gradient_clip_val = trainer.gradient_clip_val
+        if hasattr(trainer, "_gradient_clip_val_bck"):
+            self.gradient_clip_val = trainer._gradient_clip_val_bck
+        else:
+            self.gradient_clip_val = trainer.gradient_clip_val
         trainer.gradient_clip_val = None
+        trainer._gradient_clip_val_bck = self.gradient_clip_val
         BaseModule.trainer.fset(self, trainer)
 
         if self.max_sequence_length is None:
