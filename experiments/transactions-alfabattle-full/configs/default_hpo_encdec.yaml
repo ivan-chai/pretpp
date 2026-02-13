@@ -3,10 +3,6 @@ metric:
   classification_fields:
     - target
 
-data_module:
-  _target_: pretpp.data.InterleavedDataModule
-  val_period: 2
-
 module:
   _target_: pretpp.modules.HPOModule
   hpo_losses:
@@ -29,7 +25,8 @@ module:
     - loss_0_log_amount
     - loss_0_log_hour_diff
   hpo_params:
-    tune_on_val: true
+    algorithm: mse
+    encoder_decoder: true
     weights_normalization: none
     ema:
       main: 0
