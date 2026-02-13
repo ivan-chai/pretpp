@@ -77,7 +77,7 @@ class HPOModule(BaseModule):
         if self.max_sequence_length is None:
             datamodule = trainer.datamodule
             for split in trainer.datamodule.splits:
-                self.max_sequence_length = max(self.max_sequence_length or 0, getattr(trainer.datamodule, f"{split}_data").max_length)
+                self.max_sequence_length = max(self.max_sequence_length or 0, getattr(trainer.datamodule, f"{split}_data").max_length or 0)
 
     def training_step(self, batch, batch_idx):
         dataloader_idx = batch[0].payload.get("_dataloader_idx", None)
