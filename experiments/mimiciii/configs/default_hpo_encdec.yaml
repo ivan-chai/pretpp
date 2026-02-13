@@ -3,17 +3,6 @@ metric:
   classification_fields:
     - target
 
-data_module:
-  _target_: pretpp.data.InterleavedDataModule
-  val_period: 2
-  train_params:
-    random_split: 0.9
-    random_part: train
-  val_params:
-    random_split: 0.9
-    random_part: val
-  val_path: data/train.parquet
-
 module:
   _target_: pretpp.modules.HPOModule
   hpo_losses:
@@ -21,7 +10,8 @@ module:
     - loss_0_labels
     - loss_0_types
   hpo_params:
-    tune_on_val: true
+    algorithm: mse
+    encoder_decoder: true
     weights_normalization: none
     ema:
       main: 0
