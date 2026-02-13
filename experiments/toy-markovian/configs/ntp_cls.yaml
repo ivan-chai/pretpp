@@ -21,6 +21,7 @@ module:
             _target_: hotpp.losses.CrossEntropyLoss
             num_classes: ${num_classes}
       - _target_: pretpp.losses.ClassificationLoss
+        apply_to_all_outputs: true
         targets:
           target:
             num_classes: ${num_downstream_classes}

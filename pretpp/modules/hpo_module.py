@@ -61,8 +61,6 @@ class HPOModule(BaseModule):
         self.loss_group_params = loss_group_params
         self.shared_group_params = shared_group_params
         self.loss_weights = torch.nn.Parameter(torch.ones([len(hpo_losses)]))
-        self.register_buffer("n_weights_updates", torch.zeros([], dtype=torch.long))
-        self.register_buffer("avg_weights", torch.zeros(len(self.hpo_losses)))
         self.gradient_clip_val = None
         self.max_sequence_length = None
 
@@ -137,14 +135,7 @@ class HPOModule(BaseModule):
         if opt.tune_on_val and dataloader_idx == 1:
             opt.val_step(closure, after_backward_hook=grad_clip_fn)
         else:
-            final_weights = opt.hpo_step(closure, closure_encoder, after_backward_hook=grad_clip_fn)
-            metrics.update({f"hpo_{name}": w.item() for name, w in zip(self.hpo_losses, final_weights)})
-
-            self.n_weights_updates += 1
-            self.avg_weights *= (self.n_weights_updates - 1) / self.n_weights_updates
-            self.avg_weights += final_weights / self.n_weights_updates
-            metrics.update({f"hpo_avg_{name}": self.avg_weights[i] for i, name in enumerate(self.hpo_losses)})
-
+            opt.hpo_step(closure, closure_encoder, after_backward_hook=grad_clip_fn)
             hpo_grads = self.loss_weights.grad
             if hpo_grads:
                 hpo_grads = torch.stack(hpo_grads)

@@ -12,14 +12,16 @@ class HybridLoss(BaseLoss):
     Args:
         losses: A list of losses.
         prediction_loss: An index of the prediction loss.
+        truncate: The type of subsequence selection for losses with different input lengths. Either None, `begin`, or `end`.
     """
-    def __init__(self, losses, prediction_loss=None, aggregator=None):
+    def __init__(self, losses, prediction_loss=None, aggregator=None, truncate=None):
         if any([loss.aggregate for loss in losses]) and (not aggregator):
             raise ValueError("Need aggregator")
         super().__init__()
         self._losses = torch.nn.ModuleList(losses)
         self._prediction_loss = prediction_loss
         self._aggregator = aggregator
+        self._truncate = truncate
 
     @property
     def aggregate(self):
@@ -30,10 +32,12 @@ class HybridLoss(BaseLoss):
         return sum([loss.input_size for loss in self._losses])
 
     def prepare_inference_batch(self, inputs):
+        if self._prediction_loss is not None:
+            return self._losses[self._prediction_loss].prepare_inference_batch(inputs)
         for loss in self._losses:
             loss_inputs = loss.prepare_inference_batch(inputs)
             if loss_inputs is not inputs:
-                raise RuntimeError("Base losses must not change inputs.")
+                raise RuntimeError("Base losses must not change inputs, when prediction_loss is not provided.")
         return inputs
 
     def prepare_batch(self, inputs, targets=None):
@@ -49,8 +53,13 @@ class HybridLoss(BaseLoss):
         new_targets = {}
         for i, loss in enumerate(self._losses):
             loss_inputs, loss_targets = loss.prepare_batch(inputs, targets)
+            new_targets[f"_loss_{i}_input_length"] = loss_inputs.shape[1]
             if loss_inputs is not inputs:
-                raise RuntimeError("Base losses must not change inputs.")
+                if self._truncate is None:
+                    raise RuntimeError("Base losses must not change inputs, when 'truncate' is None.")
+                if loss_inputs.shape[1] < inputs.shape[1]:
+                    raise RuntimeError("Base losses must not truncate sequences.")
+                inputs = loss_inputs
             new_targets[i] = loss_targets
         return inputs, new_targets
 
@@ -71,6 +80,15 @@ class HybridLoss(BaseLoss):
         offset = 0
         for i, loss in enumerate(self._losses):
             loss_outputs = PaddedBatch(outputs.payload[..., offset:offset + loss.input_size], outputs.seq_lens)
+            loss_length = targets[f"_loss_{i}_input_length"]
+            if (self._truncate is not None) and (loss_outputs.shape[1] != loss_length):
+                assert loss_outputs.shape[1] > loss_length
+                delta = loss_outputs.shape[1] - loss_length
+                if self._truncate == "begin":
+                    loss_outputs = PaddedBatch(loss_outputs.payload[:, :loss_length], (loss_outputs.seq_lens - delta).clip(min=0))
+                else:
+                    assert self._truncate == "end"
+                    loss_outputs = PaddedBatch(loss_outputs.payload[:, delta:], (loss_outputs.seq_lens - delta).clip(min=0))
             if loss.aggregate:
                 loss_outputs = PaddedBatch(self._aggregator(loss_outputs).unsqueeze(1),
                                            torch.ones_like(loss_outputs.seq_lens))  # (B, 1, D).

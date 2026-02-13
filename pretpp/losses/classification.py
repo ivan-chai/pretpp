@@ -16,6 +16,8 @@ class ClassificationLoss(BaseLoss):
         drop_nans: Exclude elements with nan targets.
     """
     def __init__(self, targets, cls_token=None, overwrite_timestamp=False, apply_to_all_outputs=False, drop_nans=False):
+        if (cls_token is not None) and apply_to_all_outputs:
+            raise ValueError("Can't mix CLS token with apply-to-all-outputs.")
         super().__init__()
         for name, spec in targets.items():
             if "num_classes" not in spec:
