@@ -253,11 +253,12 @@ class BaseModule(pl.LightningModule):
             return optimizer
         else:
             scheduler = self._lr_scheduler_partial(optimizer)
+            scheduler = {
+                "scheduler": scheduler,
+                "interval": getattr(scheduler, "default_interval", "epoch")
+            }
             if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                scheduler = {
-                    "scheduler": scheduler,
-                    "monitor": "val/loss",
-                }
+                scheduler["monitor"] = "val/loss"
             return [optimizer], [scheduler]
 
     def configure_callbacks(self):
@@ -306,6 +307,7 @@ class BaseModule(pl.LightningModule):
     @torch.autocast("cuda", enabled=False)
     def _update_metric(self, metric, x, inputs, outputs, targets):
         predictions = self._loss.predict(outputs)
+        targets = self._loss.get_prediction_targets(targets)
         metric.update(predictions, targets)
 
     @torch.autocast("cuda", enabled=False)
@@ -314,13 +316,14 @@ class BaseModule(pl.LightningModule):
         return self._loss.compute_metrics(inputs, outputs, targets)
 
     @torch.no_grad()
-    def _get_grad_norm(self):
+    def _get_grad_norm(self, warn_empty_grads=True):
         names, parameters = zip(*[pair for pair in self.named_parameters()
                                   if pair[1].requires_grad])
         norms = torch.zeros(len(parameters), device=parameters[0].device)
         for i, (name, p) in enumerate(zip(names, parameters)):
             if p.grad is None:
-                warnings.warn(f"No grad for {name}")
+                if warn_empty_grads:
+                    warnings.warn(f"No grad for {name}")
                 continue
             norms[i] = p.grad.data.norm(2)
         return norms.square().sum().item() ** 0.5
@@ -336,9 +339,9 @@ class BaseModule(pl.LightningModule):
             for k, v in sorted(single_batch_metrics.items()):
                 log_values[f"{split}/{k}"] = v
 
-        log_values_bar = {
-            f"{split}/loss": loss
-        }
+        log_values_bar = {}
+        if loss is not None:
+            log_values_bar[f"{split}/loss"] = loss
         if mean_seq_len is not None:
             log_values_bar["sequence_length"] = mean_seq_len
 
