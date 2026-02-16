@@ -116,7 +116,9 @@ class ClassificationLoss(BaseLoss):
             logits = outputs[name]  # (B, L, D).
             if self._drop_nans:
                 mask = target.isfinite()
-                if not mask.any():
+                nlabels = mask.sum()
+                metrics[f"nans-{name}"] = mask.numel() - nlabels
+                if nlabels == 0:
                     losses[name] = logits.sum() * 0
                     continue
                 logits = logits[mask]
@@ -139,7 +141,9 @@ class ClassificationLoss(BaseLoss):
         last = (lengths - 1).clip(min=0)[:, None, None]  # (B, 1, 1).
         result = {}
         for name in sorted(set(self._targets) & set(outputs)):
-            result[name] = outputs[name].take_along_dim(last, 1).squeeze(1).argmax(-1)  # (B).
+            logits = outputs[name].take_along_dim(last, 1).squeeze(1)
+            result[f"logits-{name}"] = logits  # (B, C).
+            result[name] = logits.argmax(-1)  # (B).
         return PaddedBatch(result, orig_lengths, seq_names={})
 
     def _split_outputs(self, outputs):

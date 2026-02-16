@@ -47,8 +47,9 @@ def evaluation_worker(config, tasks_queue, results_queue):
             scores = eval_downstream(config, None, FakeDataModule(splits), None,
                                      precomputed_embeddings=embeddings,
                                      precomputed_targets=targets)
-            metrics = {f"{split}/downstream": mean
-                       for split, (mean, std) in scores.items()}
+            metrics = {f"{split}/{metric}": value
+                       for split, metrics in scores.items()
+                       for metric, value in metrics.items()}
             results_queue.put((i, step, metrics))
     except Exception as e:
         results_queue.put(e)
