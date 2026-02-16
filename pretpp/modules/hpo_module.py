@@ -45,10 +45,12 @@ class HPOModule(BaseModule):
         hp_group_params: Specific parameters for weights optimization (lr etc.).
         loss_group_params: Specific parameters for loss optimization (lr etc.).
         shared_group_params: Specific parameters for shared weights optimization (lr etc.).
+        encoder_group_params: Specific parameters for encoder weights optimization (lr etc.).
     """
     def __init__(self, seq_encoder, loss, hpo_losses, downstream_loss,
                  hpo_params=None, shared_prefix=None,
-                 hp_group_params=None, loss_group_params=None, shared_group_params=None,
+                 hp_group_params=None, loss_group_params=None,
+                 shared_group_params=None, encoder_group_params=None,
                  **kwargs):
         super().__init__(seq_encoder, loss, **kwargs)
         self.automatic_optimization = False
@@ -60,6 +62,7 @@ class HPOModule(BaseModule):
         self.hp_group_params = hp_group_params
         self.loss_group_params = loss_group_params
         self.shared_group_params = shared_group_params
+        self.encoder_group_params = encoder_group_params
         self.loss_weights = torch.nn.Parameter(torch.ones([len(hpo_losses)]))
         self.gradient_clip_val = None
         self.max_sequence_length = None
@@ -185,6 +188,8 @@ class HPOModule(BaseModule):
             params[1].update(self.loss_group_params)
         if self.shared_group_params is not None:
             params[2].update(self.shared_group_params)
+        if self.encoder_group_params is not None:
+            params[3].update(self.encoder_group_params)
         optimizer = AlignedHPOptimizer(params, self._optimizer_partial,
                                        weights_names=self.hpo_losses,
                                        **(self.hpo_params or {}))
