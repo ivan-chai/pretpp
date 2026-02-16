@@ -5,6 +5,11 @@ defaults:
 
 name: ntp_cls
 
+metric:
+  _target_: pretpp.metrics.DownstreamMetric
+  classification_fields:
+    - target
+
 module:
   _target_: pretpp.modules.BaseModule
   loss_projection_partial: ${head}

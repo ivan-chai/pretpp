@@ -22,10 +22,17 @@ module:
           timestamps:
             _target_: hotpp.losses.TimeMAELoss
             max_delta: ${max_time_delta}
+            smoothing: 1
+            grad_scale: 0.45
           labels:
             _target_: hotpp.losses.CrossEntropyLoss
             num_classes: ${num_classes}
+            grad_scale: null
+          log_amount:
+            _target_: hotpp.losses.MAELoss
+            grad_scale: 0.45
       - _target_: pretpp.losses.ClassificationLoss
+        drop_nans: true
         apply_to_all_outputs: true
         targets:
           target:
