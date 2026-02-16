@@ -130,6 +130,6 @@ trainer:
   gradient_clip_val: 1  # Increases training stability.
   check_val_every_n_epoch: 1
   model_selection:
-    metric: val/downstream
+    metric: val/downstream-auroc
     mode: max
   deterministic: true
