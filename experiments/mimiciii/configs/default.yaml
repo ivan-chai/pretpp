@@ -46,9 +46,13 @@ data_module:
   batch_size: 32
   num_workers: 4
   train_params:
+    random_split: 0.9
+    random_part: train
     min_required_length: 2
     max_length: 1024
   val_params:
+    random_split: 0.9
+    random_part: val
     max_length: 1024
     position: last
   test_params:
@@ -56,7 +60,7 @@ data_module:
     position: last
   global_target_fields: target
   train_path: data/train.parquet
-  val_path: data/test.parquet
+  val_path: data/train.parquet
   test_path: data/test.parquet
 
 metric: null

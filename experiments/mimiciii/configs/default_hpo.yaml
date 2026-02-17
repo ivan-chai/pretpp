@@ -6,13 +6,6 @@ metric:
 data_module:
   _target_: pretpp.data.InterleavedDataModule
   val_period: 2
-  train_params:
-    random_split: 0.9
-    random_part: train
-  val_params:
-    random_split: 0.9
-    random_part: val
-  val_path: data/train.parquet
 
 module:
   _target_: pretpp.modules.HPOModule
