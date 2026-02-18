@@ -1,27 +1,33 @@
 import torch
-from sklearn.metrics import roc_auc_score
-from torchmetrics import Metric
+from torchmetrics import Accuracy, AUROC
 
 
-class DownstreamMetric(Metric):
+class DownstreamMetric(torch.nn.Module):
     """Finetuned model evaluation on downstream tasks.
 
     Args:
         classification_fields: The fields to compute accuracy for.
     """
-    def __init__(self, classification_fields, compute_on_cpu=False):
-        super().__init__(compute_on_cpu=compute_on_cpu)
+    def __init__(self, classification_fields):
+        super().__init__()
         self.classification_fields = classification_fields
+        self.initialized = False
         self.reset()
 
+    def _initialize_metrics(self, num_classes, device):
+        assert len(num_classes) == len(self.classification_fields)
+        for field, num_classes in zip(self.classification_fields, num_classes):
+            setattr(self, f"accuracy_{field}", Accuracy(task="multiclass", num_classes=num_classes).to(device))
+            setattr(self, f"auroc_{field}", AUROC(task="multiclass", num_classes=num_classes, average="macro").to(device))
+        self.initialized = True
+
     def reset(self):
+        if not self.initialized:
+            return
         for field in self.classification_fields:
-            # Accuracy.
-            self.add_state(f"n_{field}", default=torch.zeros([], dtype=torch.long), dist_reduce_fx="sum")
-            self.add_state(f"n_correct_{field}", default=torch.zeros([], dtype=torch.long), dist_reduce_fx="sum")
-            # ROC.
-            self.add_state(f"labels_{field}", default=[], dist_reduce_fx="cat")
-            self.add_state(f"scores_{field}", default=[], dist_reduce_fx="cat")
+            delattr(self, f"accuracy_{field}")
+            delattr(self, f"auroc_{field}")
+        self.initialized = False
 
     def update(self, predictions, targets):
         """Update metric.
@@ -30,40 +36,31 @@ class DownstreamMetric(Metric):
             Predictions: PaddedBatch with predictions and logits.
             Predictions: PaddedBatch with targets.
         """
+        if not self.initialized:
+            num_classes = [predictions.payload[f"logits-{field}"].shape[1] for field in self.classification_fields]
+            self._initialize_metrics(num_classes, predictions.device)
         for field in self.classification_fields:
-            target = targets.payload[field]  # (B).
-            target_mask = target.isfinite()  # (B).
+            target = targets.payload[field]
+            target_mask = target.isfinite()
             if not target_mask.any():
                 continue
-            target = target[target_mask]
+            target = target[target_mask]  # (B).
 
             # Update accuracy.
             prediction = predictions.payload[field][target_mask]  # (B).
             if (prediction.ndim != 1) or (target.ndim != 1):
                 raise NotImplementedError("Only global classification is implemented.")
-            attr = f"n_{field}"
-            setattr(self, attr, getattr(self, attr) + len(target))
-            attr = f"n_correct_{field}"
-            setattr(self, attr, getattr(self, attr) + (prediction == target).sum().item())
+            getattr(self, f"accuracy_{field}").update(prediction, target)
 
             # Update ROC.
-            logits_name = f"logits-{field}"
-            if logits_name in predictions.payload:
-                logits = predictions.payload[logits_name][target_mask]  # (B, C).
-                getattr(self, f"labels_{field}").append(target)
-                getattr(self, f"scores_{field}").append(logits.float())
+            logits = predictions.payload[f"logits-{field}"][target_mask]  # (B, C).
+            getattr(self, f"auroc_{field}").update(logits, target)
 
     def compute(self):
+        if not self.initialized:
+            return {}
         metrics = {}
         for field in self.classification_fields:
-            metrics[f"accuracy-{field}"] = getattr(self, f"n_correct_{field}") / max(1, getattr(self, f"n_{field}"))
-            scores = getattr(self, f"scores_{field}")
-            if not isinstance(scores, torch.Tensor):
-                scores = torch.cat(scores, dim=0)
-            scores = scores.cpu().numpy()  # (B, C).
-            labels = getattr(self, f"labels_{field}")
-            if not isinstance(labels, torch.Tensor):
-                labels = torch.cat(labels, dim=0)
-            labels = torch.nn.functional.one_hot(labels.long(), scores.shape[1]).cpu().numpy()  # (B).
-            metrics[f"macro-auc-{field}"] = roc_auc_score(labels, scores, average="macro", multi_class="ovr")
+            metrics[f"accuracy-{field}"] = getattr(self, f"accuracy_{field}").compute()
+            metrics[f"macro-auc-{field}"] = getattr(self, f"auroc_{field}").compute()
         return metrics
