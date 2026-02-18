@@ -50,14 +50,14 @@ class DownstreamMetric(Metric):
             logits_name = f"logits-{field}"
             if logits_name in predictions.payload:
                 logits = predictions.payload[logits_name][target_mask]  # (B, C).
-                getattr(self, f"labels_{field}").append(target.cpu())
-                getattr(self, f"scores_{field}").append(logits.float().cpu())
+                getattr(self, f"labels_{field}").append(target)
+                getattr(self, f"scores_{field}").append(logits.float())
 
     def compute(self):
         metrics = {}
         for field in self.classification_fields:
             metrics[f"accuracy-{field}"] = getattr(self, f"n_correct_{field}") / max(1, getattr(self, f"n_{field}"))
-            scores = torch.cat(getattr(self, f"scores_{field}"), 0).cpu().numpy()  # (B, C).
-            labels = torch.nn.functional.one_hot(torch.cat(getattr(self, f"labels_{field}"), 0).long(), scores.shape[1]).cpu().numpy()  # (B).
+            scores = getattr(self, f"scores_{field}").cpu().numpy()  # (B, C).
+            labels = torch.nn.functional.one_hot(getattr(self, f"labels_{field}").long(), scores.shape[1]).cpu().numpy()  # (B).
             metrics[f"macro-auc-{field}"] = roc_auc_score(labels, scores, average="macro", multi_class="ovr")
         return metrics
