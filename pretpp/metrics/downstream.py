@@ -57,7 +57,13 @@ class DownstreamMetric(Metric):
         metrics = {}
         for field in self.classification_fields:
             metrics[f"accuracy-{field}"] = getattr(self, f"n_correct_{field}") / max(1, getattr(self, f"n_{field}"))
-            scores = getattr(self, f"scores_{field}").cpu().numpy()  # (B, C).
-            labels = torch.nn.functional.one_hot(getattr(self, f"labels_{field}").long(), scores.shape[1]).cpu().numpy()  # (B).
+            scores = getattr(self, f"scores_{field}")
+            if not isinstance(scores, torch.Tensor):
+                scores = torch.cat(scores, dim=0)
+            scores = scores.cpu().numpy()  # (B, C).
+            labels = getattr(self, f"labels_{field}")
+            if not isinstance(labels, torch.Tensor):
+                labels = torch.cat(labels, dim=0)
+            labels = torch.nn.functional.one_hot(labels.long(), scores.shape[1]).cpu().numpy()  # (B).
             metrics[f"macro-auc-{field}"] = roc_auc_score(labels, scores, average="macro", multi_class="ovr")
         return metrics
