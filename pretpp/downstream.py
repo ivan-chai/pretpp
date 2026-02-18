@@ -12,6 +12,7 @@ import time
 import torch
 import warnings
 from contextlib import contextmanager
+from pathlib import Path
 from torchmetrics import Metric
 from torchmetrics.utilities import dim_zero_cat
 from hotpp.embed import embeddings_to_pandas, extract_embeddings, InferenceDataModule
@@ -152,8 +153,7 @@ class DownstreamEvaluator:
 
     def run_async(self, step, embeddings, targets, state_dict):
         """Run evaluation task."""
-        if not os.path.isdir(self.root):
-            os.mkdir(self.root)
+        Path(self.root).mkdir(parents=False, exist_ok=True)
 
         if step <= self.last_seen_step:
             warnings.warn(f"Unexpected order of steps: {step} <= {self.last_seen_step}. Skipping evaluation.")
@@ -369,8 +369,7 @@ class DownstreamCheckpointCallback(pl.callbacks.Checkpoint):
         if isinstance(trainer.datamodule, InferenceDataModule):
             # Disable recursive calls, because the callback is registered in Trainer.
             return
-        if not os.path.isdir(self._root):
-            os.mkdir(self._root)
+        Path(self._root).mkdir(parents=False, exist_ok=True)
         last_checkpoint_path = os.path.join(self._root, "checkpoint-last.pth")
         trainer.save_checkpoint(last_checkpoint_path)
         self._fetch_metrics(trainer, pl_module)
