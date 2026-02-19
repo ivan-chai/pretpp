@@ -270,72 +270,6 @@ class EmbedderModule(pl.LightningModule):
         return embeddings
 
 
-@contextmanager
-def copy_trainer(trainer_orig, checkpoint_path):
-    # Save states.
-    checkpoint_path = trainer_orig.strategy.broadcast(checkpoint_path)
-    checkpoint = trainer_orig._checkpoint_connector.dump_checkpoint()
-    trainer_orig.strategy.save_checkpoint(checkpoint, checkpoint_path)
-    del checkpoint
-    trainer_orig.strategy.barrier()
-
-    # Trainer includes:
-    # - state (can be deep-copied).
-    # - connectors (need to set a copy as an attribute)
-    # - loops (including nested loops in fit_loop)
-    trainer = copy.copy(trainer_orig)
-    # Handle state.
-    trainer.state = copy.deepcopy(trainer.state)
-    # Handle connectors.
-    trainer._accelerator_connector = trainer_orig._accelerator_connector
-    for name in ["data", "logger", "callback", "checkpoint", "signal"]:
-        connector = copy.copy(getattr(trainer, f"_{name}_connector"))
-        assert hasattr(connector, "trainer")
-        connector.trainer = trainer
-        setattr(trainer, f"_{name}_connector", connector)
-    # Handle loops.
-    for name in ["fit", "validate", "test", "predict"]:
-        loop = copy.copy(getattr(trainer, f"{name}_loop"))
-        if name == "fit":
-            loop.epoch_loop = copy.copy(loop.epoch_loop)
-            loop.epoch_loop.val_loop = copy.copy(loop.epoch_loop.val_loop)
-            loop.epoch_loop._results = copy.copy(loop.epoch_loop._results)
-            loop.epoch_loop.val_loop._results = copy.copy(loop.epoch_loop.val_loop._results)
-        else:
-            loop._results = copy.copy(loop._results)
-        assert hasattr(loop, "trainer")
-        loop.trainer = trainer
-        setattr(trainer, f"{name}_loop", loop)
-
-    loops = ["fit", "validate", "test", "predict"]
-    for name in loops:
-        loop = copy.copy(getattr(trainer, f"{name}_loop"))
-        setattr(trainer, f"{name}_loop", loop)
-        loop._data_source = copy.copy(loop._data_source)
-    trainer.fit_loop.epoch_loop.val_loop = copy.copy(trainer.fit_loop.epoch_loop.val_loop)
-    trainer.fit_loop.epoch_loop.val_loop._data_source = copy.copy(trainer.fit_loop.epoch_loop.val_loop._data_source)
-
-    # Disable callbacks.
-    trainer.callbacks = []
-
-    model = trainer.strategy.model
-    base_model = trainer.strategy._lightning_module
-    base_model.trainer = trainer
-    current_fx_name = base_model._current_fx_name
-    device = base_model.device
-
-    try:
-        yield trainer
-    finally:
-        # Restore state.
-        base_model._current_fx_name = current_fx_name
-        base_model.trainer = trainer_orig
-        trainer_orig.strategy.connect(base_model)
-        trainer_orig.strategy.setup(trainer_orig)
-        trainer_orig._checkpoint_connector.restore(checkpoint_path)
-        trainer_orig.strategy.remove_checkpoint(checkpoint_path)
-
-
 class DownstreamCheckpointCallback(pl.callbacks.Checkpoint):
     """Predict all dataloaders and run evaluation asynchronously.
 
@@ -415,11 +349,9 @@ class DownstreamCheckpointCallback(pl.callbacks.Checkpoint):
         splits = self._config.get("data_splits", datamodule.splits)
 
         # Predict.
-        checkpoint_path = os.path.join(self._root, "restore.pth")
-        with copy_trainer(trainer, checkpoint_path) as eval_trainer:
-            embedder = EmbedderModule(pl_module, extra_features=self._config.get("extra_features", None))
-            embeddings = extract_embeddings(eval_trainer, datamodule, embedder, splits)
-            _, targets = extract_targets(eval_trainer, datamodule, splits)
+        embedder = EmbedderModule(pl_module, extra_features=self._config.get("extra_features", None))
+        embeddings = extract_embeddings(trainer, datamodule, embedder, splits)
+        _, targets = extract_targets(trainer, datamodule, splits)
 
         # Run evaluation.
         if trainer.global_rank == 0:
