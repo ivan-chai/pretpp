@@ -57,8 +57,7 @@ def evaluation_worker(config, tasks_queue, results_queue):
                       start_new_session=True,
                       stdin=sp.PIPE,
                       stdout=sp.PIPE,
-                      text=True,
-                      bufsize=1)
+                      text=True)
     atexit.register(lambda: worker.kill() if worker.poll() is not None else None)
     try:
         print(json.dumps(config, indent=None, separators=(",", ":")), file=worker.stdin)
