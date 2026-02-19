@@ -4,6 +4,7 @@ metric:
     - target
 
 module:
+  _target_: pretpp.modules.BaseModule
   loss_projection_partial:
     _target_: pretpp.nn.CatHead
     _partial_: true
@@ -18,7 +19,7 @@ module:
         head_output_sizes:
           labels: ${num_classes}
           timestamps: 1
-          types: 5
+          log_amount: 1
       - _target_: hotpp.nn.Head  # downstream.
         _partial_: true
         output_size: ${num_downstream_classes}
@@ -34,15 +35,12 @@ module:
             _target_: hotpp.losses.TimeMAELoss
             max_delta: ${max_time_delta}
             smoothing: 1
-            grad_scale: null
           labels:
             _target_: hotpp.losses.CrossEntropyLoss
             num_classes: ${num_classes}
             grad_scale: null
-          types:
-            _target_: hotpp.losses.CrossEntropyLoss
-            num_classes: 5
-            grad_scale: null
+          log_amount:
+            _target_: hotpp.losses.MAELoss
       - _target_: pretpp.losses.ClassificationLoss
         drop_nans: true
         apply_to_all_outputs: true

@@ -1,42 +1,10 @@
 defaults:
   - default
   - default_rnn
+  - mtl_loss
   - _self_
 
 name: ntp_cls
 
-metric:
-  _target_: pretpp.metrics.DownstreamMetric
-  classification_fields:
-    - target
-
 module:
   _target_: pretpp.modules.BaseModule
-  loss_projection_partial: ${head}
-  loss:
-    _target_: pretpp.losses.HybridLoss
-    prediction_loss: 1
-    losses:
-      - _target_: pretpp.losses.NextItemLoss
-        losses:
-          timestamps:
-            _target_: hotpp.losses.TimeMAELoss
-            max_delta: ${max_time_delta}
-            smoothing: 1
-            grad_scale: 0.45
-          labels:
-            _target_: hotpp.losses.CrossEntropyLoss
-            num_classes: ${num_classes}
-            grad_scale: null
-          log_amount:
-            _target_: hotpp.losses.MAELoss
-            grad_scale: 0.45
-      - _target_: pretpp.losses.ClassificationLoss
-        drop_nans: true
-        apply_to_all_outputs: true
-        targets:
-          target:
-            num_classes: ${num_downstream_classes}
-            cast: true
-    aggregator:
-      _target_: hotpp.nn.LastAggregator

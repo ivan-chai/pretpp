@@ -1,7 +1,6 @@
-metric:
-  _target_: pretpp.metrics.DownstreamMetric
-  classification_fields:
-    - target
+defaults:
+  - mtl_loss
+  - _self_
 
 module:
   _target_: pretpp.modules.HPOModule
@@ -17,34 +16,3 @@ module:
       downstream: 0
       cov: 0.99
   downstream_loss: loss_1_target
-  loss_projection_partial:
-    _target_: pretpp.nn.CatHead
-    _partial_: true
-    infer_output_size_index: 0
-    head_partials:
-      - ${head}
-      - _target_: hotpp.nn.Head
-        _partial_: true
-        output_size: ${num_downstream_classes}
-        hidden_dims: [128]
-        use_batch_norm: true
-  loss:
-    _target_: pretpp.losses.HybridLoss
-    prediction_loss: 1
-    losses:
-      - _target_: pretpp.losses.NextItemLoss
-        losses:
-          timestamps:
-            _target_: hotpp.losses.TimeMAELoss
-            max_delta: ${max_time_delta}
-          labels:
-            _target_: hotpp.losses.CrossEntropyLoss
-            num_classes: ${num_classes}
-      - _target_: pretpp.losses.ClassificationLoss
-        apply_to_all_outputs: true
-        targets:
-          target:
-            num_classes: ${num_downstream_classes}
-            cast: true
-    aggregator:
-      _target_: hotpp.nn.LastAggregator
