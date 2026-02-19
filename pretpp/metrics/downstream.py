@@ -44,7 +44,7 @@ class DownstreamMetric(torch.nn.Module):
             target_mask = target.isfinite()
             if not target_mask.any():
                 continue
-            target = target[target_mask]  # (B).
+            target = target[target_mask].long()  # (B).
 
             # Update accuracy.
             prediction = predictions.payload[field][target_mask]  # (B).
