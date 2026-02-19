@@ -26,13 +26,13 @@ def get_worker_env():
     env = dict(os.environ)
 
     prefixes = (
-        "NCCL_",             # NCCL
-        "OMPI_", "OPAL_",    # Open MPI
-        "PMI_", "PMIX_",     # MPICH/PMIx/Slurm PMI
-        "MPICH_", "HYDRA_",  # MPICH/Hydra
-        "I_MPI_",            # Intel MPI
-        "MV2_",              # MVAPICH2
-        "SLURM_"             # SLURM
+        "NCCL_",                     # NCCL
+        "OMP_", "OMPI_", "OPAL_",    # Open MPI
+        "PMI_", "PMIX_",             # MPICH/PMIx/Slurm PMI
+        "MPICH_", "HYDRA_",          # MPICH/Hydra
+        "I_MPI_",                    # Intel MPI
+        "MV2_",                      # MVAPICH2
+        "SLURM_"                     # SLURM
     )
     for k in list(env.keys()):
         if k.startswith(prefixes):
