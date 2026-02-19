@@ -40,9 +40,14 @@ transformer_recmem_chunk_size: 256
 
 downstream_report: results/downstream_${name}.yaml
 
+#logger:
+#  _target_: pytorch_lightning.loggers.WandbLogger
+#  project: pretpp-mbd-mini-full
+#  name: ${name}
+#  save_dir: lightning_logs
 logger:
-  _target_: pytorch_lightning.loggers.WandbLogger
-  project: pretpp-mbd-mini-full
+  _target_: venik.MLFlowLogger
+  project: mbd-mini-ntp-cls
   name: ${name}
   save_dir: lightning_logs
 model_path: checkpoints/${name}.ckpt
@@ -69,6 +74,9 @@ data_module:
     - src_type32
   batch_size: 512
   num_workers: 4
+  local_targets_fields:
+    - months_target_2
+  local_targets_indices_field: months_last_id
   id_field: client_id
   train_params:
     random_split: 0.95
@@ -183,18 +191,18 @@ module:
     _target_: torch.optim.lr_scheduler.StepLR
     step_size: 10
     gamma: 0.8
-  downstream_validation_config: configs/downstream.yaml
+ # downstream_validation_config: configs/downstream.yaml
   val_metric: ${metric}
   test_metric: ${metric}
 
 trainer:
   accelerator: cuda
   devices: 1
-  max_epochs: 60
+  max_epochs: 900
   enable_checkpointing: true
   precision: bf16-mixed
   gradient_clip_val: 1  # Increases training stability.
   check_val_every_n_epoch: 3
   model_selection:
-    metric: val/downstream
+    metric: val/loss_1_batch-accuracy-months_target_2
     mode: max
