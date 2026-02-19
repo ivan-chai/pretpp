@@ -26,11 +26,13 @@ def get_worker_env():
     env = dict(os.environ)
 
     prefixes = (
+        "NCCL_",             # NCCL
         "OMPI_", "OPAL_",    # Open MPI
         "PMI_", "PMIX_",     # MPICH/PMIx/Slurm PMI
         "MPICH_", "HYDRA_",  # MPICH/Hydra
         "I_MPI_",            # Intel MPI
-        "MV2_"               # MVAPICH2
+        "MV2_",              # MVAPICH2
+        "SLURM_"             # SLURM
     )
     for k in list(env.keys()):
         if k.startswith(prefixes):
@@ -38,10 +40,7 @@ def get_worker_env():
 
     keys = [
         "RANK", "WORLD_SIZE", "LOCAL_RANK",
-        "MASTER_ADDR", "MASTER_PORT",
-        "SLURM_PROCID", "SLURM_LOCALID", "SLURM_NODEID",
-        "SLURM_NTASKS", "SLURM_STEP_ID",
-        "PMI_FD", "PMIX_SERVER_URI", "PMIX_NAMESPACE"
+        "MASTER_ADDR", "MASTER_PORT"
     ]
     for k in keys:
         env.pop(k, None)
