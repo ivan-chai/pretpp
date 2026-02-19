@@ -374,7 +374,7 @@ class DownstreamCheckpointCallback(pl.callbacks.Checkpoint):
                 if metric_prefix is not None:
                     metrics = {k: v for k, v in metrics.items() if k.startswith(metric_prefix)}
                 if metrics:
-                    pl_module.log_dict(metrics)
+                    pl_module.log_dict(metrics, rank_zero_only=True)
         if wait:
             trainer.strategy.barrier()
 
