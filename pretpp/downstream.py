@@ -1,17 +1,20 @@
 import atexit
 import copy
+import json
 import logging
 import multiprocessing as mp
 import os
 import pickle as pkl
 import pytorch_lightning as pl
 import queue
+import subprocess as sp
 import sys
 import tempfile
 import time
 import torch
 import warnings
 from contextlib import contextmanager
+from omegaconf import OmegaConf
 from pathlib import Path
 from torchmetrics import Metric
 from torchmetrics.utilities import dim_zero_cat
@@ -19,41 +22,66 @@ from hotpp.embed import embeddings_to_pandas, extract_embeddings, InferenceDataM
 from hotpp.eval_downstream import extract_targets, targets_to_pandas
 
 
-class FakeDataModule:
-    def __init__(self, splits):
-        self.splits = splits
+def get_worker_env():
+    env = dict(os.environ)
+
+    prefixes = (
+        "OMPI_", "OPAL_",    # Open MPI
+        "PMI_", "PMIX_",     # MPICH/PMIx/Slurm PMI
+        "MPICH_", "HYDRA_",  # MPICH/Hydra
+        "I_MPI_",            # Intel MPI
+        "MV2_"               # MVAPICH2
+    )
+    for k in list(env.keys()):
+        if k.startswith(prefixes):
+            env.pop(k, None)
+
+    keys = [
+        "RANK", "WORLD_SIZE", "LOCAL_RANK",
+        "MASTER_ADDR", "MASTER_PORT",
+        "SLURM_PROCID", "SLURM_LOCALID", "SLURM_NODEID",
+        "SLURM_NTASKS", "SLURM_STEP_ID",
+        "PMI_FD", "PMIX_SERVER_URI", "PMIX_NAMESPACE"
+    ]
+    for k in keys:
+        env.pop(k, None)
+
+    return env
 
 
 def evaluation_worker(config, tasks_queue, results_queue):
-    from hotpp.eval_downstream import eval_downstream
-    import luigi
-    if config.get("log_level", "INFO") not in ["DEBUG", "INFO"]:
-        for name in list(logging.root.manager.loggerDict):
-            if "luigi" in name:
-                logging.getLogger(name).setLevel(logging.ERROR)
-        sys.stderr = open(os.devnull,"w")
-        sys.stdout = open(os.devnull, "w")
+    if not isinstance(config, dict):
+        config = OmegaConf.to_container(config)
+    worker = sp.Popen([sys.executable, "-m", "pretpp.downstream_worker"],
+                      env=get_worker_env(),
+                      close_fds=True,
+                      start_new_session=True,
+                      stdin=sp.PIPE,
+                      stdout=sp.PIPE,
+                      text=True,
+                      bufsize=1)
+    atexit.register(lambda: worker.kill() if worker.poll() is not None else None)
     try:
+        print(json.dumps(config, indent=None, separators=(",", ":")), file=worker.stdin)
+        worker.stdin.flush()
         while True:
             task = tasks_queue.get()
+            if worker.poll() is not None:
+                raise Exception(f"Worker finished with code {worker.poll()}")
+            print(json.dumps(task, indent=None, separators=(",", ":")), file=worker.stdin)
+            worker.stdin.flush()
             if task is None:
+                # KILL.
                 break
-            i, step, data_path = task
-            with open(data_path, "rb") as fp:
-                data = pkl.load(fp)
-            os.remove(data_path)
-            embeddings = data["embeddings"]
-            targets = data["targets"]
-            splits = embeddings["split"].unique()
-            scores = eval_downstream(config, None, FakeDataModule(splits), None,
-                                     precomputed_embeddings=embeddings,
-                                     precomputed_targets=targets)
-            metrics = {f"{split}/{metric}": value
-                       for split, metrics in scores.items()
-                       for metric, value in metrics.items()}
-            results_queue.put((i, step, metrics))
+            result = json.loads(worker.stdout.readline())
+            if isinstance(result, dict) and ("error" in result):
+                raise Exception(result["error"])
+            results_queue.put(result)
     except Exception as e:
         results_queue.put(e)
+    finally:
+        if worker.poll() is None:
+            worker.kill()
 
 
 class CheckpointSelector:
