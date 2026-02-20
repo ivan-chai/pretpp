@@ -1,4 +1,3 @@
-eval_ptls: true
 workers: 2
 total_cpu_count: 15
 log_level: ERROR

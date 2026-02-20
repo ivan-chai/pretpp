@@ -50,6 +50,7 @@ data_module:
     random_part: train
     min_required_length: 2
     max_length: 1024
+    parallelize: files
   val_params:
     random_split: 0.9
     random_part: val
