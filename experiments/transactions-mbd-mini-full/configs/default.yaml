@@ -40,14 +40,9 @@ transformer_recmem_chunk_size: 256
 
 downstream_report: results/downstream_${name}.yaml
 
-#logger:
-#  _target_: pytorch_lightning.loggers.WandbLogger
-#  project: pretpp-mbd-mini-full
-#  name: ${name}
-#  save_dir: lightning_logs
 logger:
-  _target_: venik.MLFlowLogger
-  project: mbd-mini-ntp-cls
+  _target_: pytorch_lightning.loggers.WandbLogger
+  project: pretpp-mbd-mini-full
   name: ${name}
   save_dir: lightning_logs
 model_path: checkpoints/${name}.ckpt
@@ -75,8 +70,8 @@ data_module:
   batch_size: 512
   num_workers: 4
   local_targets_fields:
-    - months_target_2
-  local_targets_indices_field: months_last_id
+  #  - months_target_2
+  #local_targets_indices_field: months_last_id
   id_field: client_id
   train_params:
     random_split: 0.95

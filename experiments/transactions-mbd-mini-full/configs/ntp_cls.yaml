@@ -73,14 +73,5 @@ module:
           months_target_2:
             num_classes: 2
         local_targets_indices_field: months_last_id
-#        targets:
-#          target_2:
-#            num_classes: ${num_downstream_classes}
-#            cast: true
-#          target_1:
-#            num_classes: ${num_downstream_classes}
-#            cast: true
-          #months_target_1:
-          #  num_classes: 2
     aggregator:
       _target_: hotpp.nn.LastAggregator              
