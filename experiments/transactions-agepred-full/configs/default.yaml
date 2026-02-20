@@ -45,6 +45,7 @@ data_module:
   train_params:
     min_length: _
     max_length: 1200
+    parallelize: files
   num_workers: 4
   global_target_fields: target
   train_path: data/train.parquet
@@ -120,9 +121,9 @@ trainer:
   devices: 1
   max_epochs: 45
   enable_checkpointing: true
-  precision: 16-mixed
+  precision: bf16-mixed
   gradient_clip_val: 1  # Increases training stability.
   check_val_every_n_epoch: 5
   model_selection:
-    metric: val/downstream
+    metric: val/downstream-accuracy
     mode: max
