@@ -1,0 +1,64 @@
+metric:
+  _target_: pretpp.metrics.DownstreamMetric
+  classification_fields:
+    - target
+
+data_module:
+  _target_: pretpp.data.InterleavedDataModule
+  val_period: 10
+
+module:
+  _target_: pretpp.modules.HPOModule
+  hpo_losses:
+    - loss_0_timestamps
+    - loss_0_labels
+    - loss_0_log_amount
+  hpo_params:
+    tune_on_val: true
+    ema: 0.99
+  downstream_loss: loss_1_target
+  shared_prefix: _loss_projection.0.
+  loss_projection_partial:
+    _target_: pretpp.nn.StackHead
+    _partial_: true
+    head_partials:
+      - _target_: hotpp.nn.Head
+        _partial_: true
+        output_size: 256
+      - _target_: pretpp.nn.CatHead
+        _partial_: true
+        infer_output_size_index: 0
+        head_partials:
+          - ${head}
+          - _target_: hotpp.nn.Head
+            _partial_: true
+            output_size: ${num_downstream_classes}
+            hidden_dims: [128]
+            use_batch_norm: true
+  loss:
+    _target_: pretpp.losses.HybridLoss
+    prediction_loss: 1
+    losses:
+      - _target_: pretpp.losses.NextItemLoss
+        losses:
+          timestamps:
+            _target_: hotpp.losses.TimeMAELoss
+            max_delta: ${max_time_delta}
+            smoothing: 1
+            grad_scale: null
+          labels:
+            _target_: hotpp.losses.CrossEntropyLoss
+            num_classes: ${num_classes}
+            grad_scale: null
+          log_amount:
+            _target_: hotpp.losses.MAELoss
+            grad_scale: null
+      - _target_: pretpp.losses.ClassificationLoss
+        drop_nans: true
+        apply_to_all_outputs: true
+        targets:
+          target:
+            num_classes: ${num_downstream_classes}
+            cast: true
+    aggregator:
+      _target_: hotpp.nn.LastAggregator

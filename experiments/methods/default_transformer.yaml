@@ -22,6 +22,8 @@ module:
       max_duration: ${max_duration}
       pos_type:  # Multiple encodings are allowed.
         - time-angular-rel
+      rope: none
+      mlp: default
       activation:
         _partial_: True
         _target_: torch.nn.functional.gelu

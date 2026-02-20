@@ -101,3 +101,56 @@ class TransformerHead(SimpleTransformer):
         b, l = x.shape
         dummy_timestamps = PaddedBatch(torch.arange(l)[None].float().expand(b, l), x.seq_lens)
         return super().forward(x, dummy_timestamps)[0]
+
+
+class CatHead(torch.nn.ModuleList):
+    """Concatenate outputs of multiple heads."""
+    def __init__(self, input_size, output_size=None, head_partials=None, infer_output_size_index=None):
+        if head_partials is None:
+            raise ValueError("Need head_partials")
+        heads = []
+        total_size = 0
+        for i, partial in enumerate(head_partials):
+            if i == infer_output_size_index:
+                heads.append(None)
+            else:
+                heads.append(partial(input_size))
+                total_size += heads[-1].output_size
+        if infer_output_size_index is not None:
+            if output_size is None:
+                raise ValueError("Need output size to infer a missing size")
+            heads[infer_output_size_index] = head_partials[infer_output_size_index](input_size, output_size=output_size - total_size)
+            total_size = output_size
+        if (output_size is not None) and (total_size != output_size):
+            raise ValueError(f"Expected output size {output_size}, got {total_size}")
+        super().__init__(heads)
+
+    @property
+    def output_size(self):
+        return sum([h.output_size for h in self])
+
+    def forward(self, x):
+        outputs = [h(x) for h in self]
+        for output in outputs:
+            if (output.seq_lens != x.seq_lens).any():
+                raise RuntimeError("Heads output lengths mismatch.")
+        return PaddedBatch(torch.cat([output.payload for output in outputs], -1), x.seq_lens)
+
+
+class StackHead(torch.nn.Sequential):
+    """Combine multiple heads vertically."""
+    def __init__(self, input_size, output_size=None, head_partials=None):
+        if head_partials is None:
+            raise ValueError("Need head_partials")
+        heads = []
+        for i, partial in enumerate(head_partials):
+            if i < len(head_partials) - 1:
+                heads.append(partial(input_size))
+                input_size = heads[-1].output_size
+            else:
+                heads.append(partial(input_size, output_size=output_size))
+        super().__init__(*heads)
+
+    @property
+    def output_size(self):
+        return self[-1].output_size

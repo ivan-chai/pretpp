@@ -6,11 +6,24 @@ import tarfile
 from huggingface_hub import hf_hub_download
 from ptls.preprocessing import PysparkDataPreprocessor
 from pyspark.sql import SparkSession
-from pyspark.sql.types import ArrayType, FloatType
+from pyspark.sql.types import ArrayType, FloatType, IntegerType
 from random import Random
 
 
 SEED = 42
+
+
+MONTHS_ORDER = [
+    "2022-02-28", "2022-03-31", "2022-04-30", "2022-05-31",
+    "2022-06-30", "2022-07-31", "2022-08-31", "2022-09-30",
+    "2022-10-31", "2022-11-30", "2022-12-31", "2023-01-31",
+]
+
+import calendar, datetime
+MONTHS_TIMESTAMPS = [
+    int(calendar.timegm(datetime.datetime.strptime(m, "%Y-%m-%d").timetuple())) + 86399
+    for m in MONTHS_ORDER
+]
 
 
 def parse_args():
@@ -20,8 +33,6 @@ def parse_args():
 
 
 def make_from_folds(folds, data_root, targets_root, dst, n_partitions):
-    spark = SparkSession.builder.getOrCreate()
-    dataset = None
     spark = SparkSession.builder.getOrCreate()
     dataset = None
     for fold in folds:
@@ -47,12 +58,39 @@ def make_from_folds(folds, data_root, targets_root, dst, n_partitions):
         targets = result_df
         part = part.join(targets, on="client_id", how="left")
         dataset = dataset.union(part) if dataset is not None else part
+
     # Compute log_amount.
     udf = F.udf(lambda x: [math.log(abs(v) + 1) for v in x], ArrayType(FloatType(), False))
     dataset = dataset.withColumn("log_amount", udf(F.col("amount")))
     # Scale event_time by 4 days.
     udf = F.udf(lambda x: [v / 345600 for v in x], ArrayType(FloatType(), False))
     dataset = dataset.withColumn("timestamps", udf(F.col("event_time")))
+
+    months_ts = MONTHS_TIMESTAMPS
+
+    def compute_months_last_id(event_times):
+        result = []
+        for month_end_ts in months_ts:
+            last_idx = -1
+            for i, t in enumerate(event_times):
+                if t <= month_end_ts:
+                    last_idx = i
+            result.append(last_idx)
+        return result
+
+    udf_last_id = F.udf(compute_months_last_id, ArrayType(IntegerType(), False))
+    dataset = dataset.withColumn("months_last_id", udf_last_id(F.col("event_time")))
+
+    existing_cols = set(dataset.columns)
+    actual_months = [m for m in MONTHS_ORDER if f"target_1_{m}" in existing_cols]
+
+    for target_n in range(1, 5):
+        col_names = [f"target_{target_n}_{mon}" for mon in actual_months]
+        dataset = dataset.withColumn(
+            f"months_target_{target_n}",
+            F.array(*[F.col(c) for c in col_names])
+        )
+
     # Dump.
     dataset.repartition(n_partitions, "client_id").write.mode("overwrite").parquet(dst)
 

@@ -1,0 +1,7 @@
+defaults:
+  - default
+  - default_hts_transformer
+  - default_hpo
+  - _self_
+
+name: ntp_cls_hpo_hts_transformer

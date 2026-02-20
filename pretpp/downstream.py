@@ -244,16 +244,29 @@ class DownstreamEvaluator:
 
 
 class EmbedderModule(pl.LightningModule):
-    """Wrapper to disable extra hooks of the base module."""
-    def __init__(self, model):
+    """Wrapper to disable extra hooks of the base module.
+
+    Args:
+        extra_features: A list of columns to append as features to embedding.
+    """
+    def __init__(self, model, extra_features=None):
         super().__init__()
         self.model = model
+        self.extra_features = extra_features
 
     def forward(self, x):
         return self.model(x)
 
     def embed(self, x):
-        return self.model.embed(x)
+        embeddings = self.model.embed(x)  # (B, D).
+        extra_features = []
+        for name in self.extra_features or []:
+            if x.payload[name].shape != (len(embeddings),):
+                raise ValueError("Extra features must be of shape (B).")
+            extra_features.append(x.payload[name].to(embeddings.dtype).unsqueeze(1))
+        if extra_features:
+            embeddings = torch.cat([embeddings] + extra_features, -1)  # (B, D').
+        return embeddings
 
 
 @contextmanager
@@ -405,7 +418,8 @@ class DownstreamCheckpointCallback(pl.callbacks.Checkpoint):
         # Predict.
         checkpoint_path = os.path.join(self._root, "restore.pth")
         with copy_trainer(trainer, checkpoint_path) as eval_trainer:
-            embeddings = extract_embeddings(eval_trainer, datamodule, EmbedderModule(pl_module), splits)
+            embedder = EmbedderModule(pl_module, extra_features=self._config.get("extra_features", None))
+            embeddings = extract_embeddings(eval_trainer, datamodule, embedder, splits)
             _, targets = extract_targets(eval_trainer, datamodule, splits)
 
         # Run evaluation.
