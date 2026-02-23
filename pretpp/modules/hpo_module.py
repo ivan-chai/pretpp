@@ -140,8 +140,7 @@ class HPOModule(BaseModule):
         else:
             opt.hpo_step(closure, closure_encoder, after_backward_hook=grad_clip_fn)
             hpo_grads = self.loss_weights.grad
-            if hpo_grads:
-                hpo_grads = torch.stack(hpo_grads)
+            if hpo_grads is not None:
                 hpo_grad_norm = torch.linalg.norm(hpo_grads)
                 metrics["hpo_grad_norm"] = hpo_grad_norm
             metrics.update(opt.metrics)
