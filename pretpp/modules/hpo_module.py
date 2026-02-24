@@ -45,10 +45,12 @@ class HPOModule(BaseModule):
         hp_group_params: Specific parameters for weights optimization (lr etc.).
         loss_group_params: Specific parameters for loss optimization (lr etc.).
         shared_group_params: Specific parameters for shared weights optimization (lr etc.).
+        encoder_group_params: Specific parameters for encoder weights optimization (lr etc.).
     """
     def __init__(self, seq_encoder, loss, hpo_losses, downstream_loss,
                  hpo_params=None, shared_prefix=None,
-                 hp_group_params=None, loss_group_params=None, shared_group_params=None,
+                 hp_group_params=None, loss_group_params=None,
+                 shared_group_params=None, encoder_group_params=None,
                  **kwargs):
         super().__init__(seq_encoder, loss, **kwargs)
         self.automatic_optimization = False
@@ -60,22 +62,25 @@ class HPOModule(BaseModule):
         self.hp_group_params = hp_group_params
         self.loss_group_params = loss_group_params
         self.shared_group_params = shared_group_params
+        self.encoder_group_params = encoder_group_params
         self.loss_weights = torch.nn.Parameter(torch.ones([len(hpo_losses)]))
-        self.register_buffer("n_weights_updates", torch.zeros([], dtype=torch.long))
-        self.register_buffer("avg_weights", torch.zeros(len(self.hpo_losses)))
         self.gradient_clip_val = None
         self.max_sequence_length = None
 
     @BaseModule.trainer.setter
     def trainer(self, trainer):
-        self.gradient_clip_val = trainer.gradient_clip_val
+        if hasattr(trainer, "_gradient_clip_val_bck"):
+            self.gradient_clip_val = trainer._gradient_clip_val_bck
+        else:
+            self.gradient_clip_val = trainer.gradient_clip_val
         trainer.gradient_clip_val = None
+        trainer._gradient_clip_val_bck = self.gradient_clip_val
         BaseModule.trainer.fset(self, trainer)
 
         if self.max_sequence_length is None:
             datamodule = trainer.datamodule
             for split in trainer.datamodule.splits:
-                self.max_sequence_length = max(self.max_sequence_length or 0, getattr(trainer.datamodule, f"{split}_data").max_length)
+                self.max_sequence_length = max(self.max_sequence_length or 0, getattr(trainer.datamodule, f"{split}_data").max_length or 0)
 
     def training_step(self, batch, batch_idx):
         dataloader_idx = batch[0].payload.get("_dataloader_idx", None)
@@ -133,17 +138,9 @@ class HPOModule(BaseModule):
         if opt.tune_on_val and dataloader_idx == 1:
             opt.val_step(closure, after_backward_hook=grad_clip_fn)
         else:
-            final_weights = opt.hpo_step(closure, closure_encoder, after_backward_hook=grad_clip_fn)
-            metrics.update({f"hpo_{name}": w.item() for name, w in zip(self.hpo_losses, final_weights)})
-
-            self.n_weights_updates += 1
-            self.avg_weights *= (self.n_weights_updates - 1) / self.n_weights_updates
-            self.avg_weights += final_weights / self.n_weights_updates
-            metrics.update({f"hpo_avg_{name}": self.avg_weights[i] for i, name in enumerate(self.hpo_losses)})
-
+            opt.hpo_step(closure, closure_encoder, after_backward_hook=grad_clip_fn)
             hpo_grads = self.loss_weights.grad
-            if hpo_grads:
-                hpo_grads = torch.stack(hpo_grads)
+            if hpo_grads is not None:
                 hpo_grad_norm = torch.linalg.norm(hpo_grads)
                 metrics["hpo_grad_norm"] = hpo_grad_norm
             metrics.update(opt.metrics)
@@ -190,6 +187,8 @@ class HPOModule(BaseModule):
             params[1].update(self.loss_group_params)
         if self.shared_group_params is not None:
             params[2].update(self.shared_group_params)
+        if self.encoder_group_params is not None:
+            params[3].update(self.encoder_group_params)
         optimizer = AlignedHPOptimizer(params, self._optimizer_partial,
                                        weights_names=self.hpo_losses,
                                        **(self.hpo_params or {}))

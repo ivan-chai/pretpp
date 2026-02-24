@@ -15,10 +15,14 @@ class ClassificationLoss(BaseLoss):
         apply_to_all_outputs: Whether to compute loss for global classification targets with aggregated embedding or for each embedding.
         drop_nans: Exclude elements with nan targets.
     """
-    def __init__(self, targets={}, cls_token=None, overwrite_timestamp=False, apply_to_all_outputs=False, 
+    def __init__(self, targets=None, cls_token=None, overwrite_timestamp=False, apply_to_all_outputs=False,
                  drop_nans=False, local_targets=None, local_targets_indices_field=None):
-        if cls_token and local_targets:
-            raise NotImplementedError("TODO")
+        if (cls_token is not None) and local_targets:
+            raise NotImplementedError("CLS token with local targets")
+        if (cls_token is not None) and apply_to_all_outputs:
+            raise ValueError("Can't mix CLS token with apply-to-all-outputs.")
+        if local_target and (local_targets_indices_field is None):
+            raise ValueError("Need indices field for local targets.")
         super().__init__()
         for name, spec in targets.items():
             if "num_classes" not in spec:
@@ -85,7 +89,7 @@ class ClassificationLoss(BaseLoss):
         """
         inputs = self.prepare_inference_batch(inputs)
         if self._local_targets:
-            n_targets = {name: targets.payload[name] for name in dict(self._targets) | dict(self._local_targets) | 
+            n_targets = {name: targets.payload[name] for name in dict(self._targets) | dict(self._local_targets) |
                          ({self._local_targets_indices_field:None} if isinstance(self._local_targets_indices_field, str) else dict(self._local_targets_indices_field))}
             n_seq_names = {name for name in targets.seq_names if name in dict(self._targets) |dict(self._local_targets)}
         else:
@@ -129,7 +133,9 @@ class ClassificationLoss(BaseLoss):
             logits = outputs[name]  # (B, L, D).
             if self._drop_nans:
                 mask = target.isfinite()
-                if not mask.any():
+                nlabels = mask.sum()
+                metrics[f"nans-{name}"] = mask.numel() - nlabels
+                if nlabels == 0:
                     losses[name] = logits.sum() * 0
                     continue
                 logits = logits[mask]
@@ -152,25 +158,25 @@ class ClassificationLoss(BaseLoss):
             logits = outputs[name]  # (B, L, D).
             indices = targets.payload[self._local_targets_indices_field]  # (B, M).
             valid_mask = (indices >= 0) & (indices < logits.shape[1])  # (B, M).
-            
+
             if not valid_mask.any():
                 losses[name] = logits.sum() * 0
                 continue
-            
+
             indices_clamped = indices.clamp(min=0, max=logits.shape[1] - 1)
             indices_expanded = indices_clamped.unsqueeze(-1).expand(-1, -1, logits.shape[-1]).long()  # (B, M, D).
             selected_logits = logits.take_along_dim(indices_expanded, dim=1)  # (B, M, D).
-            
+
             selected_logits_flat = selected_logits[valid_mask]  # (N, D).
             target_flat = target[valid_mask]  # (N,).
-            
+
             if spec.get("cast", False):
                 target_flat = target_flat.long()
             losses[name] = torch.nn.functional.cross_entropy(selected_logits_flat, target_flat)
-            
+
             if spec.get("weight", 1) != 1:
                 losses[name] = ScaleGradient.apply(losses[name], spec["weight"])
-            
+
             with torch.no_grad():
                 predictions = selected_logits_flat.argmax(-1)  # (N,).
                 metrics[f"batch-accuracy-{name}"] = (predictions == target_flat).float().mean()
@@ -183,7 +189,9 @@ class ClassificationLoss(BaseLoss):
         last = (lengths - 1).clip(min=0)[:, None, None]  # (B, 1, 1).
         result = {}
         for name in sorted(set(self._targets) & set(outputs)):
-            result[name] = outputs[name].take_along_dim(last, 1).squeeze(1).argmax(-1)  # (B).
+            logits = outputs[name].take_along_dim(last, 1).squeeze(1)
+            result[f"logits-{name}"] = logits  # (B, C).
+            result[name] = logits.argmax(-1)  # (B).
 
         seq_names = set()
         if self._local_targets:
@@ -193,7 +201,7 @@ class ClassificationLoss(BaseLoss):
                 result[name] = predictions
                 seq_names.add(name)
 
-        return PaddedBatch(result, orig_lengths, seq_names={})
+        return PaddedBatch(result, orig_lengths, seq_names=seq_names)
 
     def _split_outputs(self, outputs):
         """Convert parameters tensor to the dictionary with parameters for each loss."""

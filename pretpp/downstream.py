@@ -1,57 +1,85 @@
 import atexit
 import copy
+import json
 import logging
 import multiprocessing as mp
 import os
 import pickle as pkl
 import pytorch_lightning as pl
 import queue
+import subprocess as sp
 import sys
 import tempfile
 import time
 import torch
 import warnings
 from contextlib import contextmanager
+from omegaconf import OmegaConf
+from pathlib import Path
 from torchmetrics import Metric
 from torchmetrics.utilities import dim_zero_cat
 from hotpp.embed import embeddings_to_pandas, extract_embeddings, InferenceDataModule
 from hotpp.eval_downstream import extract_targets, targets_to_pandas
 
 
-class FakeDataModule:
-    def __init__(self, splits):
-        self.splits = splits
+def get_worker_env():
+    env = dict(os.environ)
+
+    prefixes = (
+        "NCCL_",                     # NCCL
+        "OMP_", "OMPI_", "OPAL_",    # Open MPI
+        "PMI_", "PMIX_",             # MPICH/PMIx/Slurm PMI
+        "MPICH_", "HYDRA_",          # MPICH/Hydra
+        "I_MPI_",                    # Intel MPI
+        "MV2_",                      # MVAPICH2
+        "SLURM_"                     # SLURM
+    )
+    for k in list(env.keys()):
+        if k.startswith(prefixes):
+            env.pop(k, None)
+
+    keys = [
+        "RANK", "WORLD_SIZE", "LOCAL_RANK",
+        "MASTER_ADDR", "MASTER_PORT"
+    ]
+    for k in keys:
+        env.pop(k, None)
+
+    return env
 
 
 def evaluation_worker(config, tasks_queue, results_queue):
-    from hotpp.eval_downstream import eval_downstream
-    import luigi
-    if config.get("log_level", "INFO") not in ["DEBUG", "INFO"]:
-        for name in list(logging.root.manager.loggerDict):
-            if "luigi" in name:
-                logging.getLogger(name).setLevel(logging.ERROR)
-        sys.stderr = open(os.devnull,"w")
-        sys.stdout = open(os.devnull, "w")
+    if not isinstance(config, dict):
+        config = OmegaConf.to_container(config)
+    worker = sp.Popen([sys.executable, "-m", "pretpp.downstream_worker"],
+                      env=get_worker_env(),
+                      close_fds=True,
+                      start_new_session=True,
+                      stdin=sp.PIPE,
+                      stdout=sp.PIPE,
+                      text=True)
+    atexit.register(lambda: worker.kill() if worker.poll() is not None else None)
     try:
+        print(json.dumps(config, indent=None, separators=(",", ":")), file=worker.stdin)
+        worker.stdin.flush()
         while True:
             task = tasks_queue.get()
+            if worker.poll() is not None:
+                raise Exception(f"Worker finished with code {worker.poll()}")
+            print(json.dumps(task, indent=None, separators=(",", ":")), file=worker.stdin)
+            worker.stdin.flush()
             if task is None:
+                # KILL.
                 break
-            i, step, data_path = task
-            with open(data_path, "rb") as fp:
-                data = pkl.load(fp)
-            os.remove(data_path)
-            embeddings = data["embeddings"]
-            targets = data["targets"]
-            splits = embeddings["split"].unique()
-            scores = eval_downstream(config, None, FakeDataModule(splits), None,
-                                     precomputed_embeddings=embeddings,
-                                     precomputed_targets=targets)
-            metrics = {f"{split}/downstream": mean
-                       for split, (mean, std) in scores.items()}
-            results_queue.put((i, step, metrics))
+            result = json.loads(worker.stdout.readline())
+            if isinstance(result, dict) and ("error" in result):
+                raise Exception(result["error"])
+            results_queue.put(result)
     except Exception as e:
         results_queue.put(e)
+    finally:
+        if worker.poll() is None:
+            worker.kill()
 
 
 class CheckpointSelector:
@@ -151,8 +179,7 @@ class DownstreamEvaluator:
 
     def run_async(self, step, embeddings, targets, state_dict):
         """Run evaluation task."""
-        if not os.path.isdir(self.root):
-            os.mkdir(self.root)
+        Path(self.root).mkdir(parents=False, exist_ok=True)
 
         if step <= self.last_seen_step:
             warnings.warn(f"Unexpected order of steps: {step} <= {self.last_seen_step}. Skipping evaluation.")
@@ -269,72 +296,6 @@ class EmbedderModule(pl.LightningModule):
         return embeddings
 
 
-@contextmanager
-def copy_trainer(trainer_orig, checkpoint_path):
-    # Save states.
-    checkpoint_path = trainer_orig.strategy.broadcast(checkpoint_path)
-    checkpoint = trainer_orig._checkpoint_connector.dump_checkpoint()
-    trainer_orig.strategy.save_checkpoint(checkpoint, checkpoint_path)
-    del checkpoint
-    trainer_orig.strategy.barrier()
-
-    # Trainer includes:
-    # - state (can be deep-copied).
-    # - connectors (need to set a copy as an attribute)
-    # - loops (including nested loops in fit_loop)
-    trainer = copy.copy(trainer_orig)
-    # Handle state.
-    trainer.state = copy.deepcopy(trainer.state)
-    # Handle connectors.
-    trainer._accelerator_connector = trainer_orig._accelerator_connector
-    for name in ["data", "logger", "callback", "checkpoint", "signal"]:
-        connector = copy.copy(getattr(trainer, f"_{name}_connector"))
-        assert hasattr(connector, "trainer")
-        connector.trainer = trainer
-        setattr(trainer, f"_{name}_connector", connector)
-    # Handle loops.
-    for name in ["fit", "validate", "test", "predict"]:
-        loop = copy.copy(getattr(trainer, f"{name}_loop"))
-        if name == "fit":
-            loop.epoch_loop = copy.copy(loop.epoch_loop)
-            loop.epoch_loop.val_loop = copy.copy(loop.epoch_loop.val_loop)
-            loop.epoch_loop._results = copy.copy(loop.epoch_loop._results)
-            loop.epoch_loop.val_loop._results = copy.copy(loop.epoch_loop.val_loop._results)
-        else:
-            loop._results = copy.copy(loop._results)
-        assert hasattr(loop, "trainer")
-        loop.trainer = trainer
-        setattr(trainer, f"{name}_loop", loop)
-
-    loops = ["fit", "validate", "test", "predict"]
-    for name in loops:
-        loop = copy.copy(getattr(trainer, f"{name}_loop"))
-        setattr(trainer, f"{name}_loop", loop)
-        loop._data_source = copy.copy(loop._data_source)
-    trainer.fit_loop.epoch_loop.val_loop = copy.copy(trainer.fit_loop.epoch_loop.val_loop)
-    trainer.fit_loop.epoch_loop.val_loop._data_source = copy.copy(trainer.fit_loop.epoch_loop.val_loop._data_source)
-
-    # Disable callbacks.
-    trainer.callbacks = []
-
-    model = trainer.strategy.model
-    base_model = trainer.strategy._lightning_module
-    base_model.trainer = trainer
-    current_fx_name = base_model._current_fx_name
-    device = base_model.device
-
-    try:
-        yield trainer
-    finally:
-        # Restore state.
-        base_model._current_fx_name = current_fx_name
-        base_model.trainer = trainer_orig
-        trainer_orig.strategy.connect(base_model)
-        trainer_orig.strategy.setup(trainer_orig)
-        trainer_orig._checkpoint_connector.restore(checkpoint_path)
-        trainer_orig.strategy.remove_checkpoint(checkpoint_path)
-
-
 class DownstreamCheckpointCallback(pl.callbacks.Checkpoint):
     """Predict all dataloaders and run evaluation asynchronously.
 
@@ -368,11 +329,9 @@ class DownstreamCheckpointCallback(pl.callbacks.Checkpoint):
         if isinstance(trainer.datamodule, InferenceDataModule):
             # Disable recursive calls, because the callback is registered in Trainer.
             return
-        if not os.path.isdir(self._root):
-            os.mkdir(self._root)
-        checkpoint = pl_module.state_dict()
+        Path(self._root).mkdir(parents=False, exist_ok=True)
         last_checkpoint_path = os.path.join(self._root, "checkpoint-last.pth")
-        torch.save(checkpoint, last_checkpoint_path)
+        trainer.save_checkpoint(last_checkpoint_path)
         self._fetch_metrics(trainer, pl_module)
 
     def on_validation_epoch_end(self, trainer, pl_module):
@@ -410,17 +369,15 @@ class DownstreamCheckpointCallback(pl.callbacks.Checkpoint):
                 pl_module.load_state_dict(torch.load(self.best_model_path, weights_only=True)["state_dict"])
 
     def _run_downstream_evaluation(self, trainer, pl_module):
-        datamodule = trainer.datamodule
+        datamodule = trainer.datamodule.with_test_parameters()
         id_field = datamodule.id_field
         target_names = datamodule.train_data.global_target_fields
         splits = self._config.get("data_splits", datamodule.splits)
 
         # Predict.
-        checkpoint_path = os.path.join(self._root, "restore.pth")
-        with copy_trainer(trainer, checkpoint_path) as eval_trainer:
-            embedder = EmbedderModule(pl_module, extra_features=self._config.get("extra_features", None))
-            embeddings = extract_embeddings(eval_trainer, datamodule, embedder, splits)
-            _, targets = extract_targets(eval_trainer, datamodule, splits)
+        embedder = EmbedderModule(pl_module, extra_features=self._config.get("extra_features", None))
+        embeddings = extract_embeddings(trainer, datamodule, embedder, splits)
+        _, targets = extract_targets(trainer, datamodule, splits)
 
         # Run evaluation.
         if trainer.global_rank == 0:
@@ -443,7 +400,7 @@ class DownstreamCheckpointCallback(pl.callbacks.Checkpoint):
                 if metric_prefix is not None:
                     metrics = {k: v for k, v in metrics.items() if k.startswith(metric_prefix)}
                 if metrics:
-                    pl_module.log_dict(metrics)
+                    pl_module.log_dict(metrics, rank_zero_only=True)
         if wait:
             trainer.strategy.barrier()
 

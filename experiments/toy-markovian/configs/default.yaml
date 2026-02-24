@@ -45,6 +45,8 @@ data_module:
   max_length: 64
   num_workers: 1
   train_path: data/train.parquet
+  train_params:
+    parallelize: files
   val_path: data/val.parquet
   test_path: data/test.parquet
   global_target_fields: target
@@ -117,5 +119,5 @@ trainer:
   gradient_clip_val: 1  # Increases training stability.
   check_val_every_n_epoch: 10
   model_selection:
-    metric: val/downstream
+    metric: val/downstream-accuracy
     mode: max

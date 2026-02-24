@@ -79,6 +79,7 @@ data_module:
   train_params:
     min_required_length: 2
     max_length: 1200
+    parallelize: files
   val_params:
     max_length: 512
     position: last
@@ -197,11 +198,11 @@ module:
 trainer:
   accelerator: cuda
   devices: 1
-  max_epochs: 60
+  max_epochs: 45
   enable_checkpointing: true
   precision: bf16-mixed
   gradient_clip_val: 1  # Increases training stability.
   check_val_every_n_epoch: 3
   model_selection:
-    metric: val/downstream
+    metric: val/downstream-auroc
     mode: max

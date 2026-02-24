@@ -1,0 +1,10 @@
+defaults:
+  - default_hpo
+  - _self_
+
+module:
+  hpo_losses:
+    - loss_0_timestamps
+    - loss_0_labels
+    - loss_0_log_amount
+    - loss_1_target

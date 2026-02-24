@@ -137,6 +137,27 @@ class CatHead(torch.nn.ModuleList):
         return PaddedBatch(torch.cat([output.payload for output in outputs], -1), x.seq_lens)
 
 
+class MultiHead(CatHead):
+    """A simple interface to CatHead with many fields.
+
+    NOTE: heads are sorted by name, similar to NextItemLoss.
+    """
+    def __init__(self, input_size, output_size=None, head_partial=None, head_output_sizes=None):
+        if head_partial is None:
+            raise ValueError("Need head_partial")
+        if head_output_sizes is None:
+            raise ValueError("Need head_output_sizes")
+        order = list(sorted(head_output_sizes.keys()))
+        heads = []
+        total_size = 0
+        for name in order:
+            heads.append(head_partial(input_size, head_output_sizes[name]))
+            total_size += heads[-1].output_size
+        if (output_size is not None) and (total_size != output_size):
+            raise ValueError(f"Expected output size {output_size}, got {total_size}")
+        torch.nn.ModuleList.__init__(self, heads)
+
+
 class StackHead(torch.nn.Sequential):
     """Combine multiple heads vertically."""
     def __init__(self, input_size, output_size=None, head_partials=None):

@@ -1,4 +1,3 @@
-data_splits: [val, test]  # Val is equal to test.
 workers: 2
 total_cpu_count: 15
 log_level: ERROR
