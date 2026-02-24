@@ -1,10 +1,11 @@
 import warnings
-from abc import ABC, abstractmethod
 import math
 import pytorch_lightning as pl
 import torch
 import yaml
 import os
+from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from omegaconf import OmegaConf
 from pytorch_lightning.callbacks import ModelCheckpoint
 
@@ -39,7 +40,7 @@ class HPOModule(BaseModule):
 
     Args:
         hpo_losses: A list of losses to tune hyperparameters for.
-        downstream_loss: The name of the downstream loss.
+        downstream_loss: The name of the downstream loss or a mapping from loss name to weight.
         hpo_params: Parameters of the HP optimizer.
         shared_prefix: The prefix for shared parameters weights.
         hp_group_params: Specific parameters for weights optimization (lr etc.).
@@ -56,7 +57,7 @@ class HPOModule(BaseModule):
         self.automatic_optimization = False
         # Register loss parameters.
         self.hpo_losses = list(hpo_losses)
-        self.downstream_loss = downstream_loss
+        self.downstream_loss = downstream_loss if isinstance(downstream_loss, Mapping) else {downstream_loss: 1}
         self.hpo_params = hpo_params
         self.shared_prefix = shared_prefix
         self.hp_group_params = hp_group_params
@@ -110,7 +111,8 @@ class HPOModule(BaseModule):
             if opt.encoder_decoder:
                 z.payload.grad = None
             assert len(weights) == len(self.hpo_losses)
-            loss = sum([w * losses[k] for k, w in zip(self.hpo_losses, weights)], down * losses[self.downstream_loss])
+            downstream_loss = sum([w * losses[name] for name, w in self.downstream_loss.items()])
+            loss = sum([w * losses[k] for k, w in zip(self.hpo_losses, weights)], down * downstream_loss)
             self.manual_backward(loss, retain_graph=retain_graph)
             if stage == HPO_STAGE_DOWNSTREAM:
                 metrics["hpo_grad_norm_downstream"] = self._get_grad_norm(warn_empty_grads=False)
