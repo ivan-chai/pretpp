@@ -9,7 +9,7 @@ target:
     - client_id
   cols_id_type:
     - str
-  col_target: target_2
+  col_target: months_target_2
   drop_duplicated_ids: true
 split:
   fit_ids: true
