@@ -1,77 +1,10 @@
 defaults:
   - default
   - default_rnn
+  - mtl_loss
   - _self_
 
 name: ntp_cls
 
 module:
   _target_: pretpp.modules.BaseModule
-  loss_projection_partial: ${head}
-  loss:
-    _target_: pretpp.losses.HybridLoss
-    prediction_loss: 1
-    losses:
-      - _target_: pretpp.losses.NextItemLoss
-        losses:
-            timestamps:
-              _target_: hotpp.losses.TimeMAELoss
-              max_delta: ${max_time_delta}
-              smoothing: 1
-              grad_scale: null
-            labels:
-              _target_: hotpp.losses.CrossEntropyLoss
-              num_classes: ${num_classes_plus1}
-              grad_scale: null
-            log_amount:
-              _target_: hotpp.losses.MAELoss
-              grad_scale: null
-            event_subtype:
-              _target_: hotpp.losses.CrossEntropyLoss
-              num_classes: 62
-              grad_scale: null
-            currency:
-              _target_: hotpp.losses.CrossEntropyLoss
-              num_classes: 17
-              grad_scale: null
-            src_type11:
-              _target_: hotpp.losses.CrossEntropyLoss
-              num_classes: 77
-              grad_scale: null
-            src_type12:
-              _target_: hotpp.losses.CrossEntropyLoss
-              num_classes: 526
-              grad_scale: null
-            dst_type11:
-              _target_: hotpp.losses.CrossEntropyLoss
-              num_classes: 133
-              grad_scale: null
-            dst_type12:
-              _target_: hotpp.losses.CrossEntropyLoss
-              num_classes: 821
-              grad_scale: null
-            src_type21:
-              _target_: hotpp.losses.CrossEntropyLoss
-              num_classes: 10002
-              grad_scale: null
-            src_type22:
-              _target_: hotpp.losses.CrossEntropyLoss
-              num_classes: 88
-              grad_scale: null
-            src_type31:
-              _target_: hotpp.losses.CrossEntropyLoss
-              num_classes: 2495
-              grad_scale: null
-            src_type32:
-              _target_: hotpp.losses.CrossEntropyLoss
-              num_classes: 88
-              grad_scale: null
-      - _target_: pretpp.losses.ClassificationLoss
-        drop_nans: true
-        apply_to_all_outputs: 'False'
-        local_targets:
-          months_target_2:
-            num_classes: 2
-        local_targets_indices_field: months_last_id
-    aggregator:
-      _target_: hotpp.nn.LastAggregator              
