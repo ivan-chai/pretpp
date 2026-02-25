@@ -4,8 +4,35 @@ import logging
 import multiprocessing as mp
 import os
 import pickle as pkl
+import signal
 import sys
 from omegaconf import OmegaConf
+
+
+def register_signal_handler(sig, signal_handler):
+    old = None
+    if callable(signal.getsignal(sig)):
+        old = signal.getsignal(sig)
+
+    def handler_wrapper(*args, **kwargs):
+        signal_handler()
+        if old is not None:
+            old(*args, **kwargs)
+        else:
+            sys.exit(1)
+
+    signal.signal(sig, handler_wrapper)
+
+
+def register_exit_handler(signal_handler):
+    atexit.register(signal_handler)
+
+    signals = [signal.SIGINT]
+    if sys.platform != "win32":
+        signals.append(signal.SIGTERM)
+
+    for sig in signals:
+        register_signal_handler(sig, signal_handler)
 
 
 class FakeDataModule:
@@ -55,10 +82,13 @@ def evaluation_subprocess():
 
     tasks_queue = mp.Queue()
     results_queue = mp.Queue()
-    atexit.register(lambda: tasks_queue.put(None))
-
     worker = mp.Process(target=evaluation_worker, args=(config, tasks_queue, results_queue))
     worker.start()
+
+    def close_subprocess():
+        tasks_queue.put(None)
+    register_exit_handler(close_subprocess)
+
     try:
         for line in sys.stdin:
             task = json.loads(line)
@@ -72,11 +102,10 @@ def evaluation_subprocess():
     except Exception as e:
         result = {"error": str(e)}
         print(json.dumps(result, indent=None, separators=(",", ":")), flush=True)
-    finally:
-        tasks_queue.close()
-        results_queue.close()
-        if worker.is_alive():
-            worker.kill()
+    worker.join(1)
+    if worker.is_alive():
+        worker.terminate()
+        worker.join()
 
 
 if __name__ == "__main__":

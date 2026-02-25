@@ -1,4 +1,3 @@
-import atexit
 import copy
 import json
 import logging
@@ -20,6 +19,8 @@ from torchmetrics import Metric
 from torchmetrics.utilities import dim_zero_cat
 from hotpp.embed import embeddings_to_pandas, extract_embeddings, InferenceDataModule
 from hotpp.eval_downstream import extract_targets, targets_to_pandas
+
+from .downstream_worker import register_exit_handler
 
 
 def get_worker_env():
@@ -58,7 +59,11 @@ def evaluation_worker(config, tasks_queue, results_queue):
                       stdin=sp.PIPE,
                       stdout=sp.PIPE,
                       text=True)
-    atexit.register(lambda: worker.kill() if worker.poll() is not None else None)
+    def close_subprocess():
+        print("null", file=worker.stdin)
+        worker.stdin.flush()
+        worker.wait()
+    register_exit_handler(close_subprocess)
     try:
         print(json.dumps(config, indent=None, separators=(",", ":")), file=worker.stdin)
         worker.stdin.flush()
@@ -164,10 +169,13 @@ class DownstreamEvaluator:
 
         self.tasks_queue = mp.Queue()
         self.results_queue = mp.Queue()
-        atexit.register(lambda: self.tasks_queue.put(None))
-
         self.worker = mp.Process(target=evaluation_worker, args=(self.config, self.tasks_queue, self.results_queue))
         self.worker.start()
+
+        def close_subprocess():
+            self.tasks_queue.put(None)
+
+        register_exit_handler(close_subprocess)
 
         self.finished = False
         self.num_evaluations = 0
