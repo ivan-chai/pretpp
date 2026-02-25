@@ -3,6 +3,7 @@ defaults:
   - _self_
 
 module:
+  shared_prefix: _loss_projection.
   hpo_losses:
     - loss_0_labels
     - loss_0_timestamps
