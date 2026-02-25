@@ -9,30 +9,23 @@ import sys
 from omegaconf import OmegaConf
 
 
-def register_signal_handler(sig, signal_handler):
-    old = None
-    if callable(signal.getsignal(sig)):
-        old = signal.getsignal(sig)
-
-    def handler_wrapper(*args, **kwargs):
-        signal_handler()
-        if old is not None:
-            old(*args, **kwargs)
-        else:
-            sys.exit(1)
-
-    signal.signal(sig, handler_wrapper)
+def pass_signal(pid, sig):
+    def handler(*args, **kwargs):
+        os.kill(pid, sig)
+        sys.exit(1)
+    signal.signal(sig, handler)
 
 
-def register_exit_handler(signal_handler):
-    atexit.register(signal_handler)
+def close_child_handler(pid, normal_handler=None):
+    if normal_handler is not None:
+        atexit.register(normal_handler)
 
     signals = [signal.SIGINT]
     if sys.platform != "win32":
         signals.append(signal.SIGTERM)
 
     for sig in signals:
-        register_signal_handler(sig, signal_handler)
+        pass_signal(pid, sig)
 
 
 class FakeDataModule:
@@ -87,7 +80,9 @@ def evaluation_subprocess():
 
     def close_subprocess():
         tasks_queue.put(None)
-    register_exit_handler(close_subprocess)
+        worker.join()
+
+    close_child_handler(worker.pid, close_subprocess)
 
     try:
         for line in sys.stdin:
@@ -102,10 +97,6 @@ def evaluation_subprocess():
     except Exception as e:
         result = {"error": str(e)}
         print(json.dumps(result, indent=None, separators=(",", ":")), flush=True)
-    worker.join(1)
-    if worker.is_alive():
-        worker.terminate()
-        worker.join()
 
 
 if __name__ == "__main__":

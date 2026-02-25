@@ -20,7 +20,7 @@ from torchmetrics.utilities import dim_zero_cat
 from hotpp.embed import embeddings_to_pandas, extract_embeddings, InferenceDataModule
 from hotpp.eval_downstream import extract_targets, targets_to_pandas
 
-from .downstream_worker import register_exit_handler
+from .downstream_worker import close_child_handler
 
 
 def get_worker_env():
@@ -45,7 +45,6 @@ def get_worker_env():
     ]
     for k in keys:
         env.pop(k, None)
-
     return env
 
 
@@ -63,7 +62,8 @@ def evaluation_worker(config, tasks_queue, results_queue):
         print("null", file=worker.stdin)
         worker.stdin.flush()
         worker.wait()
-    register_exit_handler(close_subprocess)
+
+    close_child_handler(worker.pid, close_subprocess)
     try:
         print(json.dumps(config, indent=None, separators=(",", ":")), file=worker.stdin)
         worker.stdin.flush()
@@ -82,9 +82,6 @@ def evaluation_worker(config, tasks_queue, results_queue):
             results_queue.put(result)
     except Exception as e:
         results_queue.put(e)
-    finally:
-        if worker.poll() is None:
-            worker.kill()
 
 
 class CheckpointSelector:
@@ -174,8 +171,9 @@ class DownstreamEvaluator:
 
         def close_subprocess():
             self.tasks_queue.put(None)
+            self.worker.join()
 
-        register_exit_handler(close_subprocess)
+        close_child_handler(self.worker.pid, close_subprocess)
 
         self.finished = False
         self.num_evaluations = 0
