@@ -1,0 +1,31 @@
+data_module:
+  train_params:
+    drop_nans:
+      - months_target_1
+      - months_target_2
+      - months_target_3
+      - months_target_4
+  val_params:
+    drop_nans:
+      - months_target_1
+      - months_target_2
+      - months_target_3
+      - months_target_4
+
+metric:
+  _target_: pretpp.metrics.DownstreamMetric
+  classification_fields:
+      - months_target_2
+
+module:
+  _target_: pretpp.modules.BaseModule
+  loss_projection_partial: ${head}
+  loss:
+    _target_: pretpp.losses.ClassificationLoss
+    apply_to_all_outputs: false
+    targets:
+      months_target_2:
+        num_classes: ${num_downstream_classes}
+        cast: true
+  val_metric: ${metric}
+  test_metric: ${metric}
