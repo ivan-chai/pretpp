@@ -14,9 +14,11 @@ module:
     - loss_0_types
   hpo_params:
     tune_on_val: true
+    algorithm: mse
     weights_normalization: none
+    apply_optimizer_correction: true
     ema:
-      main: 0
+      main: 0.9
       downstream: 0
       cov: 0.99
   downstream_loss: loss_1_target
