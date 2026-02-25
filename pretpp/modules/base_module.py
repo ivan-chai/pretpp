@@ -326,7 +326,7 @@ class BaseModule(pl.LightningModule):
                     warnings.warn(f"No grad for {name}")
                 continue
             norms[i] = p.grad.data.norm(2)
-        return norms.square().sum().item() ** 0.5
+        return norms.square().sum() ** 0.5
 
     def _log_metrics(self, split, batch_size, loss, losses, metrics, single_batch_metrics=None, mean_seq_len=None):
         log_values = {}
