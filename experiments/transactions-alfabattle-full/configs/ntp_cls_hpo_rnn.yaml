@@ -1,7 +1,0 @@
-defaults:
-  - default
-  - default_rnn
-  - default_hpo
-  - _self_
-
-name: ntp_cls_hpo_rnn
