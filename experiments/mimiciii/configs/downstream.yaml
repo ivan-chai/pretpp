@@ -1,6 +1,6 @@
-data_splits: [train, test]  # Val is equal to test.
-workers: 2
-total_cpu_count: 15
+eval_ptls: true
+workers: 1
+total_cpu_count: 8
 log_level: ERROR
 environment:
   work_dir: _
@@ -44,6 +44,7 @@ models:
       reg_lambda: null
       colsample_bytree: null
       min_child_samples: null
+      verbosity: 0
       n_jobs: ${total_cpu_count}
     cpu_count: ${total_cpu_count}
     preprocessing:

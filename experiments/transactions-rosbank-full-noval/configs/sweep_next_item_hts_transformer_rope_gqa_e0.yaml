@@ -1,0 +1,28 @@
+project: pretpp-rosbank-full-noval
+run_cap: 100
+name: next-item-hts-transformer-rope-gqa-e0
+command:
+  - ${env}
+  - python3
+  - -m
+  - hotpp.train
+  - --config-dir
+  - configs
+  - --config-name
+  - next_item_hts_transformer_rope
+  - name=next_item_hts_transformer_rope_gqa_e0
+  - ~model_path
+  - ~report
+  - ~trainer.model_selection
+  - trainer.max_epochs=0
+  - ${args_no_hyphens}
+method: bayes
+metric:
+  name: test/downstream
+  goal: maximize
+parameters:
+  seed_everything:
+    min: 0
+    max: 10000
+  module.seq_encoder.model_partial.group_size:
+    values: [1, 2, 4]

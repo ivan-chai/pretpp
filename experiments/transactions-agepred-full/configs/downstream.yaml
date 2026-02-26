@@ -1,4 +1,5 @@
-workers: 2
+eval_ptls: true
+workers: 1
 total_cpu_count: 8
 log_level: ERROR
 environment:
@@ -43,6 +44,7 @@ models:
       min_child_samples: null
       num_leaves: 50
       random_state: 42
+      verbosity: 0
       n_jobs: ${total_cpu_count}
     cpu_count: ${total_cpu_count}
     preprocessing:
@@ -68,5 +70,5 @@ report:
   print_all_metrics: false
   metrics:
     accuracy:
-      float_format: "{:.3f}"
+      float_format: "{:.4f}"
       split_columns: true

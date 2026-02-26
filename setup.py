@@ -20,7 +20,7 @@ setuptools.setup(
     ],
     python_requires=">=3.9",
     install_requires=[
-        "hotpp-benchmark>=0.6.3",
+        "hotpp-benchmark>=0.6.7",
         "ptls-validation @ git+https://git@github.com/dllllb/ptls-validation.git#egg=ptls-validation"
     ]
 )

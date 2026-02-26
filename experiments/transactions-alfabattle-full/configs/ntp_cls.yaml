@@ -1,0 +1,10 @@
+defaults:
+  - default
+  - default_rnn
+  - mtl_loss
+  - _self_
+
+name: ntp_cls
+
+module:
+  _target_: pretpp.modules.BaseModule
