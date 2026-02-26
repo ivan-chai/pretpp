@@ -1,5 +1,6 @@
-workers: 2
-total_cpu_count: 15
+eval_ptls: true
+workers: 1
+total_cpu_count: 4
 log_level: ERROR
 environment:
   work_dir: _
