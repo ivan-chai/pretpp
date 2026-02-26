@@ -57,8 +57,9 @@ module:
             _target_: hotpp.losses.MAELoss
             grad_scale: null
       - _target_: pretpp.losses.ClassificationLoss
+        drop_nans: true
         targets:
-          target:
+          target_flag:
             num_classes: ${num_downstream_classes}
             cast: true
     aggregator:
