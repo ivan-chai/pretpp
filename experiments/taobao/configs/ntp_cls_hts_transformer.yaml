@@ -8,28 +8,3 @@ name: ntp_cls_hts_transformer
 
 module:
   _target_: pretpp.modules.BaseModule
-  loss:
-    truncate: begin
-    losses:
-      - _target_: pretpp.losses.NextItemLoss
-        losses:
-          timestamps:
-            _target_: hotpp.losses.TimeMAELoss
-            max_delta: ${max_time_delta}
-            smoothing: 1
-            grad_scale: null
-          labels:
-            _target_: hotpp.losses.CrossEntropyLoss
-            num_classes: ${num_classes}
-            grad_scale: null
-          types:
-            _target_: hotpp.losses.CrossEntropyLoss
-            num_classes: 5
-            grad_scale: null
-      - _target_: pretpp.losses.ClassificationLoss
-        drop_nans: true
-        apply_to_all_outputs: true
-        targets:
-          target:
-            num_classes: ${num_downstream_classes}
-            cast: true
