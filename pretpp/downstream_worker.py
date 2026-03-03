@@ -4,6 +4,7 @@ import logging
 import multiprocessing as mp
 import os
 import pickle as pkl
+import queue
 import signal
 import sys
 from omegaconf import OmegaConf
@@ -90,7 +91,13 @@ def evaluation_subprocess():
             tasks_queue.put(task)
             if task is None:
                 break
-            result = results_queue.get(block=True)
+            while True:
+                try:
+                    result = results_queue.get(timeout=1)
+                    break
+                except queue.Empty:
+                    if not worker.is_alive():
+                        raise RuntimeError(f"Worker has finished with error {worker.exitcode}")
             print(json.dumps(result, indent=None, separators=(",", ":")), flush=True)
             if "error" in result:
                 break
