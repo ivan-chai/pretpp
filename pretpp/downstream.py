@@ -255,6 +255,7 @@ class DownstreamEvaluator:
                         self.checkpoints.evaluate(step, metrics[self.monitor])
             n_unfinished = self.num_evaluations - len(self.results)
             if wait and (n_unfinished > 0):
+                self._assert_alive()
                 if not messaged:
                     print(f"Waiting {n_unfinished} unfinished evaluation jobs")
                     messaged = True
