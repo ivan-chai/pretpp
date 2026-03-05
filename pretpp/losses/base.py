@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod, abstractproperty
 import torch
+from hotpp.data import PaddedBatch
 
 
 class BaseLoss(torch.nn.Module):
@@ -54,3 +55,36 @@ class BaseLoss(torch.nn.Module):
 
     def get_prediction_targets(self, targets):
         return targets
+
+    @staticmethod
+    def unwrap_model_outputs(outputs):
+        """Extract tensor-based model outputs from dictionary-variant PaddedBatch."""
+        if not isinstance(outputs.payload, dict):
+            return outputs
+        if "outputs" not in outputs.payload:
+            raise ValueError("Dictionary model outputs must contain 'outputs' field.")
+        return PaddedBatch(outputs.payload["outputs"], outputs.seq_lens)
+
+    @staticmethod
+    def get_special_token_mask(outputs):
+        """Extract special token mask from a dictionary-based PaddedBatch."""
+        if not isinstance(outputs.payload, dict):
+            return None
+        return outputs.payload.get("special_token_mask", None)
+
+    @staticmethod
+    def select_embeddings_by_mask(embeddings, mask):
+        if mask.ndim != 2:
+            raise ValueError("Expected mask with shape (B, L).")
+        b, l = mask.shape
+        seq_len_mask = embeddings.seq_len_mask.bool()  # (B, L).
+        mask = torch.logical_and(mask.bool(), seq_len_mask)  # (B, L).
+        mask_lengths = mask.sum(1)  # (B).
+        max_length = mask_lengths.max().item()
+
+        # Equalize the number of elements in each raw.
+        mask = torch.logical_or(mask, ~seq_len_mask)  # (B, L).
+        mask = torch.logical_and(mask, mask.cumsum(1) <= max_length)  # (B, L).
+
+        selected = embeddings.payload[mask].reshape(b, max_length, embeddings.payload.shape[2])  # (B, O, D).
+        return PaddedBatch(selected, mask_lengths)

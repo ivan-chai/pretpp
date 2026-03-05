@@ -75,22 +75,30 @@ class HybridLoss(BaseLoss):
         Returns:
             Losses dict and metrics dict.
         """
+        special_token_mask = self.get_history_token_mask(outputs)
+        outputs = self.unwrap_model_outputs(outputs)
         losses = {}
         metrics = {}
         offset = 0
         for i, loss in enumerate(self._losses):
-            loss_outputs = PaddedBatch(outputs.payload[..., offset:offset + loss.input_size], outputs.seq_lens)
+            loss_outputs = outputs.payload[..., offset:offset + loss.input_size]
+            if special_token_mask is None:
+                loss_outputs = PaddedBatch({"outputs": loss_outputs}, outputs.seq_lens)
+            else:
+                loss_outputs = PaddedBatch({"outputs": loss_outputs, "special_token_mask": special_token_mask}, outputs.seq_lens)
             loss_length = targets[f"_loss_{i}_input_length"]
             if (self._truncate is not None) and (loss_outputs.shape[1] != loss_length):
-                assert loss_outputs.shape[1] > loss_length
-                delta = loss_outputs.shape[1] - loss_length
+                assert loss_outputs.payload["outputs"].shape[1] > loss_length
+                delta = loss_outputs.payload["outputs"].shape[1] - loss_length
                 if self._truncate == "begin":
-                    loss_outputs = PaddedBatch(loss_outputs.payload[:, :loss_length], (loss_outputs.seq_lens - delta).clip(min=0))
+                    loss_outputs = PaddedBatch({k: v[:, :loss_length] for k, v in loss_outputs.payload.items()},
+                                               (loss_outputs.seq_lens - delta).clip(min=0))
                 else:
                     assert self._truncate == "end"
-                    loss_outputs = PaddedBatch(loss_outputs.payload[:, delta:], (loss_outputs.seq_lens - delta).clip(min=0))
+                    loss_outputs = PaddedBatch({k: v[:, delta:] for k, v in loss_outputs.payload.items()},
+                                               (loss_outputs.seq_lens - delta).clip(min=0))
             if loss.aggregate:
-                loss_outputs = PaddedBatch(self._aggregator(loss_outputs).unsqueeze(1),
+                loss_outputs = PaddedBatch(self._aggregator(self.unwrap_model_outputs(loss_outputs)).unsqueeze(1),
                                            torch.ones_like(loss_outputs.seq_lens))  # (B, 1, D).
             current_losses, current_metrics = loss(loss_outputs, targets[i])
             losses |= {f"loss_{i}_" + k: v for k, v in current_losses.items()}
@@ -101,17 +109,23 @@ class HybridLoss(BaseLoss):
         return losses, metrics
 
     def predict(self, outputs):
+        outputs = unwrap_model_outputs(outputs)
+        special_token_mask = get_special_token_mask(outputs)
         offset = 0
         for i, loss in enumerate(self._losses):
             if i == self._prediction_loss:
-                loss_outputs = PaddedBatch(outputs.payload[..., offset:offset + loss.input_size], outputs.seq_lens)
+                loss_outputs = outputs.payload[..., offset:offset + loss.input_size]
+                if special_token_mask is None:
+                    loss_outputs = PaddedBatch({"outputs": loss_outputs}, outputs.seq_lens)
+                else:
+                    loss_outputs = PaddedBatch({"outputs": loss_outputs, "special_token_mask": special_token_mask}, outputs.seq_lens)
                 break
             offset += loss.input_size
         else:
             raise RuntimeError(f"Wrong prediction loss index: {self._prediction_loss}")
         loss = self._losses[self._prediction_loss]
         if loss.aggregate:
-            loss_outputs = PaddedBatch(self._aggregator(loss_outputs).unsqueeze(1),
+            loss_outputs = PaddedBatch(self._aggregator(self.unwrap_model_outputs(loss_outputs)).unsqueeze(1),
                                        torch.ones_like(loss_outputs.seq_lens))  # (B, 1, D).
         return loss.predict(loss_outputs)
 

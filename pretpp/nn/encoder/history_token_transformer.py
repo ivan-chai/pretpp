@@ -81,6 +81,8 @@ class HistoryTokenTransformer(SimpleTransformer):
             else:
                 outputs, _ = self.transform(x, attention_mask=attention_mask)  # (B, L', D).
             outputs = strategy.extract_outputs(outputs)
+        if (self.sos is not None) and isinstance(outputs.payload, dict) and (outputs.payload.get("special_token_mask", None) is not None):
+            raise RuntimeError("Can't remove SOS when history tokens are returned.")
         outputs = self.remove_sos(outputs)
         states = None
         return outputs, states

@@ -146,6 +146,7 @@ class MLMLoss(BaseLoss):
 
     def _split_outputs(self, outputs):
         """Convert parameters tensor to the dictionary with parameters for each loss."""
+        outputs = self.unwrap_model_outputs(outputs)
         offset = 0
         result = {}
         for name in self._order:

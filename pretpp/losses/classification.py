@@ -12,12 +12,15 @@ class ClassificationLoss(BaseLoss):
         targets: A mapping from a target name to dictionary with "num_classes" and optional "weight" and "cast" fields.
         cls_token: A dictionary with field values for a CLS token (optional, typically for transformer models).
         overwrite_timestamp: Assign the latest timestamp to the CLS token.
-        apply_to_all_outputs: Whether to compute loss for global classification targets with aggregated embedding or for each embedding.
+        apply_to_tokens: Controls a subset of outputs to apply loss to. Either `last`, `all`, or `special`.
         drop_nans: Exclude elements with nan targets.
     """
-    def __init__(self, targets, cls_token=None, overwrite_timestamp=False, apply_to_all_outputs=False, drop_nans=False):
-        if (cls_token is not None) and apply_to_all_outputs:
-            raise ValueError("Can't mix CLS token with apply-to-all-outputs.")
+    def __init__(self, targets, cls_token=None, overwrite_timestamp=False,
+                 apply_to_tokens="last", drop_nans=False):
+        if apply_to_tokens not in {"last", "all", "special"}:
+            raise ValueError(f"Unknown application strategy: {apply_to_tokens}.")
+        if (cls_token is not None) and (apply_to_tokens != "last"):
+            raise ValueError(f"Can't mix CLS token with a selected application strategy {apply_to_tokens}.")
         super().__init__()
         for name, spec in targets.items():
             if "num_classes" not in spec:
@@ -29,7 +32,7 @@ class ClassificationLoss(BaseLoss):
         self._order = list(sorted(targets))
         self._cls_token = cls_token
         self._overwrite_timestamp = overwrite_timestamp
-        self._apply_to_all_outputs = apply_to_all_outputs
+        self._apply_to_tokens = apply_to_tokens
         self._drop_nans = drop_nans
 
     @property
@@ -39,7 +42,7 @@ class ClassificationLoss(BaseLoss):
     @property
     def aggregate(self):
         # Use aggregation if there is no special token.
-        return (self._cls_token is None) and (not self._apply_to_all_outputs)
+        return (self._cls_token is None) and (self._apply_to_tokens == "last")
 
     def prepare_inference_batch(self, inputs):
         """Extract model inputs for inference.
@@ -148,12 +151,21 @@ class ClassificationLoss(BaseLoss):
 
     def _split_outputs(self, outputs):
         """Convert parameters tensor to the dictionary with parameters for each loss."""
+        special_token_mask = self.get_special_token_mask(outputs)
+        outputs = self.unwrap_model_outputs(outputs)
         outputs, lengths = outputs.payload, outputs.seq_lens
         if outputs.ndim != 3:
             raise NotImplementedError("Expected outputs with shape (B, L, C).")
-        if self._apply_to_all_outputs:
+        if self._apply_to_tokens == "all":
             # Use all output vectors.
             pass
+        elif self._apply_to_tokens == "special":
+            if special_token_mask is None:
+                raise ValueError("Special token mask is not provided.")
+            if special_token_mask.ndim != 2:
+                raise ValueError("Special token mask must have shape (B, L).")
+            outputs = self.select_embeddings_by_mask(PaddedBatch(outputs, lengths), special_token_mask)
+            outputs, lengths = outputs.payload, outputs.seq_lens
         elif self._cls_token is not None:
             # Extract CLS token embedding.
             last_indices = lengths - 1

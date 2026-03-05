@@ -143,13 +143,14 @@ class HTStrategyBase(ABC, torch.nn.Module):
 
     @abstractmethod
     def extract_outputs(self, x):
-        """Remove history tokens from output.
+        """Remove history tokens from output if necessary.
 
         Args:
             x: (B, L', D).
 
         Returns:
-            PaddedBatch with shape (B, L, D) or (B, D) for embedding mode.
+            In the standard mode: PaddedBatch with two fields: "outputs" (B, L, D) and "special_token_mask" (B, L).
+            In the embeddings mode: Matrix with shape (B, D).
         """
         pass
 
@@ -234,13 +235,13 @@ class HTStrategyImpl(HTStrategyBase):
             b, l = timestamps.shape
             d = len(self.token)
             r = len(self.positions)
-            self.insert_mask = torch.ones(l + r, device=self.device, dtype=torch.long)  # (L + R).
-            self.insert_mask.scatter_(0, self.positions, 0)  # (L + R).
+            self.insert_mask = torch.ones(l + r, device=self.device, dtype=torch.bool)  # (L + R).
+            self.insert_mask.scatter_(0, self.positions, False)  # (L + R).
             last_input = (self.insert_mask.cumsum(0) - 1).clip(min=0)  # (L + R).
             self.index = last_input.scatter(0, self.positions, l)  # (L + R).
             self.prev_input = last_input.take_along_dim(self.positions, 0)  # (R).
             if (self.predict == "history_tokens") or embedding:
-                self.output_indices = (1 - self.insert_mask).nonzero().squeeze(1)  # (L).
+                self.output_indices = (~self.insert_mask).nonzero().squeeze(1)  # (L).
                 self.output_lengths = (self.after_positions < self.seq_lens[:, None]).sum(1)  # (B).
             elif self.predict == "input_tokens":
                 self.output_indices = self.insert_mask.nonzero().squeeze(1)  # (L).
@@ -315,11 +316,17 @@ class HTStrategyImpl(HTStrategyBase):
                 return self.avg_aggregator(outputs)
             else:
                 raise ValueError(f"Unknown embedding type: {self.embedding_type}")
-        elif (not self.apply_to_batch) or (self.predict == "all"):
+        elif not self.apply_to_batch:
             return x
+        elif self.predict == "all":
+            return PaddedBatch({"outputs": x.payload, "special_token_mask": (~self.insert_mask)[None].expand(x.shape[0], -1)}, x.seq_lens)
         else:
             assert self.predict in {"input_tokens", "history_tokens"}
-            return PaddedBatch(x.payload.take_along_dim(self.output_indices[None, :, None], 1), self.output_lengths)  # (B, L, D).
+            result = PaddedBatch(x.payload.take_along_dim(self.output_indices[None, :, None], 1), self.output_lengths)  # (B, L, D).
+            if self.predict == "history_tokens":
+                special_token_mask = torch.ones(*result.shape, dtype=torch.bool, device=result.device)
+                result = PaddedBatch({"outputs": result.payload, "special_token_mask": special_token_mask}, result.seq_lens)
+            return result
 
 
 class FullHTStrategy(HTStrategyImpl):
@@ -470,13 +477,18 @@ class LastHTStrategy(HTStrategyBase):
         if self.embedding:
             return x.payload.take_along_dim((x.seq_lens[:, None, None] - 1).clip(min=0), 1).squeeze(1)  # (B, D).
         elif self.predict == "history_tokens":
-            payload =  x.payload.take_along_dim((x.seq_lens[:, None, None] - 1).clip(min=0), 1)  # (B, 1, D).
-            return PaddedBatch(payload, torch.ones_like(self.seq_lens))
+            return PaddedBatch({"outputs": x.payload.take_along_dim((x.seq_lens[:, None, None] - 1).clip(min=0), 1),  # (B, 1, D).
+                                "special_token_mask": torch.ones(len(x.seq_lens), 1, dtype=torch.bool, device=x.device)},
+                               torch.ones_like(self.seq_lens))
         elif self.predict == "input_tokens":
             return PaddedBatch(x.payload[:, :-1], (x.seq_lens - 1).clip(min=0))
         else:
             assert self.predict == "all"
-            return x
+            special_token_mask = torch.zeros(*x.shape, dtype=torch.bool, device=x.device)
+            special_token_mask.scatter_(1, (x.seq_lens - 1).clip(min=0).unsqueeze(1), True)
+            return PaddedBatch({"outputs": x.payload,
+                                "special_token_mask": special_token_mask},
+                               x.seq_lens)
 
 
 class RecMemHTStrategy(HTStrategyImpl):
@@ -625,7 +637,11 @@ class LongFormerHTStrategy(HTStrategyBase):
         if self.embedding:
             return x.payload.take_along_dim((x.seq_lens[:, None, None] - 1).clip(min=0), 1).squeeze(1)  # (B, D).
         else:
-            return x
+            special_token_mask = torch.zeros(*x.shape, dtype=torch.bool, device=x.device)
+            special_token_mask.scatter_(1, self.global_positions[None].expand(x.shape[0], -1), True)
+            return PaddedBatch({"outputs": x.payload,
+                                "special_token_mask": special_token_mask},
+                               x.seq_lens)
 
 
 class NoHTStrategy(HTStrategyBase):

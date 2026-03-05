@@ -58,6 +58,7 @@ module:
             grad_scale: null
       - _target_: pretpp.losses.ClassificationLoss
         drop_nans: true
+        apply_to_tokens: all
         targets:
           target_flag:
             num_classes: ${num_downstream_classes}
