@@ -17,7 +17,7 @@ module:
 #      dropout: 0.3
   loss:
     cls_token: null
-    apply_to_all_outputs: false
+    apply_to_tokens: last
   aggregator:
     _target_: hotpp.nn.MeanAggregator
   peft_adapter:

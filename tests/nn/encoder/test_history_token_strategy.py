@@ -11,7 +11,7 @@ import torch
 
 from hotpp.data import PaddedBatch
 from pretpp.nn.encoder import FullHTStrategy, SubsetHTStrategy, FixedHTStrategy, LastHTStrategy, NoHTStrategy
-from pretpp.nn.encoder.history_token_strategy import make_ht_attention_mask
+from pretpp.nn.encoder.history_token_strategy import LongFormerHTStrategy, make_ht_attention_mask
 
 
 class TestMakeHTAttentionMask(TestCase):
@@ -416,6 +416,136 @@ class TestHTStrategy(TestCase):
 
             reverted_embeddings = s.extract_outputs(new_embeddings)
             self.assertAlmostEqual((reverted_embeddings - gt_embeddings).abs().max().item(), 0)
+
+
+class TestSpecialTokenMask(TestCase):
+    """Tests for special_token_mask correctness across all strategies."""
+
+    def setUp(self):
+        payload = torch.arange(12).reshape(3, 4, 1).float()
+        timestamps = torch.zeros(3, 4)
+        lengths = torch.tensor([4, 3, 4])
+        self.embeddings = PaddedBatch(payload, lengths)
+        self.timestamps = PaddedBatch(timestamps, lengths)
+
+    # --- HTStrategyImpl (via FixedHTStrategy), predict == "all" ---
+
+    @mock.patch("torch.rand")
+    @mock.patch("torch.randn")
+    def test_fixed_strategy_predict_all_special_token_mask_shape(self, mock_randn, mock_rand):
+        mock_randn.return_value = torch.tensor([-1.0])
+        mock_rand.return_value = torch.tensor(0.2)  # apply
+
+        strategy = FixedHTStrategy(1, positions=[1, 3], predict="all")
+        with strategy(self.timestamps) as s:
+            new_embeddings, new_timestamps, _ = s.apply(self.embeddings, self.timestamps)
+            outputs = s.extract_outputs(new_embeddings)
+
+        self.assertIsInstance(outputs.payload, dict)
+        mask = outputs.payload["special_token_mask"]
+        # Shape must be (B, L+R).
+        b, l_plus_r = new_embeddings.shape
+        self.assertEqual(mask.shape, (b, l_plus_r))
+
+    @mock.patch("torch.rand")
+    @mock.patch("torch.randn")
+    def test_fixed_strategy_predict_all_special_token_mask_values(self, mock_randn, mock_rand):
+        """HT positions should be True, real token positions False."""
+        mock_randn.return_value = torch.tensor([-1.0])
+        mock_rand.return_value = torch.tensor(0.2)  # apply
+
+        # positions=[1, 3]: HT inserted after positions 1 and 3.
+        # New sequence layout: [r0, r1, HT, r2, r3, HT] → HT at indices 2 and 5.
+        strategy = FixedHTStrategy(1, positions=[1, 3], predict="all")
+        with strategy(self.timestamps) as s:
+            new_embeddings, _, _ = s.apply(self.embeddings, self.timestamps)
+            outputs = s.extract_outputs(new_embeddings)
+
+        mask = outputs.payload["special_token_mask"]
+        # All batch rows share the same HT positions (at indices 2 and 5).
+        expected = torch.tensor([False, False, True, False, False, True])
+        for b in range(mask.shape[0]):
+            self.assertEqual(mask[b].tolist(), expected.tolist(), f"Row {b} mismatch")
+
+    @mock.patch("torch.rand")
+    @mock.patch("torch.randn")
+    def test_fixed_strategy_predict_all_no_apply(self, mock_randn, mock_rand):
+        """When apply_to_batch=False, extract_outputs returns the input unchanged (no dict)."""
+        mock_randn.return_value = torch.tensor([-1.0])
+        mock_rand.return_value = torch.tensor(0.8)  # don't apply
+
+        strategy = FixedHTStrategy(1, positions=[1, 3], predict="all")
+        with strategy(self.timestamps) as s:
+            new_embeddings, _, _ = s.apply(self.embeddings, self.timestamps)
+            outputs = s.extract_outputs(new_embeddings)
+
+        # No HT tokens inserted → plain PaddedBatch returned.
+        self.assertIsInstance(outputs, PaddedBatch)
+        self.assertNotIsInstance(outputs.payload, dict)
+
+    # --- LastHTStrategy ---
+
+    @mock.patch("torch.randn")
+    def test_last_strategy_predict_history_tokens_no_name_error(self, mock_randn):
+        """Bug: len(payload) was undefined. Should not raise."""
+        mock_randn.return_value = torch.tensor([-1.0])
+        strategy = LastHTStrategy(1, predict="history_tokens")
+
+        with strategy(self.timestamps) as s:
+            new_emb, new_ts, _ = s.apply(self.embeddings, self.timestamps)
+            outputs = s.extract_outputs(new_emb)
+
+        # Returns 1 HT token per sequence.
+        self.assertIsInstance(outputs.payload, dict)
+        self.assertEqual(outputs.payload["outputs"].shape[1], 1)
+        self.assertEqual(outputs.seq_lens.tolist(), [1, 1, 1])
+        # All returned tokens are special.
+        mask = outputs.payload["special_token_mask"]
+        self.assertTrue(mask.all())
+
+    @mock.patch("torch.randn")
+    def test_last_strategy_predict_all_special_token_mask(self, mock_randn):
+        """HT appended at end → last valid position should be True."""
+        mock_randn.return_value = torch.tensor([-1.0])
+        strategy = LastHTStrategy(1, predict="all")
+
+        with strategy(self.timestamps) as s:
+            new_emb, new_ts, _ = s.apply(self.embeddings, self.timestamps)
+            outputs = s.extract_outputs(new_emb)
+
+        self.assertIsInstance(outputs.payload, dict)
+        mask = outputs.payload["special_token_mask"]
+        # seq_lens should be original + 1 (includes HT token).
+        self.assertEqual(outputs.seq_lens.tolist(), new_emb.seq_lens.tolist())
+        # HT is at position seq_lens-1 for each row.
+        for b, sl in enumerate(outputs.seq_lens.tolist()):
+            self.assertTrue(mask[b, sl - 1].item(), f"Row {b}: HT position should be True")
+            self.assertFalse(mask[b, :sl - 1].any().item(), f"Row {b}: real positions should be False")
+
+    # --- LongFormerHTStrategy ---
+
+    def test_longformer_strategy_special_token_mask_shape_and_values(self):
+        """Global positions should be marked True in all batch rows."""
+        strategy = LongFormerHTStrategy(global_frequency=0.5)
+
+        # Use embedding=True for deterministic global_positions.
+        with strategy(self.timestamps, embedding=False) as s:
+            # Override global_positions with known values for determinism.
+            s.global_positions = torch.tensor([0, 2])
+            new_emb, _, _ = s.apply(self.embeddings, self.timestamps)
+            outputs = s.extract_outputs(new_emb)
+
+        self.assertIsInstance(outputs.payload, dict)
+        mask = outputs.payload["special_token_mask"]
+        b, l = self.embeddings.shape
+        self.assertEqual(mask.shape, (b, l))
+
+        # Positions 0 and 2 should be True in every row.
+        for row in range(b):
+            self.assertTrue(mask[row, 0].item(), f"Row {row}, pos 0 should be True")
+            self.assertTrue(mask[row, 2].item(), f"Row {row}, pos 2 should be True")
+            self.assertFalse(mask[row, 1].item(), f"Row {row}, pos 1 should be False")
+            self.assertFalse(mask[row, 3].item(), f"Row {row}, pos 3 should be False")
 
 
 if __name__ == "__main__":

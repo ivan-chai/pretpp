@@ -121,4 +121,5 @@ class MLMDeTPPLoss(DetectionLoss, BaseLoss):
         Returns:
             Losses dict and metrics dict.
         """
+        outputs = self.unwrap_model_outputs(outputs)
         return super().forward(targets, outputs, states=None)

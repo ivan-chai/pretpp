@@ -8,17 +8,24 @@ class HistoryTokenTransformer(SimpleTransformer):
 
     Args:
         strategy_partial: History token strategy initializer which accepts embedding dim as input.
+        val_strategy_partial: History token strategy used for validation and testing.
         history_token_fraction: The average fraction of batches to apply history token to.
         history_token_locality: The value between 0 and 1 with 0 meaning uniform history token selection
             and 1 for using the last available token.
         embed_layer: The layer to extract HT embeddings from, a list of indices, or `all`. By default, extract
             the output of the final layer.
     """
-    def __init__(self, input_size, strategy_partial, embed_layer=None, **kwargs):
+    def __init__(self, input_size, strategy_partial, val_strategy_partial=None, embed_layer=None, **kwargs):
         super().__init__(input_size, **kwargs)
         self.strategy = strategy_partial(self.n_embd)
         if self.strategy.causal != self.causal:
             raise NotImplementedError("Strategy and transformer causality mismatch.")
+        if val_strategy_partial is not None:
+            self.val_strategy = val_strategy_partial(self.n_embd)
+            if self.val_strategy.causal != self.causal:
+                raise NotImplementedError("Validation strategy and transformer causality mismatch.")
+        else:
+            self.val_strategy = None
         if embed_layer == "all":
             embed_layer = list(range(self.n_layer))
         self.embed_layer = embed_layer
@@ -60,9 +67,13 @@ class HistoryTokenTransformer(SimpleTransformer):
         return embeddings
 
     def forward(self, x, timestamps, states=None, return_states=False):
-        if not self.training:
+        if self.training:
+            mode_strategy = self.strategy
+        elif self.val_strategy is None:
             # Don't insert history tokens.
             return super().forward(x, timestamps, states=states, return_states=return_states)
+        else:
+            mode_strategy = self.val_strategy
         if return_states:
             raise NotImplementedError("HistoryTokenTransformer doesn't support states return.")
         b, l = x.shape
@@ -70,7 +81,7 @@ class HistoryTokenTransformer(SimpleTransformer):
         x = PaddedBatch(self.input_projection(x.payload), x.seq_lens)  # (B, L, D).
         x, timestamps = self.add_sos(x, timestamps)
 
-        with self.strategy(timestamps) as strategy:
+        with mode_strategy(timestamps) as strategy:
             x, timestamps, attention_mask = strategy.apply(x, timestamps)  # (B, L', D).
 
             # Apply transformer.
@@ -81,6 +92,9 @@ class HistoryTokenTransformer(SimpleTransformer):
             else:
                 outputs, _ = self.transform(x, attention_mask=attention_mask)  # (B, L', D).
             outputs = strategy.extract_outputs(outputs)
+        if (self.sos is not None) and isinstance(outputs.payload, dict) and (outputs.payload.get("special_token_mask", None) is not None):
+            if outputs.payload["special_token_mask"][:, 0].any():
+                raise RuntimeError("Can't remove SOS when history tokens are at the beginning of a sequence.")
         outputs = self.remove_sos(outputs)
         states = None
         return outputs, states

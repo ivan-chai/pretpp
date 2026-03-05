@@ -1,3 +1,5 @@
+apply_cls_to_tokens: all
+
 metric:
   _target_: pretpp.metrics.DownstreamMetric
   classification_fields:
@@ -36,7 +38,7 @@ module:
             _target_: hotpp.losses.CrossEntropyLoss
             num_classes: ${num_classes}
       - _target_: pretpp.losses.ClassificationLoss
-        apply_to_all_outputs: true
+        apply_to_tokens: ${apply_cls_to_tokens}
         targets:
           target:
             num_classes: ${num_downstream_classes}

@@ -9,11 +9,15 @@ class NextItemLoss(BaseLoss):
 
     Args:
         losses: Mapping from the feature name to the loss function.
+        apply_to_tokens: Controls a subset of outputs to apply loss to. Either `regular` for non-special tokens or `all`.
     """
-    def __init__(self, losses):
+    def __init__(self, losses, apply_to_tokens="regular"):
         super().__init__()
+        if apply_to_tokens not in {"all", "regular"}:
+            raise ValueError(f"Unknown application strategy: {apply_to_tokens}")
         self._losses = torch.nn.ModuleDict(losses)
         self._order = list(sorted(losses))
+        self._apply_to_tokens = apply_to_tokens
 
     @property
     def aggregate(self):
@@ -50,6 +54,7 @@ class NextItemLoss(BaseLoss):
             Losses dict and metrics dict.
         """
         inputs = targets
+        outputs = self._select_token_subset(outputs)
         # Compute losses. It is assumed that predictions lengths are equal to targets lengths.
         if not isinstance(outputs, dict):
             outputs = self._split_outputs(outputs.payload)
@@ -61,6 +66,19 @@ class NextItemLoss(BaseLoss):
             for k, v in loss_metrics.items():
                 metrics[f"{name}-{k}"] = v
         return losses, metrics
+
+    def _select_token_subset(self, outputs):
+        if self._apply_to_tokens == "all":
+            return outputs
+        elif isinstance(outputs, dict):
+            raise NotImplementedError("Can't combine application strategy with a dictionary loss input.")
+        assert self._apply_to_tokens == "regular"
+        special_mask = self.get_special_token_mask(outputs)
+        outputs = self.unwrap_model_outputs(outputs)
+        if special_mask is None:
+            return outputs
+        regular_mask = ~special_mask.bool()
+        return self.select_embeddings_by_mask(outputs, regular_mask)
 
     def _split_outputs(self, outputs):
         """Convert parameters tensor to the dictionary with parameters for each loss."""

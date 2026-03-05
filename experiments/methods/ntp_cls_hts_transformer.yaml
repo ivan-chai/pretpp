@@ -1,0 +1,21 @@
+defaults:
+  - default
+  - default_hts_transformer
+  - mtl_loss
+  - _self_
+
+name: ntp_cls_hts_transformer
+
+apply_cls_to_tokens: all  # or "special".
+transformer_history_token_probability: 1
+
+module:
+  _target_: pretpp.modules.BaseModule
+  seq_encoder:
+    model_partial:
+      strategy_partial:
+        predict: all
+      val_strategy_partial:
+        _target_: pretpp.nn.LastHTStrategy
+        _partial_: true
+        predict: all
