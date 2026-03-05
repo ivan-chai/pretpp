@@ -74,9 +74,9 @@ class NextItemLoss(BaseLoss):
             raise NotImplementedError("Can't combine application strategy with a dictionary loss input.")
         assert self._apply_to_tokens == "regular"
         special_mask = self.get_special_token_mask(outputs)
+        outputs = self.unwrap_model_outputs(outputs)
         if special_mask is None:
             return outputs
-        outputs = self.unwrap_model_outputs(outputs)
         regular_mask = ~special_mask.bool()
         return self.select_embeddings_by_mask(outputs, regular_mask)
 

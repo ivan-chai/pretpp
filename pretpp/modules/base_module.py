@@ -196,7 +196,7 @@ class BaseModule(pl.LightningModule):
             raise ValueError("Dictionary model outputs must contain 'outputs' field.")
         primary = PaddedBatch(outputs.payload["outputs"], outputs.seq_lens)
         aux_payload = PaddedBatch({k: v for k, v in outputs.payload.items() if k != "outputs"},
-                                  outputs.seq_lens, seq_names=set(output.seq_names) - {"outputs"})
+                                  outputs.seq_lens, seq_names=set(outputs.seq_names) - {"outputs"})
         return primary, aux_payload
 
     def _merge_output_batch(self, outputs, aux_payload):

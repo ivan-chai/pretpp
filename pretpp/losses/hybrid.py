@@ -75,7 +75,7 @@ class HybridLoss(BaseLoss):
         Returns:
             Losses dict and metrics dict.
         """
-        special_token_mask = self.get_history_token_mask(outputs)
+        special_token_mask = self.get_special_token_mask(outputs)
         outputs = self.unwrap_model_outputs(outputs)
         losses = {}
         metrics = {}
@@ -109,8 +109,8 @@ class HybridLoss(BaseLoss):
         return losses, metrics
 
     def predict(self, outputs):
-        outputs = unwrap_model_outputs(outputs)
-        special_token_mask = get_special_token_mask(outputs)
+        special_token_mask = self.get_special_token_mask(outputs)
+        outputs = self.unwrap_model_outputs(outputs)
         offset = 0
         for i, loss in enumerate(self._losses):
             if i == self._prediction_loss:
