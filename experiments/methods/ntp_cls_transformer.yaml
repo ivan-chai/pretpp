@@ -1,0 +1,10 @@
+defaults:
+  - default
+  - default_transformer
+  - mtl_loss
+  - _self_
+
+name: ntp_cls_transformer
+
+module:
+  _target_: pretpp.modules.BaseModule

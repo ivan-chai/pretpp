@@ -1,10 +1,1 @@
-defaults:
-  - default
-  - default_hts_transformer
-  - mtl_loss
-  - _self_
-
-name: ntp_cls_hts_transformer
-
-module:
-  _target_: pretpp.modules.BaseModule
+../../methods/ntp_cls_hts_transformer.yaml

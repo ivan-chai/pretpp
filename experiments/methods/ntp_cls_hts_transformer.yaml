@@ -1,0 +1,11 @@
+defaults:
+  - default
+  - default_hts_transformer
+  - mtl_loss
+  - _self_
+
+name: ntp_cls_hts_transformer
+apply_cls_to_tokens: special
+
+module:
+  _target_: pretpp.modules.BaseModule
