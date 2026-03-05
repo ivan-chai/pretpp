@@ -6,7 +6,7 @@ defaults:
 
 name: ntp_cls_hts_transformer
 
-apply_cls_to_tokens: special
+apply_cls_to_tokens: all  # or "special".
 transformer_history_token_probability: 1
 
 module:

@@ -130,7 +130,7 @@ class ClassificationLoss(BaseLoss):
                 mask = slice(None, None, None)
             if spec.get("cast", False):
                 target = target.long()
-            losses[name] = torch.nn.functional.cross_entropy(logits.flatten(0, -2), target[:, None].repeat(1, logits.shape[1]).flatten())
+            losses[name] = torch.nn.functional.cross_entropy(logits.flatten(0, -2), target[:, None].expand(*logits.shape[:2]).flatten())
             if spec.get("weight", 1) != 1:
                 losses[name] = ScaleGradient.apply(losses[name], spec["weight"])
             with torch.no_grad():
