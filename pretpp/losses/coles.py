@@ -119,6 +119,7 @@ class ColesLoss(BaseLoss):
         Returns:
             Losses dict and metrics dict.
         """
+        outputs = self.unwrap_model_outputs(outputs)
         outputs, lengths = outputs.payload, outputs.seq_lens
         if self.cls_token is not None:
             # Extract CLS token embedding.

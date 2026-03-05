@@ -159,7 +159,7 @@ class BaseModule(pl.LightningModule):
         """Extract embeddings."""
         seq_encoder = self._seq_encoder if not self._peft_applied else self._seq_encoder.base_model
         hiddens, states = seq_encoder(x, return_states=return_states)  # (B, L, D).
-        outputs = self._head(hiddens)
+        outputs = self._apply_to_outputs(hiddens, self._head)
         return outputs, states
 
     def _embed_impl(self, inputs):
@@ -169,6 +169,7 @@ class BaseModule(pl.LightningModule):
         else:
             return_states = "full" if self._aggregator.need_states else False
             hiddens, states = self.forward(inputs, return_states=return_states)
+            hiddens, _ = self._split_output_batch(hiddens)
             embeddings = self._aggregator(hiddens, states)
         return embeddings  # (B, D).
 
@@ -184,9 +185,31 @@ class BaseModule(pl.LightningModule):
                                   torch.ones_like(inputs.seq_lens))  # (B, 1, D).
         else:
             outputs, _ = self.forward(inputs)
-        outputs = self._loss_projection(outputs)  # (B, L, D).
+        outputs = self._apply_to_outputs(outputs, self._loss_projection)  # (B, L, D).
         losses, metrics = self._loss(outputs, targets)
         return outputs, losses, metrics
+
+    def _split_output_batch(self, outputs):
+        if not isinstance(outputs.payload, dict):
+            return outputs, None
+        if "outputs" not in outputs.payload:
+            raise ValueError("Dictionary model outputs must contain 'outputs' field.")
+        primary = PaddedBatch(outputs.payload["outputs"], outputs.seq_lens)
+        aux_payload = PaddedBatch({k: v for k, v in outputs.payload.items() if k != "outputs"},
+                                  outputs.seq_lens, seq_names=set(outputs.seq_names) - {"outputs"})
+        return primary, aux_payload
+
+    def _merge_output_batch(self, outputs, aux_payload):
+        if aux_payload is None:
+            return outputs
+        payload = {"outputs": outputs.payload} | aux_payload.payload
+        seq_names = {"outputs"} | set(aux_payload.seq_names)
+        return PaddedBatch(payload, outputs.seq_lens, seq_names=seq_names)
+
+    def _apply_to_outputs(self, outputs, module):
+        primary, aux_payload = self._split_output_batch(outputs)
+        projected = module(primary)
+        return self._merge_output_batch(projected, aux_payload)
 
     def training_step(self, batch, batch_idx):
         x, y = batch
