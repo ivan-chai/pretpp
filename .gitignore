@@ -1,9 +1,9 @@
 # PreTPP
 experiments/**/data
 experiments/**/data/
-lightning_logs/
+lightning_logs*/
 experiments/**/outputs/
-experiments/**/checkpoints/
+experiments/**/checkpoints*/
 experiments/**/wandb/
 experiments/recsys25/results/embeddings*
 experiments/recsys25/embeddings

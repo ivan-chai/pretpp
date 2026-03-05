@@ -49,6 +49,7 @@ class BaseModule(pl.LightningModule):
         val_metric: Validation set metric.
         test_metric: Test set metric.
         downstream_validation_config: If provided, evaluate downstream metrics on each validation step.
+        sync_batch_metrics: Whether to synchronize intermediate metrics or not.
     """
     def __init__(self, seq_encoder, loss,
                  timestamps_field="timestamps",
@@ -63,7 +64,8 @@ class BaseModule(pl.LightningModule):
                  peft_adapter=None,
                  val_metric=None,
                  test_metric=None,
-                 downstream_validation_config=None):
+                 downstream_validation_config=None,
+                 sync_batch_metrics=False):
         super().__init__()
         self._timestamps_field = timestamps_field
 
@@ -79,6 +81,7 @@ class BaseModule(pl.LightningModule):
         self._freeze_prefixes = freeze_prefixes
         self._peft_adapter = peft_adapter
         self._peft_applied = False
+        self._sync_batch_metrics = sync_batch_metrics
 
         if head_partial is None:
             head_partial = IdentityHead
@@ -345,5 +348,5 @@ class BaseModule(pl.LightningModule):
         if mean_seq_len is not None:
             log_values_bar["sequence_length"] = mean_seq_len
 
-        self.log_dict(log_values, batch_size=batch_size, sync_dist=True)
-        self.log_dict(log_values_bar, batch_size=batch_size, sync_dist=True, prog_bar=True)
+        self.log_dict(log_values, batch_size=batch_size, sync_dist=self._sync_batch_metrics)
+        self.log_dict(log_values_bar, batch_size=batch_size, sync_dist=self._sync_batch_metrics, prog_bar=True)
