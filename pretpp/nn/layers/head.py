@@ -1,7 +1,35 @@
+import copy
 import torch
+from contextlib import contextmanager, ExitStack
 from hotpp.data import PaddedBatch
 from hotpp.nn import Head, ConditionalHead, SimpleTransformer
 from .metric import MetricLayer
+
+
+class StoreGradientsFn(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, module, tensor):
+        ctx.grads_module = module
+        return tensor  # identity, just a pass-through
+
+    @staticmethod
+    def backward(ctx, grad):
+        if ctx.grads_module.input_grads is not None:
+            raise NotImplementedError("Multiple backwards through caching layer")
+        ctx.grads_module.input_grads = grad.clone()
+        return None, grad
+
+
+class StoreGradients(torch.nn.Module):
+    def __init__(self, module):
+        super().__init__()
+        self.module = module
+        self.input_grads = None
+
+    def forward(self, batch):
+        batch = copy.copy(batch)
+        batch.payload = StoreGradientsFn.apply(self, batch.payload)
+        return self.module(batch)
 
 
 class IdentityHead(torch.nn.Module):
@@ -124,13 +152,65 @@ class CatHead(torch.nn.ModuleList):
         if (output_size is not None) and (total_size != output_size):
             raise ValueError(f"Expected output size {output_size}, got {total_size}")
         super().__init__(heads)
+        self._cache_input_grads = False
+
+    @contextmanager
+    def cache_input_grads(self):
+        """Store input gradients for each head."""
+        self._cache_input_grads = True
+        self._input_grads = [(h if hasattr(h, "cache_input_grads") else StoreGradients(h)) for h in self]
+        submodules = [module for module in self if hasattr(module, "cache_input_grads")]
+        try:
+            with ExitStack() as stack:
+                managed = [stack.enter_context(module.cache_input_grads()) for module in submodules]
+                yield self
+        finally:
+            self._cache_input_grads = False
+            del self._input_grads
+
+    @property
+    def input_grads(self):
+        cache = []
+        for module in self._input_grads:
+            if hasattr(module, "cache_input_grads"):
+                cache.append(module.input_grads)
+            else:
+                assert isinstance(module, StoreGradients)
+                cache.append(module.input_grads)
+        return cache
+
+    @property
+    def grads(self):
+        result = []
+        for module in self:
+            if hasattr(type(module), "grads"):
+                result.append(module.grads)
+            else:
+                result.append({name: param.grad for name, param in module.named_parameters()})
+        return result
+
+    @grads.setter
+    def grads(self, value):
+        if value is None:
+            for param in self.parameters():
+                param.grad = None
+            return
+        for module, grads_item in zip(self, value):
+            if hasattr(type(module), "grads"):
+                module.grads = grads_item
+            else:
+                for name, param in module.named_parameters():
+                    param.grad = grads_item.get(name, None) if grads_item is not None else None
 
     @property
     def output_size(self):
         return sum([h.output_size for h in self])
 
     def forward(self, x):
-        outputs = [h(x) for h in self]
+        if self._cache_input_grads:
+            outputs = [h(x) for h in self._input_grads]
+        else:
+            outputs = [h(x) for h in self]
         for output in outputs:
             if (output.seq_lens != x.seq_lens).any():
                 raise RuntimeError("Heads output lengths mismatch.")
@@ -156,6 +236,7 @@ class MultiHead(CatHead):
         if (output_size is not None) and (total_size != output_size):
             raise ValueError(f"Expected output size {output_size}, got {total_size}")
         torch.nn.ModuleList.__init__(self, heads)
+        self._cache_input_grads = False
 
 
 class StackHead(torch.nn.Sequential):

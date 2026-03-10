@@ -7,10 +7,7 @@ module:
   hpo_losses:
     - loss_0_timestamps
     - loss_0_labels
-    - loss_0_currency
-    - loss_0_channel_type
-    - loss_0_trx_category
-    - loss_0_log_amount
+    - loss_0_types
   cache_embedding_gradients: true
   hp_group_params:
     lr: 0.01
@@ -18,4 +15,4 @@ module:
   hpo_params:
     algorithm: sgd
     encoder_decoder: true
-  downstream_loss: loss_1_target_flag
+  downstream_loss: loss_1_target

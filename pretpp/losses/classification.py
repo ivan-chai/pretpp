@@ -36,6 +36,10 @@ class ClassificationLoss(BaseLoss):
         self._drop_nans = drop_nans
 
     @property
+    def structure(self):
+        return list(self._order) if len(self._order) > 1 else self._order[0]
+
+    @property
     def input_size(self):
         return sum([spec["num_classes"] for spec in self._targets.values()])
 

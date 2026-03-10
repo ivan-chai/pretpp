@@ -26,13 +26,63 @@ def to_logit(x, eps=1e-3):
     return math.log(y + esp) - math.log(1 - y + eps)
 
 
-def to_sequence_length(x, length, padding=0):
-    if x.shape[-2] >= length:
-        return x[..., :length, :]
-    padding_shape = list(x.shape)
-    padding_shape[-2] = length - x.shape[-2]
-    padding = torch.full(padding_shape, padding, dtype=x.dtype, device=x.device)
-    return torch.cat([x, padding], -2)
+def recursive_map(data, func):
+    """Recursively applies a function to all leaf nodes in a structure."""
+    if isinstance(data, dict):
+        return {k: recursive_map(v, func) for k, v in data.items()}
+    elif isinstance(data, (list, tuple, set)):
+        return type(data)(recursive_map(item, func) for item in data)
+    return func(data)
+
+
+class Structure(tuple):
+    """Operations with nested structures."""
+    def __new__(cls, structure):
+        return super(Structure, cls).__new__(cls, [(Structure(v) if isinstance(v, (tuple, list)) else v) for v in structure])
+
+    @property
+    def size(self):
+        return sum([(v.size if isinstance(v, Structure) else 1) for v in self])
+
+    def flatten(self):
+        return sum([(v.flatten() if isinstance(v, Structure) else [v]) for v in self], [])
+
+    def replace_string(self, key, value):
+        result = []
+        for v in self:
+            if isinstance(v, str) and (v == key):
+                result.append(value)
+            elif isinstance(v, Structure):
+                result.append(v.replace_string(key, value))
+            else:
+                result.append(v)
+        return Structure(result)
+
+    def get_by_key(self, key, value_structure):
+        if len(self) != len(value_structure):
+            raise ValueError("Structures mismatch")
+        results = []
+        for k, v in zip(self, value_structure):
+            if isinstance(k, Structure):
+                assert isinstance(v, Structure)
+                try:
+                    results.append(k.get_by_key(key, v))
+                except KeyError:
+                    pass
+            else:
+                assert isinstance(k, str) and (not isinstance(v, Structure))
+                if k == key:
+                    results.append(v)
+        if not results:
+            raise KeyError(f"Key not found: {key}")
+        if len(results) > 1:
+            raise RuntimeError(f"Multiple matches for {key}")
+        return results[0]
+
+    def replace_keys_with_values(self, key_to_value):
+        return Structure([(k.replace_keys_with_values(key_to_value) if isinstance(k, Structure)
+                           else key_to_value.get(k))
+                          for k in self])
 
 
 class HPOModule(BaseModule):
@@ -52,6 +102,7 @@ class HPOModule(BaseModule):
                  hpo_params=None, shared_prefix=None,
                  hp_group_params=None, loss_group_params=None,
                  shared_group_params=None, encoder_group_params=None,
+                 cache_embedding_gradients=False,
                  **kwargs):
         super().__init__(seq_encoder, loss, **kwargs)
         self.automatic_optimization = False
@@ -64,9 +115,9 @@ class HPOModule(BaseModule):
         self.loss_group_params = loss_group_params
         self.shared_group_params = shared_group_params
         self.encoder_group_params = encoder_group_params
+        self.cache_embedding_gradients = cache_embedding_gradients
         self.loss_weights = torch.nn.Parameter(torch.ones([len(hpo_losses)]))
         self.gradient_clip_val = None
-        self.max_sequence_length = None
 
     @BaseModule.trainer.setter
     def trainer(self, trainer):
@@ -78,66 +129,96 @@ class HPOModule(BaseModule):
         trainer._gradient_clip_val_bck = self.gradient_clip_val
         BaseModule.trainer.fset(self, trainer)
 
-        if self.max_sequence_length is None:
-            datamodule = trainer.datamodule
-            for split in trainer.datamodule.splits:
-                self.max_sequence_length = max(self.max_sequence_length or 0, getattr(trainer.datamodule, f"{split}_data").max_length or 0)
-
     def training_step(self, batch, batch_idx):
         dataloader_idx = batch[0].payload.get("_dataloader_idx", None)
         opt = self.optimizers()
         if opt.tune_on_val and ((dataloader_idx is None) or (dataloader_idx > 1)):
             raise ValueError(f"When tune_on_val is used, there must be exact 2 dataloaders. Got {dataloader_idx}")
-        if opt.encoder_decoder and not self.max_sequence_length:
-            raise RuntimeError("Failed to fetch the maximum sequence length.")
+
+        cache_val_step = opt.tune_on_val and dataloader_idx == 1
 
         x, y = batch
         inputs, targets = self._loss.prepare_batch(x, y)
-        if opt.encoder_decoder:
-            if self._loss.aggregate:
-                embeddings = PaddedBatch(self._embed_impl(inputs).unsqueeze(1),
-                                         torch.ones_like(inputs.seq_lens))  # (B, 1, D).
-            else:
-                embeddings, _ = self.forward(inputs)
-            z = PaddedBatch(embeddings.payload.detach().clone(), embeddings.seq_lens)
-            z.payload.requires_grad = True
-            outputs = self._loss_projection(z)  # (B, L, D).
-            losses, metrics = self._loss(outputs, targets)
+
+        # Similar to self._compute_loss, but with encoder_decoder logic.
+        if self._loss.aggregate:
+            embeddings = PaddedBatch(self._embed_impl(inputs).unsqueeze(1),
+                                     torch.ones_like(inputs.seq_lens))  # (B, 1, D).
         else:
-            outputs, losses, metrics = self._compute_loss(inputs, targets)
+            embeddings, _ = self.forward(inputs)
+
+        if opt.encoder_decoder:
+            # Detach embeddings.
+            encoder_embeddings = embeddings
+            embeddings = PaddedBatch(encoder_embeddings.payload.detach(), encoder_embeddings.seq_lens)
+            embeddings.payload.requires_grad = True
+
+        use_cached_grads = (not cache_val_step) and opt.encoder_decoder and self.cache_embedding_gradients
+
+        if use_cached_grads:
+            # Cache gradients for each head.
+            opt.zero_grad()
+            embeddings.payload.grad = None
+            if opt.param_groups[2]["params"]:
+                raise RuntimeError("Can't cache embedding gradients when shared paramaters are used.")
+            loss_structure = Structure(self._loss.structure)
+            with self._loss_projection.cache_input_grads() as projection:
+                # Compute loss and backward.
+                outputs = self._apply_to_outputs(embeddings, projection)  # (B, L, D).
+                losses, metrics = self._loss(outputs, targets)
+                loss = sum([losses[name] for name in set(loss_structure.flatten())])
+                self.manual_backward(loss)
+                # Gather gradients.
+                z_grads_cache = Structure(projection.input_grads)
+                heads_grads_cache = Structure(projection.grads)
+                assert z_grads_cache.size == loss_structure.size
+                assert heads_grads_cache.size == loss_structure.size
+        else:
+            # Compute losses without backward.
+            outputs = self._apply_to_outputs(embeddings, self._loss_projection)  # (B, L, D).
+            losses, metrics = self._loss(outputs, targets)
 
         def closure(down, weights, retain_graph=False, stage=None):
             opt.zero_grad()
             if opt.encoder_decoder:
-                z.payload.grad = None
+                embeddings.payload.grad = None
             assert len(weights) == len(self.hpo_losses)
-            downstream_loss = sum([w * losses[name] for name, w in self.downstream_loss.items()])
-            loss = sum([w * losses[k] for k, w in zip(self.hpo_losses, weights)], down * downstream_loss)
-            self.manual_backward(loss, retain_graph=retain_graph)
-            if stage == HPO_STAGE_DOWNSTREAM:
-                metrics["hpo_grad_norm_downstream"] = self._get_grad_norm(warn_empty_grads=False)
-            elif isinstance(stage, int):
-                metrics[f"hpo_grad_norm_weight_{self.hpo_losses[stage]}"] = self._get_grad_norm(warn_empty_grads=False)
+            if use_cached_grads:
+                # Set gradients from the cache.
+                named_weights = {name: w * down for name, w in self.downstream_loss.items()} if down != 0 else {}
+                named_weights.update({self.hpo_losses[i]: w for i, w in enumerate(weights) if w != 0})
+                assert not (set(named_weights) - set(loss_structure.flatten()))
+                embeddings.payload.grad = sum(w * loss_structure.get_by_key(name, z_grads_cache)
+                                              for name, w in named_weights.items())
+                self._loss_projection.grads = loss_structure.replace_keys_with_values(
+                    {name: recursive_map(loss_structure.get_by_key(name, heads_grads_cache), lambda x: w * x)
+                     for name, w in named_weights.items()})
+            else:
+                # Do backward pass.
+                downstream_loss = sum([w * losses[name] for name, w in self.downstream_loss.items()])
+                loss = sum([w * losses[k] for k, w in zip(self.hpo_losses, weights)], down * downstream_loss)
+                self.manual_backward(loss, retain_graph=retain_graph)
+                if stage == HPO_STAGE_DOWNSTREAM:
+                    metrics["hpo_grad_norm_downstream"] = self._get_grad_norm(warn_empty_grads=False)
+                elif isinstance(stage, int):
+                    metrics[f"hpo_grad_norm_weight_{self.hpo_losses[stage]}"] = self._get_grad_norm(warn_empty_grads=False)
             if opt.encoder_decoder:
-                b, _, d = z.payload.shape
-                grads = z.payload.grad  # (B, L, D).
-                grads = to_sequence_length(grads, self.max_sequence_length)  # (B, L, D).
-                return grads.flatten()
+                return embeddings.payload.grad.flatten()
 
         if opt.encoder_decoder:
             def closure_encoder(z_grad):
                 opt.zero_grad()
-                b, _, d = z.payload.shape
+                b, _, d = embeddings.payload.shape
                 z_grad = z_grad.reshape(b, -1, d)
-                if z_grad.shape[1] >= embeddings.shape[1]:
-                    self.manual_backward(embeddings.payload, z_grad[:, :embeddings.shape[1]])
+                if z_grad.shape[1] >= encoder_embeddings.shape[1]:
+                    self.manual_backward(encoder_embeddings.payload, z_grad[:, :encoder_embeddings.shape[1]])
                 else:
-                    self.manual_backward(embeddings.payload[:, :z_grad.shape[1]], z_grad)
+                    self.manual_backward(encoder_embeddings.payload[:, :z_grad.shape[1]], z_grad)
         else:
             closure_encoder = None
 
         grad_clip_fn = lambda: self.clip_gradients(opt, gradient_clip_val=self.gradient_clip_val, gradient_clip_algorithm=self.trainer.gradient_clip_algorithm) if self.gradient_clip_val is not None else None
-        if opt.tune_on_val and dataloader_idx == 1:
+        if cache_val_step:
             opt.val_step(closure, after_backward_hook=grad_clip_fn)
         else:
             opt.hpo_step(closure, closure_encoder, after_backward_hook=grad_clip_fn)
