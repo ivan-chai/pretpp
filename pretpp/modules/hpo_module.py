@@ -145,7 +145,7 @@ class HPOModule(BaseModule):
             embeddings = PaddedBatch(self._embed_impl(inputs).unsqueeze(1),
                                      torch.ones_like(inputs.seq_lens))  # (B, 1, D).
         else:
-            embeddings, _ = self.forward(inputs)
+            embeddings, _ = self.forward_impl(inputs)
 
         if opt.encoder_decoder:
             # Detach embeddings.
@@ -167,6 +167,7 @@ class HPOModule(BaseModule):
                 outputs = self._apply_to_outputs(embeddings, projection)  # (B, L, D).
                 losses, metrics = self._loss(outputs, targets)
                 loss = sum([losses[name] for name in set(loss_structure.flatten())])
+                # Sync heads. Embedding grads stay local by design.
                 self.manual_backward(loss)
                 # Gather gradients.
                 z_grads_cache = Structure(projection.input_grads)
@@ -208,20 +209,24 @@ class HPOModule(BaseModule):
         if opt.encoder_decoder:
             def closure_encoder(z_grad):
                 opt.zero_grad()
-                b, _, d = embeddings.payload.shape
-                z_grad = z_grad.reshape(b, -1, d)
-                if z_grad.shape[1] >= encoder_embeddings.shape[1]:
-                    self.manual_backward(encoder_embeddings.payload, z_grad[:, :encoder_embeddings.shape[1]])
-                else:
-                    self.manual_backward(encoder_embeddings.payload[:, :z_grad.shape[1]], z_grad)
+                # DDP synchronization will be made in after_backward_hook.
+                encoder_embeddings.payload.backward(z_grad.reshape(*encoder_embeddings.payload.shape))
         else:
             closure_encoder = None
 
-        grad_clip_fn = lambda: self.clip_gradients(opt, gradient_clip_val=self.gradient_clip_val, gradient_clip_algorithm=self.trainer.gradient_clip_algorithm) if self.gradient_clip_val is not None else None
+        def after_backward_hook():
+            if self.gradient_clip_val is not None:
+                self.clip_gradients(opt, gradient_clip_val=self.gradient_clip_val, gradient_clip_algorithm=self.trainer.gradient_clip_algorithm)
+            if opt.encoder_decoder:
+                # Synchronize gradients in DDP.
+                with torch.enable_grad():
+                    zero_loss = 0 * sum(p.flatten()[0] for group in opt.param_groups for p in group["params"] if p.requires_grad)
+                    self.manual_backward(zero_loss)
+
         if cache_val_step:
-            opt.val_step(closure, after_backward_hook=grad_clip_fn)
+            opt.val_step(closure, after_backward_hook=after_backward_hook)
         else:
-            opt.hpo_step(closure, closure_encoder, after_backward_hook=grad_clip_fn)
+            opt.hpo_step(closure, closure_encoder, after_backward_hook=after_backward_hook)
             hpo_grads = self.loss_weights.grad
             if hpo_grads is not None:
                 hpo_grad_norm = torch.linalg.norm(hpo_grads)
