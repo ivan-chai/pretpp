@@ -1,6 +1,0 @@
-defaults:
-  - default_base
-  - _self_
-
-logger:
-  project: pretpp-rosbank-full-3s
