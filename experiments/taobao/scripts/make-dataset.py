@@ -1,22 +1,15 @@
 import argparse
-import math
 import os
 import pyspark.sql.functions as F
-from datasets import load_dataset
 from ptls.preprocessing import PysparkDataPreprocessor
-from pyspark.sql import SparkSession, Window
-from pyspark.sql.types import TimestampType
+from pyspark.sql import SparkSession, DataFrame
 from random import Random
 
 
-SEED = 42
-VAL_SIZE = 0.1
-TEST_SIZE = 0.1
-
-
 FILENAME = "tianchi_mobile_recommend_train_user.csv"
-TEST_DATE = "2014-12-12"
-
+BASE_DATE = "2014-11-18"
+SEED = 42
+VAL_SIZE = 0.15
 
 def parse_args():
     parser = argparse.ArgumentParser("Prepare and dump dataset to a parquet file.")
@@ -28,40 +21,58 @@ def load_transactions(root):
     spark = SparkSession.builder.getOrCreate()
     spark.conf.set("spark.sql.session.timeZone", "UTC")
 
-    # Read data.
     path = os.path.join(root, FILENAME)
-    transactions = spark.read.option("header", True).csv(path).select("user_id", "item_id", "behavior_type", "item_category", "time")
+    transactions = spark.read.option("header", True).csv(path).select(
+        "user_id", "item_id", "behavior_type", "item_category", "time"
+    )
     transactions = transactions.select(
-        F.col("user_id").cast("int").alias("id"),
+        F.col("user_id").cast("string").alias("user_id"),
         F.unix_timestamp(F.col("time"), format="yyyy-MM-dd HH").alias("timestamps"),
         F.col("item_category").cast("int").alias("labels"),
         F.col("behavior_type").cast("int").alias("types"),
         F.col("item_id").cast("int").alias("items")
     ).cache()
-    df = transactions.filter(F.col("timestamps") < F.unix_timestamp(F.lit(TEST_DATE), format="yyyy-MM-dd"))
-    df_target = transactions.filter(F.col("timestamps") >= F.unix_timestamp(F.lit(TEST_DATE), format="yyyy-MM-dd"))
-    df_target = df_target.select("id").distinct().withColumn("target", F.lit(1))
-
-    df = df.withColumn("timestamps", (F.col("timestamps") - F.unix_timestamp(F.lit("2014-11-18"), format="yyyy-MM-dd")) / (3600 * 24))
-    return df.cache(), df_target.cache()
+    return transactions
 
 
-def train_val_test_split(transactions):
-    """Select test set from the labeled subset of the dataset."""
-    data_ids = {row["id"] for row in transactions.select("id").distinct().collect()}
-    data_ids = list(sorted(list(data_ids)))
+def extract_data(transactions: DataFrame, user_suffix: str, start_date: str, mid_date: str, end_date: str):
+    """Extract a history window and payment targets for the following week.
 
-    Random(SEED).shuffle(data_ids)
-    n_clients_test = int(len(data_ids) * TEST_SIZE)
-    n_clients_val = int(len(data_ids) * VAL_SIZE)
-    test_ids = set(data_ids[:n_clients_test])
-    val_ids = set(data_ids[n_clients_test:n_clients_test + n_clients_val])
-    train_ids = set(data_ids[n_clients_test + n_clients_val:])
+    Returns (hist, targets) where hist is event-level and targets is per-client.
+    """
+    base_ts = F.unix_timestamp(F.lit(BASE_DATE), format="yyyy-MM-dd")
+    start_ts = F.unix_timestamp(F.lit(start_date), format="yyyy-MM-dd")
+    mid_ts = F.unix_timestamp(F.lit(mid_date), format="yyyy-MM-dd")
+    end_ts = F.unix_timestamp(F.lit(end_date), format="yyyy-MM-dd")
 
-    testset = transactions.filter(transactions["id"].isin(test_ids))
-    valset = transactions.filter(transactions["id"].isin(val_ids))
-    trainset = transactions.filter(transactions["id"].isin(train_ids))
-    return trainset.persist(), valset.persist(), testset.persist()
+    hist = (
+        transactions
+        .filter((F.col("timestamps") >= start_ts) & (F.col("timestamps") < mid_ts))
+        .withColumn("id", F.concat(F.col("user_id"), F.lit(user_suffix)))
+        .withColumn("timestamps", (F.col("timestamps") - base_ts) / (3600 * 24))
+        .drop("user_id")
+    )
+
+    targets = (
+        transactions
+        .filter(
+            (F.col("timestamps") >= mid_ts) & (F.col("timestamps") < end_ts) & (F.col("types") == 4)
+        )
+        .select(F.concat(F.col("user_id"), F.lit(user_suffix)).alias("id"))
+        .distinct()
+        .withColumn("target", F.lit(1))
+    )
+
+    return hist, targets
+
+
+def train_val_split(train):
+    all_ids = sorted(row["id"] for row in train.select("id").collect())
+    Random(SEED).shuffle(all_ids)
+    n_val = int(len(all_ids) * VAL_SIZE)
+    val_ids = set(all_ids[:n_val])
+    train_ids = set(all_ids[n_val:])
+    return train.filter(train["id"].isin(train_ids)), train.filter(train["id"].isin(val_ids))
 
 
 def dump_parquet(df, path, n_partitions):
@@ -70,10 +81,19 @@ def dump_parquet(df, path, n_partitions):
 
 def main(args):
     print("Load")
-    transactions, targets = load_transactions(args.root)
+    transactions = load_transactions(args.root)
+
+    print("Extract windows")
+    hist1, targets1 = extract_data(transactions, "_1", "2014-11-18", "2014-11-25", "2014-12-02")
+    hist2, targets2 = extract_data(transactions, "_2", "2014-11-25", "2014-12-02", "2014-12-09")
+    df_train_raw = hist1.union(hist2)
+    train_targets = targets1.union(targets2)
+    df_test_raw, test_targets = extract_data(transactions, "_3", "2014-12-02", "2014-12-09", "2014-12-16")
 
     print("Transform")
-    transactions = transactions.withColumn("order", F.struct("timestamps", "items"))
+    df_train_raw = df_train_raw.withColumn("order", F.struct("timestamps", "items"))
+    df_test_raw = df_test_raw.withColumn("order", F.struct("timestamps", "items"))
+
     preprocessor = PysparkDataPreprocessor(
         col_id="id",
         col_event_time="order",
@@ -82,15 +102,18 @@ def main(args):
         category_transformation="frequency",
         cols_identity=["timestamps"]
     )
-    transactions = preprocessor.fit_transform(transactions).drop("order", "event_time")  # id, timestamps, labels, types.
-    transactions = transactions.join(targets, on="id", how="left").fillna(0).persist()
-    print("N clients:", transactions.count())
+    combined = preprocessor.fit_transform(df_train_raw).drop("order", "event_time")
+    combined = combined.join(train_targets, on="id", how="left").fillna(0, subset=["target"]).persist()
+    test = preprocessor.transform(df_test_raw).drop("order", "event_time")
+    test = test.join(test_targets, on="id", how="left").fillna(0, subset=["target"]).persist()
 
-    print("Split")
-    # Split.
-    train, val, test = train_val_test_split(transactions)
+    print("Split train/val")
+    train, val = train_val_split(combined)
 
-    # Dump.
+    print("N train clients:", train.count())
+    print("N val clients:", val.count())
+    print("N test clients:", test.count())
+
     train_path = os.path.join(args.root, "train.parquet")
     val_path = os.path.join(args.root, "val.parquet")
     test_path = os.path.join(args.root, "test.parquet")

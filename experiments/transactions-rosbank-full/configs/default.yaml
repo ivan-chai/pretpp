@@ -136,7 +136,7 @@ module:
 
 trainer:
   accelerator: cuda
-  devices: 1
+  devices: 2
   max_epochs: 120
   enable_checkpointing: true
   precision: bf16-mixed
