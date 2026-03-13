@@ -2,7 +2,7 @@ import argparse
 import os
 import pyspark.sql.functions as F
 from ptls.preprocessing import PysparkDataPreprocessor
-from pyspark.sql import SparkSession, DataFrame, Window
+from pyspark.sql import SparkSession, DataFrame
 from random import Random
 
 
@@ -10,8 +10,6 @@ FILENAME = "tianchi_mobile_recommend_train_user.csv"
 BASE_DATE = "2014-11-18"
 SEED = 42
 VAL_SIZE = 0.15
-ITEM_OTHER_ID = 10001
-
 
 def parse_args():
     parser = argparse.ArgumentParser("Prepare and dump dataset to a parquet file.")
@@ -68,32 +66,6 @@ def extract_data(transactions: DataFrame, user_suffix: str, start_date: str, mid
     return hist, targets
 
 
-def make_item_encoding(train_raw: DataFrame) -> DataFrame:
-    """Build item frequency encoding from event-level training data.
-
-    Returns a DataFrame with columns (items, item_code) where item_code is
-    the frequency rank starting at 1 (most frequent). Ranks >= ITEM_OTHER_ID
-    are clamped to ITEM_OTHER_ID, which also serves as the code for unseen items.
-    """
-    window = Window.orderBy(F.col("count").desc(), F.col("items").asc())
-    return (
-        train_raw
-        .groupBy("items").count()
-        .withColumn("item_code", F.least(F.row_number().over(window), F.lit(ITEM_OTHER_ID)))
-        .select("items", "item_code")
-    )
-
-
-def apply_item_encoding(df: DataFrame, encoding: DataFrame) -> DataFrame:
-    return (
-        df
-        .join(encoding, on="items", how="left")
-        .fillna(ITEM_OTHER_ID, subset=["item_code"])
-        .drop("items")
-        .withColumnRenamed("item_code", "items")
-    )
-
-
 def train_val_split(train):
     all_ids = sorted(row["id"] for row in train.select("id").collect())
     Random(SEED).shuffle(all_ids)
@@ -119,10 +91,6 @@ def main(args):
     df_test_raw, test_targets = extract_data(transactions, "_3", "2014-12-02", "2014-12-09", "2014-12-16")
 
     print("Transform")
-    item_encoding = make_item_encoding(df_train_raw).cache()
-    df_train_raw = apply_item_encoding(df_train_raw, item_encoding)
-    df_test_raw = apply_item_encoding(df_test_raw, item_encoding)
-
     df_train_raw = df_train_raw.withColumn("order", F.struct("timestamps", "items"))
     df_test_raw = df_test_raw.withColumn("order", F.struct("timestamps", "items"))
 
@@ -130,9 +98,9 @@ def main(args):
         col_id="id",
         col_event_time="order",
         event_time_transformation="none",
-        cols_category=["labels", "types"],
+        cols_category=["labels", "types", "items"],
         category_transformation="frequency",
-        cols_identity=["timestamps", "items"]
+        cols_identity=["timestamps"]
     )
     combined = preprocessor.fit_transform(df_train_raw).drop("order", "event_time")
     combined = combined.join(train_targets, on="id", how="left").fillna(0, subset=["target"]).persist()
