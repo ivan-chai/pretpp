@@ -1,6 +1,0 @@
-defaults:
-  - default_base
-  - _self_
-
-logger:
-  project: pretpp-agepred-full-3s
