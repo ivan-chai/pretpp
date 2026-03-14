@@ -1,0 +1,14 @@
+date: '2026-03-14 06:16:45'
+num_seeds: 4
+test/downstream-accuracy: 0.6087500005960464
+test/downstream-accuracy-std: 0.004418237479566342
+test/loss: 77.87324333190918
+test/loss-std: 0.41677531758252667
+test/loss_coles: 77.87324333190918
+test/loss_coles-std: 0.41677531758252667
+val/downstream-accuracy: 0.6027659773826599
+val/downstream-accuracy-std: 0.0030164750931231917
+val/loss: 76.2188835144043
+val/loss-std: 0.3063703964010827
+val/loss_coles: 76.2188835144043
+val/loss_coles-std: 0.3063703964010827
