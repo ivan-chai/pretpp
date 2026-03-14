@@ -11,3 +11,6 @@ module:
         _partial_: true
         apply_probability: ${transformer_history_token_probability}
   aggregator: null
+
+trainer:
+  precision: 32-true
