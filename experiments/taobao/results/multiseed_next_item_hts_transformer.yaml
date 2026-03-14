@@ -1,0 +1,22 @@
+date: '2026-03-14 17:36:12'
+num_seeds: 5
+test/downstream-auroc: 0.7022260189056396
+test/downstream-auroc-std: 0.0019230684502143615
+test/loss: 2.5538462162017823
+test/loss-std: 0.01003568410050953
+test/loss_labels: 2.18561372756958
+test/loss_labels-std: 0.009905416658385548
+test/loss_timestamps: 0.13571990728378297
+test/loss_timestamps-std: 8.154421538875774e-05
+test/loss_types: 0.23251307010650635
+test/loss_types-std: 0.00029807116763592057
+val/downstream-auroc: 0.6955369710922241
+val/downstream-auroc-std: 0.001980845625186814
+val/loss: 2.4856003284454347
+val/loss-std: 0.009912526454452359
+val/loss_labels: 2.129351043701172
+val/loss_labels-std: 0.009724728812408923
+val/loss_timestamps: 0.1355336606502533
+val/loss_timestamps-std: 8.507986965736601e-05
+val/loss_types: 0.22071589529514313
+val/loss_types-std: 0.0003872831560772822

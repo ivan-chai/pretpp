@@ -1,14 +1,20 @@
-date: '2025-07-18 20:01:09'
-num_seeds: 5
-test/downstream: 0.874399995803833
-test/downstream-std: 0.001959587248765683
-test/loss: 47.282763671875
-test/loss-std: 0.8669582095877799
-test/loss_coles: 47.282763671875
-test/loss_coles-std: 0.8669582095877799
-val/downstream: 0.8781999945640564
-val/downstream-std: 0.002135412720775744
-val/loss: 47.3524169921875
-val/loss-std: 0.8362268489499305
-val/loss_coles: 47.3524169921875
-val/loss_coles-std: 0.8362268489499305
+date: '2026-03-13 05:07:40'
+num_seeds: 3
+test/downstream-auroc: 0.881432056427002
+test/downstream-auroc-std: 0.002414395103760826
+test/loss: 42.69662094116211
+test/loss-std: 0.41338273665371167
+test/loss_coles: 42.69662094116211
+test/loss_coles-std: 0.41338273665371167
+test/ptls-downstream: 0.8803000052769979
+test/ptls-downstream-std: 0.0007666666642762721
+test/ptls-downstream-std-std: 0.0001247218928886851
+val/downstream-auroc: 0.8891133864720663
+val/downstream-auroc-std: 0.001266059577806745
+val/loss: 42.927239735921226
+val/loss-std: 0.5606137254224498
+val/loss_coles: 42.927239735921226
+val/loss_coles-std: 0.5606137254224498
+val/ptls-downstream: 0.8830333352088928
+val/ptls-downstream-std: 0.0026333333225920796
+val/ptls-downstream-std-std: 0.0009533566015192066

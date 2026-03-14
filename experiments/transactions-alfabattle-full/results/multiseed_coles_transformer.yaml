@@ -1,0 +1,14 @@
+date: '2026-03-13 17:19:45'
+num_seeds: 2
+test/downstream-auroc: 0.7259361445903778
+test/downstream-auroc-std: 0.0005582869052886963
+test/loss: 40.6409969329834
+test/loss-std: 0.09953880310058594
+test/loss_coles: 40.6409969329834
+test/loss_coles-std: 0.09953880310058594
+val/downstream-auroc: 0.7328662872314453
+val/downstream-auroc-std: 0.0003597736358642578
+val/loss: 41.91453170776367
+val/loss-std: 0.11870193481445312
+val/loss_coles: 41.91453170776367
+val/loss_coles-std: 0.11870193481445312
