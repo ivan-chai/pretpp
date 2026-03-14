@@ -4,6 +4,22 @@ from hotpp.data import PaddedBatch
 from .base import BaseLoss
 
 
+def repeat_interleave(tensor_or_list, repeats):
+    if isinstance(tensor_or_list, torch.Tensor):
+        return tensor_or_list.repeat_interleave(repeats)
+    elif isinstance(tensor_or_list, list):
+        return [x for x in tensor_or_list for _ in range(repeats)]
+    raise ValueError(f"Unknown input type: {tensor_or_list}")
+
+
+def to_number(keys, device=None):
+    if isinstance(keys, torch.Tensor):
+        return keys
+    key_to_num = {key: i for i, key in enumerate(set(keys))}
+    result = [key_to_num[key] for key in keys]
+    return torch.tensor(result, device=device)
+
+
 class ColesLoss(BaseLoss):
     """Contrastive pretrainer.
 
@@ -96,7 +112,7 @@ class ColesLoss(BaseLoss):
         new_l = sample_sizes.max().item()
         indices = (offsets[:, :, None] + torch.arange(new_l, device=device)[None, None]).clip(max=l - 1)  # (B, N, L').
 
-        new_inputs = {k: v.repeat_interleave(n) for k, v in inputs.payload.items() if k not in inputs.seq_names}  # (BN).
+        new_inputs = {k: repeat_interleave(v, n) for k, v in inputs.payload.items() if k not in inputs.seq_names}  # (BN).
         # Need: (B, N, L').
         for k in inputs.seq_names:
             v = inputs.payload[k]  # (B, L).
@@ -131,7 +147,7 @@ class ColesLoss(BaseLoss):
             if outputs.shape[1] != 1:
                 raise NotImplementedError("Expected aggregated embedding with shape (B, 1, C).")
             outputs = outputs.squeeze(1)
-        loss = self.coles_loss(outputs, targets)
+        loss = self.coles_loss(outputs, to_number(targets, device=outputs.device))
         losses = {"coles": loss}
         metrics = {}
         return losses, metrics
