@@ -12,3 +12,6 @@ module:
         apply_probability: ${transformer_history_token_probability}
         positions: ${transformer_history_token_positions}
   aggregator: null
+
+trainer:
+  precision: 32-true

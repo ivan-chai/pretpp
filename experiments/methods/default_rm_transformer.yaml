@@ -10,3 +10,6 @@ module:
       n_tokens: 3
       multitoken: true
   aggregator: null
+
+trainer:
+  precision: 32-true

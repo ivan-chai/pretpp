@@ -11,3 +11,6 @@ module:
       global_frequency: 0
       causal: false
   aggregator: null
+
+trainer:
+  precision: 32-true
