@@ -1,0 +1,21 @@
+defaults:
+  - mtl_loss
+  - _self_
+
+module:
+  _target_: pretpp.modules.HPOModule
+  hpo_losses:
+    - loss_0_labels
+    - loss_0_timestamps
+    - loss_0_types
+  cache_embedding_gradients: true
+  hp_group_params:
+    lr: 0.01
+    betas: [0, 0.99]
+  hpo_params:
+    algorithm: sgd
+    encoder_decoder: true
+  downstream_loss: loss_1_target
+
+trainer:
+  precision: 32-true
