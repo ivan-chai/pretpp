@@ -12,9 +12,11 @@ module:
     - loss_0_timestamps
     - loss_0_labels
     - loss_0_types
+  hp_group_params:
+    lr: 0.01
+    betas: [0, 0.99]
   hpo_params:
     algorithm: sgd
-    encoder_decoder: true
   downstream_loss: loss_1_target
 
 trainer:
