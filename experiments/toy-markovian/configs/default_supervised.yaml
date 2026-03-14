@@ -21,8 +21,3 @@ module:
     apply_to_tokens: last
   val_metric: ${metric}
   test_metric: ${metric}
-
-trainer:
-  model_selection:
-    metric: val/accuracy-target
-    mode: max
