@@ -16,3 +16,6 @@ module:
     algorithm: sgd
     encoder_decoder: true
   downstream_loss: loss_1_target
+
+trainer:
+  precision: 32-true

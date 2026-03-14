@@ -23,3 +23,6 @@ module:
       downstream: 0
       cov: 0.99
   downstream_loss: loss_1_target_flag
+
+trainer:
+  precision: 32-true
