@@ -1,7 +1,1 @@
-defaults:
-  - default
-  - default_transformer
-  - default_hpo
-  - _self_
-
-name: ntp_cls_hpo_transformer
+../../methods/ntp_cls_hpo_transformer.yaml
