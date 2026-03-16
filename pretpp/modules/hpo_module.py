@@ -198,7 +198,11 @@ class HPOModule(BaseModule):
                 # Do backward pass.
                 downstream_loss = sum([w * losses[name] for name, w in self.downstream_loss.items()])
                 loss = sum([w * losses[k] for k, w in zip(self.hpo_losses, weights)], down * downstream_loss)
-                self.manual_backward(loss, retain_graph=retain_graph)
+                if self.loss_weights.requires_grad:
+                    if self.loss_weights.grad is None:
+                        self.loss_weights.grad = torch.zeros_like(self.loss_weights)
+                    loss = loss + self.loss_weights[0] * 0  # Add to graph for correct DDP synchronization.
+                self.backward(loss, retain_graph=retain_graph)
                 if stage == HPO_STAGE_DOWNSTREAM:
                     metrics["hpo_grad_norm_downstream"] = self._get_grad_norm(warn_empty_grads=False)
                 elif isinstance(stage, int):
@@ -215,13 +219,13 @@ class HPOModule(BaseModule):
             closure_encoder = None
 
         def after_backward_hook():
-            if self.gradient_clip_val is not None:
-                self.clip_gradients(opt, gradient_clip_val=self.gradient_clip_val, gradient_clip_algorithm=self.trainer.gradient_clip_algorithm)
             if opt.encoder_decoder:
                 # Synchronize gradients in DDP.
                 with torch.enable_grad():
                     zero_loss = 0 * sum(p.flatten()[0] for group in opt.param_groups for p in group["params"] if p.requires_grad)
                     self.manual_backward(zero_loss)
+            if self.gradient_clip_val is not None:
+                self.clip_gradients(opt, gradient_clip_val=self.gradient_clip_val, gradient_clip_algorithm=self.trainer.gradient_clip_algorithm)
 
         if cache_val_step:
             opt.val_step(closure, after_backward_hook=after_backward_hook)
