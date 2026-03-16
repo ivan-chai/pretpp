@@ -1,3 +1,7 @@
+defaults:
+  - next_item_loss
+  - _self_
+
 module:
   loss:
     losses:

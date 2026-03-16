@@ -1,16 +1,13 @@
+defaults:
+  - next_item_loss
+  - _self_
+
 module:
   loss:
-    _target_: pretpp.losses.NextItemLoss
     losses:
       timestamps:
-        _target_: hotpp.losses.TimeMAELoss
-        max_delta: ${max_time_delta}
-        smoothing: 1
         grad_scale: null
       labels:
-        _target_: hotpp.losses.CrossEntropyLoss
-        num_classes: ${num_classes}
+        grad_scale: null
       types:
-        _target_: hotpp.losses.CrossEntropyLoss
-        num_classes: 5
         grad_scale: null
