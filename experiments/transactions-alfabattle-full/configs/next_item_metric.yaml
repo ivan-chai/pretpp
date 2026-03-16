@@ -1,11 +1,1 @@
-defaults:
-  - next_item
-  - _self_
-
-name: next_item_metric
-
-module:
-  head_partial:
-    _target_: pretpp.nn.NormalizationHead
-    _partial_: true
-  loss_projection_partial: ${metric_head}
+../../methods/next_item_metric.yaml
