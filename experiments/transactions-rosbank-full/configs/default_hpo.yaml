@@ -5,6 +5,7 @@ defaults:
 data_module:
   _target_: pretpp.data.InterleavedDataModule
   val_period: 2
+  num_workers: 1  # Very small valset, prevent StopIteration.
 
 module:
   _target_: pretpp.modules.HPOModule
