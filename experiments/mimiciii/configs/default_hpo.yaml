@@ -21,3 +21,4 @@ module:
 
 trainer:
   precision: 32-true
+  strategy: ddp_find_unused_parameters_true
