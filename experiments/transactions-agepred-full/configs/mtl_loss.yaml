@@ -6,7 +6,6 @@ metric:
     - target
 
 module:
-  _target_: pretpp.modules.BaseModule
   loss_projection_partial:
     _target_: pretpp.nn.CatHead
     _partial_: true

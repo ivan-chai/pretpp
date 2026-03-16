@@ -1,0 +1,9 @@
+module:
+  loss:
+    losses:
+      timestamps:
+        grad_scale: null
+      labels:
+        grad_scale: null
+      log_amount:
+        grad_scale: null
