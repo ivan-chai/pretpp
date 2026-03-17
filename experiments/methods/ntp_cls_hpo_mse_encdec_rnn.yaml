@@ -1,0 +1,12 @@
+defaults:
+  - default
+  - default_rnn
+  - default_hpo_encdec
+  - _self_
+
+name: ntp_cls_hpo_mse_encdec_rnn
+
+module:
+  hpo_params:
+    algorithm: mse
+    ema: 0.9
