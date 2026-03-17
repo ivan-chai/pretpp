@@ -1,0 +1,18 @@
+date: '2026-03-16 16:29:39'
+num_seeds: 5
+test/downstream-accuracy: 0.7364000082015991
+test/downstream-accuracy-std: 0.015615372649295255
+test/downstream-auroc: 0.803063428401947
+test/downstream-auroc-std: 0.012584846682488285
+test/loss: 241.61603393554688
+test/loss-std: 69.76917186217399
+test/loss_coles: 241.61603393554688
+test/loss_coles-std: 69.76917186217399
+val/downstream-accuracy: 0.7550515532493591
+val/downstream-accuracy-std: 0.0039980906532228215
+val/downstream-auroc: 0.827069365978241
+val/downstream-auroc-std: 0.0013348004985860831
+val/loss: 215.28970031738282
+val/loss-std: 66.18140106961228
+val/loss_coles: 215.28970031738282
+val/loss_coles-std: 66.18140106961228
