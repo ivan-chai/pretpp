@@ -201,10 +201,6 @@ class HPOModule(BaseModule):
                 # Do backward pass.
                 downstream_loss = sum([w * losses[name] for name, w in self.downstream_loss.items()])
                 loss = sum([w * losses[k] for k, w in zip(self.hpo_losses, weights)], down * downstream_loss)
-                if self.loss_weights.requires_grad:
-                    if self.loss_weights.grad is None:
-                        self.loss_weights.grad = torch.zeros_like(self.loss_weights)
-                    loss = loss + self.loss_weights[0] * 0  # Add to graph for correct DDP synchronization.
                 # DDP synchronization will be made in after_backward_hook.
                 with self._no_sync():
                     self.manual_backward(loss, retain_graph=retain_graph)
