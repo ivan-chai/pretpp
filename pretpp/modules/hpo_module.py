@@ -6,6 +6,7 @@ import yaml
 import os
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
+from contextlib import contextmanager
 from omegaconf import OmegaConf
 from pytorch_lightning.callbacks import ModelCheckpoint
 
@@ -167,8 +168,10 @@ class HPOModule(BaseModule):
                 outputs = self._apply_to_outputs(embeddings, projection)  # (B, L, D).
                 losses, metrics = self._loss(outputs, targets)
                 loss = sum([losses[name] for name in set(loss_structure.flatten())])
-                # Sync heads. Embedding grads stay local by design.
-                self.manual_backward(loss)
+                # DDP synchronization will be made in after_backward_hook.
+                # NOTE: embedding gradients must not be synchronized.
+                with self._no_sync():
+                    self.manual_backward(loss)
                 # Gather gradients.
                 z_grads_cache = Structure(projection.input_grads)
                 heads_grads_cache = Structure(projection.grads)
@@ -202,7 +205,9 @@ class HPOModule(BaseModule):
                     if self.loss_weights.grad is None:
                         self.loss_weights.grad = torch.zeros_like(self.loss_weights)
                     loss = loss + self.loss_weights[0] * 0  # Add to graph for correct DDP synchronization.
-                self.backward(loss, retain_graph=retain_graph)
+                # DDP synchronization will be made in after_backward_hook.
+                with self._no_sync():
+                    self.manual_backward(loss, retain_graph=retain_graph)
                 if stage == HPO_STAGE_DOWNSTREAM:
                     metrics["hpo_grad_norm_downstream"] = self._get_grad_norm(warn_empty_grads=False)
                 elif isinstance(stage, int):
@@ -219,11 +224,10 @@ class HPOModule(BaseModule):
             closure_encoder = None
 
         def after_backward_hook():
-            if opt.encoder_decoder:
-                # Synchronize gradients in DDP.
-                with torch.enable_grad():
-                    zero_loss = 0 * sum(p.flatten()[0] for group in opt.param_groups for p in group["params"] if p.requires_grad)
-                    self.manual_backward(zero_loss)
+            # Synchronize gradients in DDP.
+            with torch.enable_grad():
+                zero_loss = 0 * sum(p.flatten()[0] for p in self.parameters())
+                self.manual_backward(zero_loss)
             if self.gradient_clip_val is not None:
                 self.clip_gradients(opt, gradient_clip_val=self.gradient_clip_val, gradient_clip_algorithm=self.trainer.gradient_clip_algorithm)
 
@@ -295,3 +299,14 @@ class HPOModule(BaseModule):
             if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
                 scheduler["monitor"] = "val/loss"  # TODO: get metric from trainer.
             return [optimizer], [scheduler]
+
+    @contextmanager
+    def _no_sync(self):
+        """Safely get no_sync regardless of strategy."""
+        # self.trainer.model is the strategy-wrapped model (DDP, FSDP, etc.)
+        if hasattr(self.trainer.model, "no_sync"):
+            with self.trainer.model.no_sync():
+                yield
+        else:
+            # Single GPU, CPU, or strategy that doesn't need no_sync
+            yield
