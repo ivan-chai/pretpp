@@ -10,23 +10,29 @@ import sys
 from omegaconf import OmegaConf
 
 
-def pass_signal(pid, sig):
-    def handler(*args, **kwargs):
-        os.kill(pid, sig)
-        sys.exit(1)
-    signal.signal(sig, handler)
+def close_child(pid):
+    try:
+        os.kill(pid, signal.SIGINT)
+    except ProcessLookupError:
+        pass
 
 
-def close_child_handler(pid, normal_handler=None):
-    if normal_handler is not None:
-        atexit.register(normal_handler)
+def append_signal(sig, fn):
+    old = None
+    if callable(signal.getsignal(sig)):
+        old = signal.getsignal(sig)
 
-    signals = [signal.SIGINT]
-    if sys.platform != "win32":
-        signals.append(signal.SIGTERM)
+    def helper(*args, **kwargs):
+        if old is not None:
+            old(*args, **kwargs)
+        fn()
+    signal.signal(sig, helper)
 
-    for sig in signals:
-        pass_signal(pid, sig)
+
+def close_child_handler(pid):
+    atexit.register(lambda: close_child(pid))
+    append_signal(signal.SIGINT, lambda: close_child(pid))
+    append_signal(signal.SIGTERM, lambda: close_child(pid))
 
 
 class FakeDataModule:
@@ -79,11 +85,7 @@ def evaluation_subprocess():
     worker = mp.Process(target=evaluation_worker, args=(config, tasks_queue, results_queue))
     worker.start()
 
-    def close_subprocess():
-        tasks_queue.put(None)
-        worker.join()
-
-    close_child_handler(worker.pid, close_subprocess)
+    close_child_handler(worker.pid)
 
     try:
         for line in sys.stdin:

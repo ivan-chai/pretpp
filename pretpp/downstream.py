@@ -1,14 +1,15 @@
 import copy
 import json
 import logging
-import multiprocessing as mp
 import os
 import pickle as pkl
 import pytorch_lightning as pl
 import queue
+import signal
 import subprocess as sp
 import sys
 import tempfile
+import threading
 import time
 import torch
 import warnings
@@ -48,38 +49,36 @@ def get_worker_env():
     return env
 
 
-def evaluation_worker(config, tasks_queue, results_queue):
-    if not isinstance(config, dict):
-        config = OmegaConf.to_container(config)
-    worker = sp.Popen([sys.executable, "-m", "pretpp.downstream_worker"],
-                      env=get_worker_env(),
-                      close_fds=True,
-                      start_new_session=True,
-                      stdin=sp.PIPE,
-                      stdout=sp.PIPE,
-                      text=True)
-    def close_subprocess():
-        print("null", file=worker.stdin)
-        worker.stdin.flush()
-        worker.wait()
-
-    close_child_handler(worker.pid, close_subprocess)
+def downstream_worker_communicator(worker, config, tasks_queue, results_queue):
     try:
         print(json.dumps(config, indent=None, separators=(",", ":")), file=worker.stdin)
         worker.stdin.flush()
+        n_active = 0
         while True:
-            task = tasks_queue.get()
-            if worker.poll() is not None:
+            if worker.poll() is None:
+                # Put new tasks.
+                try:
+                    task = tasks_queue.get(block=False)
+                    print(json.dumps(task, indent=None, separators=(",", ":")), file=worker.stdin)
+                    worker.stdin.flush()
+                    if task is None:
+                        # KILL.
+                        break
+                    n_active += 1
+                except queue.Empty:
+                    pass
+            elif n_active == 0:
                 raise Exception(f"Worker finished with code {worker.poll()}")
-            print(json.dumps(task, indent=None, separators=(",", ":")), file=worker.stdin)
-            worker.stdin.flush()
-            if task is None:
-                # KILL.
-                break
-            result = json.loads(worker.stdout.readline())
-            if isinstance(result, dict) and ("error" in result):
-                raise Exception(result["error"])
-            results_queue.put(result)
+
+            # Get fininshed tasks.
+            if n_active > 0:
+                result = json.loads(worker.stdout.readline())
+                if isinstance(result, dict) and ("error" in result):
+                    raise Exception(result["error"])
+                results_queue.put(result)
+                n_active -= 1
+            else:
+                time.sleep(1)
     except Exception as e:
         results_queue.put(e)
 
@@ -159,23 +158,26 @@ class DownstreamEvaluator:
         maximize: Whether to maximize or miminize the monitor metric.
     """
 
-    def __init__(self, root, downstream_config, monitor=None, maximize=False):
-        self.config = downstream_config
+    def __init__(self, root, config, monitor=None, maximize=False):
+        if not isinstance(config, dict):
+            config = OmegaConf.to_container(config)
         self.root = root
         self.monitor = monitor
 
-        self.tasks_queue = mp.Queue()
-        self.results_queue = mp.Queue()
-        self.worker = mp.Process(target=evaluation_worker, args=(self.config, self.tasks_queue, self.results_queue))
-        self.worker.start()
+        self.worker = sp.Popen([sys.executable, "-m", "pretpp.downstream_worker"],
+                               env=get_worker_env(),
+                               close_fds=True,
+                               start_new_session=True,
+                               stdin=sp.PIPE,
+                               stdout=sp.PIPE,
+                               text=True)
+        close_child_handler(self.worker.pid)
+        self.tasks_queue = queue.Queue()
+        self.results_queue = queue.Queue()
+        self.communicator = threading.Thread(target=downstream_worker_communicator,
+                                             args=(self.worker, config, self.tasks_queue, self.results_queue))
+        self.communicator.start()
 
-        def close_subprocess():
-            self.tasks_queue.put(None)
-            self.worker.join()
-
-        close_child_handler(self.worker.pid, close_subprocess)
-
-        self.finished = False
         self.num_evaluations = 0
         self.last_seen_step = -1
         self.results = []
@@ -224,18 +226,12 @@ class DownstreamEvaluator:
         step, checkpoint_path = self.checkpoints.get_best()
         return step, checkpoint_path
 
-    def destroy(self):
-        """Stop all subprocesses."""
-        if self.finished:
-            return
-        if self.worker.is_alive():
-            self.worker.kill()
-        self.tasks_queue.close()
-        self.results_queue.close()
-        self.finished = True
-
     def __del__(self):
-        self.destroy()
+        """Stop all subprocesses and join threads."""
+        if self.worker.poll() is None:
+            self.worker.send_signal(signal.SIGINT)
+            self.worker.wait()
+        self.communicator.join()
 
     def _receive(self, wait=False):
         messaged = False
@@ -264,9 +260,7 @@ class DownstreamEvaluator:
                 break
 
     def _assert_alive(self):
-        if self.finished:
-            raise ValueError("Evaluator was finished")
-        if not self.worker.is_alive():
+        if self.worker.poll() is not None:
             try:
                 while True:
                     result = self.results_queue.get(block=False)
