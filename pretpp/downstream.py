@@ -230,7 +230,10 @@ class DownstreamEvaluator:
         """Stop all subprocesses and join threads."""
         if self.worker.poll() is None:
             self.worker.send_signal(signal.SIGINT)
-            self.worker.wait()
+            try:
+                self.worker.wait(timeout=1)
+            except sp.TimeoutExpired:
+                self.worker.kill()
         self.communicator.join()
 
     def _receive(self, wait=False):

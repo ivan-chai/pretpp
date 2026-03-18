@@ -23,9 +23,9 @@ def append_signal(sig, fn):
         old = signal.getsignal(sig)
 
     def helper(*args, **kwargs):
+        fn()
         if old is not None:
             old(*args, **kwargs)
-        fn()
     signal.signal(sig, helper)
 
 
