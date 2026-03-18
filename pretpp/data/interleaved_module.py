@@ -122,7 +122,7 @@ class InterleavedDataModule(HotppDataModule):
         self._val_period = val_period
 
     def train_dataloader(self, rank=None, world_size=None):
-        rank = self.trainer.local_rank if rank is None else rank
+        rank = self.trainer.global_rank if rank is None else rank
         world_size = self.trainer.world_size if world_size is None else world_size
         loader_params = {"drop_last": True,
                          "pin_memory": torch.cuda.is_available()}
@@ -155,34 +155,4 @@ class InterleavedDataModule(HotppDataModule):
         )
         loader = InterleavedLoader(train_loader, val_loader, val_period=self._val_period)
         loader.__setattr__("sampler", InterleavedSampler(train_dataset, val_dataset))  # Add set_epoch hook.
-        return loader
-
-    def val_dataloader(self, rank=None, world_size=None):
-        rank = self.trainer.local_rank if rank is None else rank
-        world_size = self.trainer.world_size if world_size is None else world_size
-        loader_params = {"pin_memory": torch.cuda.is_available()}
-        loader_params.update(self.val_loader_params)
-        parallelize = loader_params.pop("parallelize", DEFAULT_PARALLELIZM)
-        dataset = ShuffledDistributedDataset(self.val_data, rank=rank, world_size=world_size,
-                                             parallelize=parallelize)  # Disable shuffle.
-        loader = torch.utils.data.DataLoader(
-            dataset=dataset,
-            collate_fn=dataset.dataset.collate_fn,
-            **loader_params
-        )
-        return loader
-
-    def test_dataloader(self, rank=None, world_size=None):
-        rank = self.trainer.local_rank if rank is None else rank
-        world_size = self.trainer.world_size if world_size is None else world_size
-        loader_params = {"pin_memory": torch.cuda.is_available()}
-        loader_params.update(self.test_loader_params)
-        parallelize = loader_params.pop("parallelize", DEFAULT_PARALLELIZM)
-        dataset = ShuffledDistributedDataset(self.test_data, rank=rank, world_size=world_size,
-                                             parallelize=parallelize)  # Disable shuffle.
-        loader = torch.utils.data.DataLoader(
-            dataset=dataset,
-            collate_fn=dataset.dataset.collate_fn,
-            **loader_params
-        )
         return loader
