@@ -125,6 +125,8 @@ class InterleavedDataModule(HotppDataModule):
         rank = self.trainer.global_rank if rank is None else rank
         world_size = self.trainer.world_size if world_size is None else world_size
         loader_params = {"drop_last": True,
+                         "multiprocessing_context": "spawn",
+                         "persistent_workers": True,
                          "pin_memory": torch.cuda.is_available()}
         loader_params.update(self.train_loader_params)
         cache_size = loader_params.pop("cache_size", 4096)
