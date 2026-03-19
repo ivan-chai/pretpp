@@ -3,7 +3,7 @@ import math
 import pytorch_lightning as pl
 from pytorch_lightning.utilities._pytree import _tree_flatten
 from pytorch_lightning.utilities.combined_loader import CombinedLoader, _get_iterables_lengths, _ModeIterator
-from hotpp.data import PaddedBatch, get_default_loader_params
+from hotpp.data import PaddedBatch, update_loader_params_with_defaults
 from hotpp.data.dataset import ShuffledDistributedDataset, DEFAULT_PARALLELIZM
 from hotpp.data.module import HotppDataModule, HotppSampler
 
@@ -124,9 +124,7 @@ class InterleavedDataModule(HotppDataModule):
     def train_dataloader(self, rank=None, world_size=None):
         rank = self.trainer.global_rank if rank is None else rank
         world_size = self.trainer.world_size if world_size is None else world_size
-        loader_params = get_default_loader_params()
-        loader_params.update({"drop_last": True})
-        loader_params.update(self.train_loader_params)
+        loader_params = update_loader_params_with_defaults(self.train_loader_params, train=True)
         cache_size = loader_params.pop("cache_size", 4096)
         parallelize = loader_params.pop("parallelize", DEFAULT_PARALLELIZM)
         seed = loader_params.pop("seed", 0)
