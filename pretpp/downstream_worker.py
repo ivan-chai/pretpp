@@ -103,9 +103,10 @@ def evaluation_subprocess():
             print(json.dumps(result, indent=None, separators=(",", ":")), flush=True)
             if "error" in result:
                 break
-    except Exception as e:
-        result = {"error": str(e)}
-        print(json.dumps(result, indent=None, separators=(",", ":")), flush=True)
+    except (Exception, KeyboardInterrupt) as e:
+        if not isinstance(e, KeyboardInterrupt):
+            result = {"error": str(e)}
+            print(json.dumps(result, indent=None, separators=(",", ":")), flush=True)
 
 
 if __name__ == "__main__":

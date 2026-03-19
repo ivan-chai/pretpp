@@ -18,8 +18,8 @@ from omegaconf import OmegaConf
 from pathlib import Path
 from torchmetrics import Metric
 from torchmetrics.utilities import dim_zero_cat
-from hotpp.embed import embeddings_to_pandas, extract_embeddings, InferenceDataModule
-from hotpp.eval_downstream import extract_targets, targets_to_pandas
+from hotpp.common import InferenceDataModule
+from hotpp.eval_downstream import EmbeddingsAndTargetsExtractor
 
 from .downstream_worker import close_child_handler
 
@@ -49,36 +49,15 @@ def get_worker_env():
     return env
 
 
-def downstream_worker_communicator(worker, config, tasks_queue, results_queue):
+def downstream_worker_communicator(worker, results_queue):
+    """Async reader: forwards JSON lines from worker stdout to results_queue."""
     try:
-        print(json.dumps(config, indent=None, separators=(",", ":")), file=worker.stdin)
-        worker.stdin.flush()
-        n_active = 0
-        while True:
-            if worker.poll() is None:
-                # Put new tasks.
-                try:
-                    task = tasks_queue.get(block=False)
-                    print(json.dumps(task, indent=None, separators=(",", ":")), file=worker.stdin)
-                    worker.stdin.flush()
-                    if task is None:
-                        # KILL.
-                        break
-                    n_active += 1
-                except queue.Empty:
-                    pass
-            elif n_active == 0:
-                raise Exception(f"Worker finished with code {worker.poll()}")
-
-            # Get fininshed tasks.
-            if n_active > 0:
-                result = json.loads(worker.stdout.readline())
-                if isinstance(result, dict) and ("error" in result):
-                    raise Exception(result["error"])
-                results_queue.put(result)
-                n_active -= 1
-            else:
-                time.sleep(1)
+        for line in worker.stdout:
+            result = json.loads(line)
+            if isinstance(result, dict) and ("error" in result):
+                results_queue.put(Exception(result["error"]))
+                return
+            results_queue.put(result)
     except Exception as e:
         results_queue.put(e)
 
@@ -172,10 +151,12 @@ class DownstreamEvaluator:
                                stdout=sp.PIPE,
                                text=True)
         close_child_handler(self.worker.pid)
-        self.tasks_queue = queue.Queue()
+        print(json.dumps(config, indent=None, separators=(",", ":")), file=self.worker.stdin)
+        self.worker.stdin.flush()
         self.results_queue = queue.Queue()
         self.communicator = threading.Thread(target=downstream_worker_communicator,
-                                             args=(self.worker, config, self.tasks_queue, self.results_queue))
+                                             args=(self.worker, self.results_queue),
+                                             daemon=True)
         self.communicator.start()
 
         self.num_evaluations = 0
@@ -201,7 +182,8 @@ class DownstreamEvaluator:
         data_path = os.path.join(self.root, f"data-{step}.pkl")
         with open(data_path, "wb") as fp:
             pkl.dump({"embeddings": embeddings, "targets": targets}, fp)
-        self.tasks_queue.put((i, step, data_path))
+        print(json.dumps((i, step, data_path), indent=None, separators=(",", ":")), file=self.worker.stdin)
+        self.worker.stdin.flush()
         self.num_evaluations += 1
         self._receive()
 
@@ -229,12 +211,15 @@ class DownstreamEvaluator:
     def __del__(self):
         """Stop all subprocesses and join threads."""
         if self.worker.poll() is None:
-            self.worker.send_signal(signal.SIGINT)
+            try:
+                self.worker.stdin.close()
+            except Exception:
+                pass
             try:
                 self.worker.wait(timeout=1)
             except sp.TimeoutExpired:
                 self.worker.kill()
-        self.communicator.join()
+        self.communicator.join(timeout=1)
 
     def _receive(self, wait=False):
         messaged = False
@@ -320,12 +305,17 @@ class DownstreamCheckpointCallback(pl.callbacks.Checkpoint):
         self._monitor = monitor
         self._maximize = maximize
         self._evaluator = None
+        self._extractor = None
         self._run_stage = None
         self.best_model_path = None
 
     def setup(self, trainer, pl_module, stage):
         self._run_stage = stage
-        if trainer.global_rank == 0:
+        if self._extractor is None:
+            datamodule = trainer.datamodule.with_test_parameters()
+            splits = self._config.get("data_splits", datamodule.splits)
+            self._extractor = EmbeddingsAndTargetsExtractor(trainer, datamodule, splits=splits)
+        if trainer.global_rank == 0 and self._evaluator is None:
             self._evaluator = DownstreamEvaluator(self._root, self._config,
                                                   monitor=self._monitor, maximize=self._maximize)
 
@@ -373,20 +363,12 @@ class DownstreamCheckpointCallback(pl.callbacks.Checkpoint):
                 pl_module.load_state_dict(torch.load(self.best_model_path, weights_only=True)["state_dict"])
 
     def _run_downstream_evaluation(self, trainer, pl_module):
-        datamodule = trainer.datamodule.with_test_parameters()
-        id_field = datamodule.id_field
-        target_names = datamodule.train_data.global_target_fields
-        splits = self._config.get("data_splits", datamodule.splits)
-
         # Predict.
         embedder = EmbedderModule(pl_module, extra_features=self._config.get("extra_features", None))
-        embeddings = extract_embeddings(trainer, datamodule, embedder, splits)
-        _, targets = extract_targets(trainer, datamodule, splits)
+        embeddings, targets = self._extractor(embedder, pandas=True)
 
         # Run evaluation.
         if trainer.global_rank == 0:
-            embeddings = embeddings_to_pandas(id_field, embeddings)
-            targets = targets_to_pandas(id_field, target_names, targets)
             self._evaluator.run_async(pl_module.global_step, embeddings, targets, pl_module.state_dict())
 
     def _fetch_metrics(self, trainer, pl_module, wait=False, metric_prefix=None):
