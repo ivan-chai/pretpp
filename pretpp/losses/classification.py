@@ -9,7 +9,7 @@ class ClassificationLoss(BaseLoss):
     """Global target prediction loss.
 
     Args:
-        targets: A mapping from a target name to dictionary with "num_classes" and optional "weight" and "cast" fields.
+        targets: A mapping from a target name to dictionary with "num_classes" and optional "grad_scale" and "cast" fields.
         cls_token: A dictionary with field values for a CLS token (optional, typically for transformer models).
         overwrite_timestamp: Assign the latest timestamp to the CLS token.
         apply_to_tokens: Controls a subset of outputs to apply loss to. Either `last`, `all`, or `special`.
@@ -25,7 +25,7 @@ class ClassificationLoss(BaseLoss):
         for name, spec in targets.items():
             if "num_classes" not in spec:
                 raise ValueError("Need 'num_classes' for each target.")
-            unknown_fields = set(spec) - {"num_classes", "weight", "cast"}
+            unknown_fields = set(spec) - {"num_classes", "grad_scale", "cast"}
             if unknown_fields:
                 raise ValueError(f"Unknown fields in loss specification: {unknown_fields}")
         self._targets = targets
@@ -135,8 +135,8 @@ class ClassificationLoss(BaseLoss):
             if spec.get("cast", False):
                 target = target.long()
             losses[name] = torch.nn.functional.cross_entropy(logits.flatten(0, -2), target[:, None].expand(*logits.shape[:2]).flatten())
-            if spec.get("weight", 1) != 1:
-                losses[name] = ScaleGradient.apply(losses[name], spec["weight"])
+            if spec.get("grad_scale", 1) != 1:
+                losses[name] = ScaleGradient.apply(losses[name], spec["grad_scale"])
             with torch.no_grad():
                 last_logits = logits.take_along_dim(last[mask], 1).squeeze(1)  # (B, D).
                 metrics[f"batch-accuracy-{name}"] = (last_logits.argmax(-1) == target).float().mean()
