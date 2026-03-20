@@ -20,6 +20,10 @@ class NextItemLoss(BaseLoss):
         self._apply_to_tokens = apply_to_tokens
 
     @property
+    def structure(self):
+        return list(self._order) if len(self._order) > 1 else self._order[0]
+
+    @property
     def aggregate(self):
         return False
 

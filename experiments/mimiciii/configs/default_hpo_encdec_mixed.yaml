@@ -1,0 +1,7 @@
+defaults:
+  - default_hpo_encdec
+  - _self_
+
+module:
+  hpo_params:
+    encoder_downstream_weight: 1

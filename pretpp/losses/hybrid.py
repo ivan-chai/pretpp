@@ -1,7 +1,7 @@
 import torch
 
 from hotpp.data import PaddedBatch
-from .base import BaseLoss
+from .base import BaseLoss, recursive_map
 
 
 class HybridLoss(BaseLoss):
@@ -22,6 +22,16 @@ class HybridLoss(BaseLoss):
         self._prediction_loss = prediction_loss
         self._aggregator = aggregator
         self._truncate = truncate
+
+    @property
+    def structure(self):
+        result = []
+        for i, loss in enumerate(self._losses):
+            if hasattr(loss, "structure"):
+                result.append(recursive_map(loss.structure, lambda name: f"loss_{i}_{name}"))
+            else:
+                raise NotImplementedError(f"Unknown structure for {loss}")
+        return result
 
     @property
     def aggregate(self):

@@ -3,6 +3,15 @@ import torch
 from hotpp.data import PaddedBatch
 
 
+def recursive_map(data, func):
+    """Recursively applies a function to all leaf nodes in a structure."""
+    if isinstance(data, dict):
+        return {k: recursive_map(v, func) for k, v in data.items()}
+    elif isinstance(data, (list, tuple, set)):
+        return type(data)(recursive_map(item, func) for item in data)
+    return func(data)
+
+
 class BaseLoss(torch.nn.Module):
     @abstractmethod
     def prepare_batch(self, inputs, targets):

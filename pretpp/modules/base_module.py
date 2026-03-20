@@ -155,12 +155,16 @@ class BaseModule(pl.LightningModule):
             self._seq_encoder = self._seq_encoder.merge_and_unload()
         return result
 
-    def forward(self, x, return_states=False):
+    def forward_impl(self, x, return_states=False):
         """Extract embeddings."""
         seq_encoder = self._seq_encoder if not self._peft_applied else self._seq_encoder.base_model
         hiddens, states = seq_encoder(x, return_states=return_states)  # (B, L, D).
         outputs = self._apply_to_outputs(hiddens, self._head)
         return outputs, states
+
+    def forward(self, x, return_states=False):
+        """Extract embeddings."""
+        return self.forward_impl(x, return_states)
 
     def _embed_impl(self, inputs):
         if self._aggregator is None:
