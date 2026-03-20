@@ -8,4 +8,3 @@ name: next_item_transformer
 
 module:
   _target_: pretpp.modules.BaseModule
-  loss_projection_partial: ${head}

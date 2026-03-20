@@ -1,4 +1,15 @@
 module:
+  loss_projection_partial:
+    _target_: pretpp.nn.MultiHead  # labels.
+    _partial_: true
+    head_partial:
+      _target_: hotpp.nn.Head
+      _partial_: true
+      hidden_dims: [128]
+    head_output_sizes:
+      labels: ${num_classes}
+      timestamps: 1
+      log_amount: 1
   loss:
     _target_: pretpp.losses.NextItemLoss
     losses:

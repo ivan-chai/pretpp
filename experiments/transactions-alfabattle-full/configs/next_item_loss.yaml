@@ -1,4 +1,30 @@
 module:
+  loss_projection_partial:
+    _target_: pretpp.nn.MultiHead  # labels.
+    _partial_: true
+    head_partial:
+      _target_: hotpp.nn.Head
+      _partial_: true
+      hidden_dims: [128]
+    head_output_sizes:
+      card_type: 177
+      city: 170
+      country: 26
+      timestamps: 1
+      labels: ${num_classes}
+      currency: 13
+      operation_kind: 9
+      operation_type: 24
+      operation_type_group: 6
+      ecommerce_flag: 5
+      payment_system: 9
+      income_flag: 5
+      mcc_category: 30
+      day_of_week: 9
+      hour: 25
+      weekofyear: 55
+      log_amount: 1
+      log_hour_diff: 1
   loss:
     _target_: pretpp.losses.NextItemLoss
     losses:
