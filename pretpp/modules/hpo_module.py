@@ -188,6 +188,7 @@ class HPOModule(BaseModule):
                 embeddings.payload.grad = None
             assert len(weights) == len(self.hpo_losses)
             if use_cached_grads:
+                assert opt.encoder_decoder  # Need only heads gradients.
                 # Set gradients from the cache.
                 named_weights = {name: w * down for name, w in self.downstream_loss.items()} if down != 0 else {}
                 named_weights.update({self.hpo_losses[i]: w for i, w in enumerate(weights) if w != 0})
@@ -204,11 +205,17 @@ class HPOModule(BaseModule):
                 # DDP synchronization will be made in after_backward_hook.
                 with self._no_sync():
                     self.manual_backward(loss, retain_graph=retain_graph)
-                if stage == HPO_STAGE_DOWNSTREAM:
-                    metrics["hpo_grad_norm_downstream"] = self._get_grad_norm(warn_empty_grads=False)
-                elif isinstance(stage, int):
-                    metrics[f"hpo_grad_norm_weight_{self.hpo_losses[stage]}"] = self._get_grad_norm(warn_empty_grads=False)
+            if stage == HPO_STAGE_DOWNSTREAM:
+                metrics["hpo_grad_norm_downstream"] = self._get_grad_norm(warn_empty_grads=False)
+            elif isinstance(stage, int):
+                metrics[f"hpo_grad_norm_weight_{self.hpo_losses[stage]}"] = self._get_grad_norm(warn_empty_grads=False)
             if opt.encoder_decoder:
+                with torch.no_grad():
+                    emb_grad_norm = torch.linalg.norm(embeddings.payload.grad.flatten())
+                if stage == HPO_STAGE_DOWNSTREAM:
+                    metrics["hpo_emb_grad_norm_downstream"] = emb_grad_norm
+                elif isinstance(stage, int):
+                    metrics[f"hpo_emb_grad_norm_weight_{self.hpo_losses[stage]}"] = emb_grad_norm
                 return embeddings.payload.grad.flatten()
 
         if opt.encoder_decoder:
