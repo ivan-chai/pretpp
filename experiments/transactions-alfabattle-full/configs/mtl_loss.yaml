@@ -16,7 +16,6 @@ module:
           _target_: hotpp.nn.Head
           _partial_: true
           hidden_dims: [128]
-          use_batch_norm: true
         head_output_sizes:
           card_type: 177
           city: 170
@@ -40,7 +39,6 @@ module:
         _partial_: true
         output_size: ${num_downstream_classes}
         hidden_dims: [128]
-        use_batch_norm: true
   loss:
     _target_: pretpp.losses.HybridLoss
     prediction_loss: 1

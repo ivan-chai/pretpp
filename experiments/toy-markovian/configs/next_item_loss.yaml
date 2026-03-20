@@ -9,19 +9,12 @@ module:
     head_output_sizes:
       labels: ${num_classes}
       timestamps: 1
-      types: 5
   loss:
     _target_: pretpp.losses.NextItemLoss
     losses:
       timestamps:
         _target_: hotpp.losses.TimeMAELoss
         max_delta: ${max_time_delta}
-        smoothing: 1
-        grad_scale: 0.05
       labels:
         _target_: hotpp.losses.CrossEntropyLoss
         num_classes: ${num_classes}
-      types:
-        _target_: hotpp.losses.CrossEntropyLoss
-        num_classes: 5
-        grad_scale: 0.9
