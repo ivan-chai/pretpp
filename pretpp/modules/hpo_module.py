@@ -233,6 +233,7 @@ class HPOModule(BaseModule):
                 self.manual_backward(zero_loss)
             if self.gradient_clip_val is not None:
                 self.clip_gradients(opt, gradient_clip_val=self.gradient_clip_val, gradient_clip_algorithm=self.trainer.gradient_clip_algorithm)
+            self.log("grad_norm", self._get_grad_norm(), prog_bar=True)
 
         if cache_val_step:
             opt.val_step(closure, after_backward_hook=after_backward_hook)
@@ -254,6 +255,10 @@ class HPOModule(BaseModule):
             if config.reduce_on_plateau:
                 raise NotImplementedError("ReduceOnPlateau LR scheduler.")
             config.scheduler.step()
+
+    def on_before_optimizer_step(self, optimizer=None, optimizer_idx=None):
+        # Move grad_norm logging to after-backward-hook.
+        pass
 
     def on_train_epoch_end(self):
         super().on_train_epoch_end()
