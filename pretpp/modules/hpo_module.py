@@ -133,10 +133,10 @@ class HPOModule(BaseModule):
     def training_step(self, batch, batch_idx):
         dataloader_idx = batch[0].payload.get("_dataloader_idx", None)
         opt = self.optimizers()
-        if opt.tune_on_val and ((dataloader_idx is None) or (dataloader_idx > 1)):
-            raise ValueError(f"When tune_on_val is used, there must be exact 2 dataloaders. Got {dataloader_idx}")
+        if opt.use_validation and ((dataloader_idx is None) or (dataloader_idx > 1)):
+            raise ValueError(f"When validation set is used for tuning, there must be exact 2 dataloaders. Got {dataloader_idx}")
 
-        cache_val_step = opt.tune_on_val and dataloader_idx == 1
+        do_val_step = opt.use_validation and dataloader_idx == 1
 
         x, y = batch
         inputs, targets = self._loss.prepare_batch(x, y)
@@ -154,7 +154,7 @@ class HPOModule(BaseModule):
             embeddings = PaddedBatch(encoder_embeddings.payload.detach(), encoder_embeddings.seq_lens)
             embeddings.payload.requires_grad = True
 
-        use_cached_grads = (not cache_val_step) and opt.encoder_decoder and self.cache_embedding_gradients
+        use_cached_grads = (not do_val_step) and opt.encoder_decoder and self.cache_embedding_gradients
 
         if use_cached_grads:
             # Cache gradients for each head.
@@ -216,7 +216,7 @@ class HPOModule(BaseModule):
                     metrics["hpo_emb_grad_norm_downstream"] = emb_grad_norm
                 elif isinstance(stage, int):
                     metrics[f"hpo_emb_grad_norm_weight_{self.hpo_losses[stage]}"] = emb_grad_norm
-                return embeddings.payload.grad.flatten()
+                return embeddings.payload
 
         if opt.encoder_decoder:
             def closure_encoder(z_grad):
@@ -235,7 +235,7 @@ class HPOModule(BaseModule):
                 self.clip_gradients(opt, gradient_clip_val=self.gradient_clip_val, gradient_clip_algorithm=self.trainer.gradient_clip_algorithm)
             self.log("grad_norm", self._get_grad_norm(), prog_bar=True)
 
-        if cache_val_step:
+        if do_val_step:
             opt.val_step(closure, after_backward_hook=after_backward_hook)
         else:
             opt.hpo_step(closure, closure_encoder, after_backward_hook=after_backward_hook)
