@@ -150,6 +150,7 @@ class HPOModule(BaseModule):
 
         if opt.encoder_decoder:
             # Detach embeddings.
+            embeddings.payload = embeddings.payload.masked_fill(~embeddings.seq_len_mask.bool().unsqueeze(-1), 0)
             encoder_embeddings = embeddings
             embeddings = PaddedBatch(encoder_embeddings.payload.detach(), encoder_embeddings.seq_lens)
             embeddings.payload.requires_grad = True
@@ -223,8 +224,18 @@ class HPOModule(BaseModule):
                 opt.zero_grad()
                 # DDP synchronization will be made in after_backward_hook.
                 encoder_embeddings.payload.backward(z_grad.reshape(*encoder_embeddings.payload.shape))
+
+            def embed_fn():
+                if self._loss.aggregate:
+                    embeddings = self._embed_impl(inputs).unsqueeze(1)  # (B, 1, D).
+                else:
+                    embeddings, _ = self.forward_impl(inputs)
+                    embeddings.payload.masked_fill_(~embeddings.seq_len_mask.bool().unsqueeze(-1), 0)
+                    embeddings = embeddings.payload
+                return embeddings
         else:
             closure_encoder = None
+            embed_fn = None
 
         def after_backward_hook():
             # Synchronize gradients in DDP.
@@ -236,9 +247,9 @@ class HPOModule(BaseModule):
             self.log("grad_norm", self._get_grad_norm(), prog_bar=True)
 
         if do_val_step:
-            opt.val_step(closure, after_backward_hook=after_backward_hook)
+            opt.val_step(closure, closure_encoder, embed_fn=embed_fn, after_backward_hook=after_backward_hook)
         else:
-            opt.hpo_step(closure, closure_encoder, after_backward_hook=after_backward_hook)
+            opt.hpo_step(closure, closure_encoder, embed_fn=embed_fn, after_backward_hook=after_backward_hook)
             hpo_grads = self.loss_weights.grad
             if hpo_grads is not None:
                 hpo_grad_norm = torch.linalg.norm(hpo_grads)
