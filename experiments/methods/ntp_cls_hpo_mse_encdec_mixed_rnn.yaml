@@ -9,6 +9,7 @@ name: ntp_cls_hpo_mse_encdec_mixed_rnn
 module:
   hpo_params:
     algorithm: mse
+    warmup_steps: 50
     ema:
       main: 0
       downstream: 0
