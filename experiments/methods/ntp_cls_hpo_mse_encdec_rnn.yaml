@@ -9,9 +9,6 @@ name: ntp_cls_hpo_mse_encdec_rnn
 module:
   hpo_params:
     algorithm: mse
-    warmup_steps: 50
+    warmup_steps: 100
     ema:
-      main: 0
-      downstream: 0
-      covs: 0.9
-      stats: 0.99
+      covs: 0.95
