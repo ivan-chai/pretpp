@@ -63,6 +63,7 @@ class AlignedHPOWarmupCallback(Callback):
                     for k, v in opt._buffers.items()
                 }
                 current_group0_params = [p.data.clone() for p in opt.param_groups[0]["params"]]
+                current_group1_params = [p.data.clone() for p in opt.param_groups[1]["params"]]
 
                 # Restore model and optimizer to pre-warmup state.
                 pl_module.load_state_dict(checkpoint["model"])
@@ -72,6 +73,8 @@ class AlignedHPOWarmupCallback(Callback):
                 opt._grads_cache.update(current_grads_cache)
                 opt._buffers.update(current_buffers)
                 for p, saved_data in zip(opt.param_groups[0]["params"], current_group0_params):
+                    p.data.copy_(saved_data)
+                for p, saved_data in zip(opt.param_groups[1]["params"], current_group1_params):
                     p.data.copy_(saved_data)
         finally:
             self.warmup_counter = new_counter
