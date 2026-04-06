@@ -14,6 +14,7 @@ from hotpp.data import PaddedBatch
 from pretpp.nn import IdentityHead
 from aligned_hpo import AlignedHPOptimizer, HPO_STAGE_DOWNSTREAM
 from .base_module import BaseModule
+from ..callbacks import AlignedHPOWarmupCallback
 
 
 def safe_mkdir(path):
@@ -96,11 +97,14 @@ class HPOModule(BaseModule):
         hp_group_params: Specific parameters for weights optimization (lr etc.).
         loss_group_params: Specific parameters for loss optimization (lr etc.).
         encoder_group_params: Specific parameters for encoder weights optimization (lr etc.).
+        cache_embedding_gradients: Compute and cache embedding gradients for all heads via a single backward pass in the encoder-decoder mode.
+        warmup_steps: Reset all except HPO statistics after the specified number of steps.
     """
     def __init__(self, seq_encoder, loss, hpo_losses, downstream_loss,
                  hpo_params=None, hp_group_params=None,
                  loss_group_params=None, encoder_group_params=None,
                  cache_embedding_gradients=False,
+                 warmup_steps=0,
                  **kwargs):
         super().__init__(seq_encoder, loss, **kwargs)
         self.automatic_optimization = False
@@ -112,8 +116,15 @@ class HPOModule(BaseModule):
         self.loss_group_params = loss_group_params
         self.encoder_group_params = encoder_group_params
         self.cache_embedding_gradients = cache_embedding_gradients
+        self.warmup_steps = warmup_steps
         self.loss_weights = torch.nn.Parameter(torch.ones([len(hpo_losses)]))
         self.gradient_clip_val = None
+
+    def configure_callbacks(self):
+        callbacks = super().configure_callbacks()
+        if self.warmup_steps > 0:
+            callbacks.append(AlignedHPOWarmupCallback(warmup_steps=self.warmup_steps))
+        return callbacks
 
     @BaseModule.trainer.setter
     def trainer(self, trainer):

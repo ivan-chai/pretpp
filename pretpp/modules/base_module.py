@@ -8,14 +8,8 @@ from omegaconf import OmegaConf
 from pytorch_lightning.callbacks import ModelCheckpoint
 
 from hotpp.data import PaddedBatch
+from pretpp.common import get_workdir
 from pretpp.nn import IdentityHead
-
-
-def safe_mkdir(path):
-    try:
-        os.mkdir(path)
-    except FileExistsError:
-        pass
 
 
 class BaseModule(pl.LightningModule):
@@ -297,11 +291,7 @@ class BaseModule(pl.LightningModule):
             from pretpp.downstream import DownstreamCallback, DownstreamCheckpointCallback
             with open(self._downstream_config, "r") as fp:
                 downstream_config = OmegaConf.create(yaml.safe_load(fp))
-            root = self.logger.root_dir or self.logger.save_dir or "lightning_logs"
-            safe_mkdir(root)
-            version = self.logger.version
-            root = os.path.join(root, version if isinstance(version, str) else f"version_{version}")
-            safe_mkdir(root)
+            root = get_workdir(self.logger, make=True)
             downstream_root = os.path.join(root, "downstream")
 
             monitor = None
