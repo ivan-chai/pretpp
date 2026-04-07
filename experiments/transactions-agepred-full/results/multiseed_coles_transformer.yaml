@@ -1,14 +1,14 @@
-date: '2026-03-14 06:16:45'
-num_seeds: 4
-test/downstream-accuracy: 0.6087500005960464
-test/downstream-accuracy-std: 0.004418237479566342
-test/loss: 77.87324333190918
-test/loss-std: 0.41677531758252667
-test/loss_coles: 77.87324333190918
-test/loss_coles-std: 0.41677531758252667
-val/downstream-accuracy: 0.6027659773826599
-val/downstream-accuracy-std: 0.0030164750931231917
-val/loss: 76.2188835144043
-val/loss-std: 0.3063703964010827
-val/loss_coles: 76.2188835144043
-val/loss_coles-std: 0.3063703964010827
+date: '2026-03-31 20:32:44'
+num_seeds: 5
+test/downstream-accuracy: 0.6066666722297669
+test/downstream-accuracy-std: 0.0055896723788483125
+test/loss: 78.28294067382812
+test/loss-std: 0.5570109582406114
+test/loss_coles: 78.28294067382812
+test/loss_coles-std: 0.5570109582406114
+val/downstream-accuracy: 0.6053617119789123
+val/downstream-accuracy-std: 0.005393362393487294
+val/loss: 74.96612854003907
+val/loss-std: 2.017788569933475
+val/loss_coles: 74.96612854003907
+val/loss_coles-std: 2.017788569933475

@@ -1,20 +1,14 @@
-date: '2026-03-16 16:17:07'
+date: '2026-03-31 12:16:35'
 num_seeds: 5
-test/downstream-auroc: 0.8819519281387329
-test/downstream-auroc-std: 0.0028081359945569045
-test/loss: 43.40371856689453
-test/loss-std: 0.938876351301146
-test/loss_coles: 43.40371856689453
-test/loss_coles-std: 0.938876351301146
-test/ptls-downstream: 0.8803000052769979
-test/ptls-downstream-std: 0.0007666666642762721
-test/ptls-downstream-std-std: 0.0001247218928886851
-val/downstream-auroc: 0.8891947627067566
-val/downstream-auroc-std: 0.0013021586796000894
-val/loss: 43.548220825195315
-val/loss-std: 0.899693951570679
-val/loss_coles: 43.548220825195315
-val/loss_coles-std: 0.899693951570679
-val/ptls-downstream: 0.8830333352088928
-val/ptls-downstream-std: 0.0026333333225920796
-val/ptls-downstream-std-std: 0.0009533566015192066
+test/downstream-auroc: 0.8832735300064087
+test/downstream-auroc-std: 0.002903789120291328
+test/loss: 43.76219635009765
+test/loss-std: 0.6984629610942102
+test/loss_coles: 43.76219635009765
+test/loss_coles-std: 0.6984629610942102
+val/downstream-auroc: 0.8905428409576416
+val/downstream-auroc-std: 0.002369490039546297
+val/loss: 43.92347412109375
+val/loss-std: 0.7066829168254575
+val/loss_coles: 43.92347412109375
+val/loss_coles-std: 0.7066829168254575
