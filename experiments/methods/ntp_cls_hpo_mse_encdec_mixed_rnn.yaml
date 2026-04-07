@@ -11,3 +11,4 @@ module:
     algorithm: mse
     ema:
       covs: 0.95
+      weights: 0.95

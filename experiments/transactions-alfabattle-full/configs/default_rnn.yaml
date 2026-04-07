@@ -1,1 +1,7 @@
-../../methods/default_rnn.yaml
+defaults:
+  - default_rnn_base
+  - _self_
+
+module:
+  optimizer_partial:
+    lr: 0.0005  # Reduce LR to prevent explosion in BW.
