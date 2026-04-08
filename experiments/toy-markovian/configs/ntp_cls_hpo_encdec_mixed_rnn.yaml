@@ -1,7 +1,1 @@
-defaults:
-  - default
-  - default_rnn
-  - default_hpo_encdec_mixed
-  - _self_
-
-name: ntp_cls_hpo_encdec_mixed_rnn
+../../methods/ntp_cls_hpo_encdec_mixed_rnn.yaml
