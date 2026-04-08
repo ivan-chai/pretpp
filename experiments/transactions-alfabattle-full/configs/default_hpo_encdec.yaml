@@ -34,7 +34,7 @@ module:
     algorithm: sgd
     encoder_decoder: true
   lr_scheduler_partial:
-    gamma: 0.5
+    gamma: 0.65
   downstream_loss: loss_1_target
 
 trainer:
