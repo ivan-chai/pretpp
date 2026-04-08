@@ -12,6 +12,7 @@ module:
     betas: [0, 0.99]
   hpo_params:
     algorithm: sgd
+    scale_gradients: 0.3
   downstream_loss: loss_1_target
 
 trainer:

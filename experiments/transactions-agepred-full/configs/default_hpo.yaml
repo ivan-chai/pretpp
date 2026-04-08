@@ -13,8 +13,9 @@ module:
     betas: [0, 0.99]
   hpo_params:
     algorithm: sgd
+    scale_gradients: 0.3
   lr_scheduler_partial:
-    gamma: 0.65
+    gamma: 0.8
   downstream_loss: loss_1_target
 
 trainer:
