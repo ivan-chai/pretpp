@@ -24,10 +24,6 @@ def safe_mkdir(path):
         pass
 
 
-def to_logit(x, eps=1e-3):
-    return math.log(y + esp) - math.log(1 - y + eps)
-
-
 def recursive_map(data, func):
     """Recursively applies a function to all leaf nodes in a structure."""
     if isinstance(data, dict):

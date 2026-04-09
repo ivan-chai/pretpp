@@ -54,13 +54,16 @@ class AlignedHPOWarmupCallback(Callback):
                 opt = trainer.optimizers[0]
 
                 # Save HPO results accumulated during warmup.
-                current_grads_cache = {
+                current_running_stats = {
                     k: (v.clone() if isinstance(v, torch.Tensor) else v)
-                    for k, v in opt._grads_cache.items()
+                    for k, v in opt._running_stats.items()
                 }
                 current_buffers = {
                     k: (v.clone() if isinstance(v, torch.Tensor) else v)
                     for k, v in opt._buffers.items()
+                }
+                current_normalizers = {
+                    k: v.state_dict() for k, v in opt._normalizers.items()
                 }
                 current_group0_params = [p.data.clone() for p in opt.param_groups[0]["params"]]
                 current_group1_params = [p.data.clone() for p in opt.param_groups[1]["params"]]
@@ -70,8 +73,10 @@ class AlignedHPOWarmupCallback(Callback):
                 opt.load_state_dict(checkpoint["optimizer"])
 
                 # Put back the HPO results we want to keep.
-                opt._grads_cache.update(current_grads_cache)
+                opt._running_stats.update(current_running_stats)
                 opt._buffers.update(current_buffers)
+                for k, v in current_normalizers.items():
+                    opt._normalizers[k].load_state_dict(v)
                 for p, saved_data in zip(opt.param_groups[0]["params"], current_group0_params):
                     p.data.copy_(saved_data)
                 for p, saved_data in zip(opt.param_groups[1]["params"], current_group1_params):
