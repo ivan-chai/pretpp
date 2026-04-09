@@ -1,0 +1,16 @@
+module:
+  hp_group_params:
+    lr: 0.01
+    betas: [0, 0.99]
+  hpo_params:
+    warmup: 100
+    ema:
+      covs: 0.99
+      stats: 0.99
+    scale_gradients: 0.5
+  lr_scheduler_partial:
+    gamma: 0.6
+
+trainer:
+  precision: 32-true
+  strategy: ddp_find_unused_parameters_true

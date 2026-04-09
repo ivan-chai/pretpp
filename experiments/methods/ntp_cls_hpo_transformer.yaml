@@ -5,8 +5,3 @@ defaults:
   - _self_
 
 name: ntp_cls_hpo_transformer
-
-module:
-  hpo_params:
-    ema:
-      covs: 0.95

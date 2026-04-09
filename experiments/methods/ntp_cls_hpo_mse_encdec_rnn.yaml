@@ -9,6 +9,3 @@ name: ntp_cls_hpo_mse_encdec_rnn
 module:
   hpo_params:
     algorithm: mse
-    ema:
-      covs: 0.95
-      weights: 0.95
