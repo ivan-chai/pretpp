@@ -1,9 +1,13 @@
-date: '2025-05-19 16:45:30'
-test/downstream: 0.9020000100135803
-test/loss: 0.9635401368141174
-test/loss_labels: 0.9557113647460938
-test/loss_timestamps: 0.007828707806766033
-val/downstream: 0.878000020980835
-val/loss: 0.9692093133926392
-val/loss_labels: 0.9614303708076477
-val/loss_timestamps: 0.007778909523040056
+date: '2026-04-09 09:08:22'
+test/downstream-accuracy: 0.9390000104904175
+test/loss: 0.9499444365501404
+test/loss_labels: 0.9488174319267273
+test/loss_timestamps: 0.0011269454844295979
+test/ptls-downstream: 0.9381999969482422
+test/ptls-downstream-std: 0.002199999988079071
+val/downstream-accuracy: 0.9319999814033508
+val/loss: 0.9543265104293823
+val/loss_labels: 0.9532047510147095
+val/loss_timestamps: 0.0011218455620110035
+val/ptls-downstream: 0.930400013923645
+val/ptls-downstream-std: 0.00800000037997961

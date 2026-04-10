@@ -238,10 +238,11 @@ class HPOModule(BaseModule):
             embed_fn = None
 
         def after_backward_hook():
-            # Synchronize gradients in DDP.
-            with torch.enable_grad():
-                zero_loss = 0 * sum(p.flatten()[0] for p in self.parameters())
-                self.manual_backward(zero_loss)
+            # Synchronize gradients in DDP (mirrors _no_sync logic).
+            if hasattr(self.trainer.model, "no_sync"):
+                with torch.enable_grad():
+                    zero_loss = 0 * sum(p.flatten()[0] for p in self.parameters())
+                    self.manual_backward(zero_loss)
             if self.gradient_clip_val is not None:
                 self.clip_gradients(opt, gradient_clip_val=self.gradient_clip_val, gradient_clip_algorithm=self.trainer.gradient_clip_algorithm)
             self.log("grad_norm", self._get_grad_norm(), prog_bar=True)
