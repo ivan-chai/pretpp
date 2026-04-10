@@ -89,6 +89,7 @@ class HPOModule(BaseModule):
     Args:
         hpo_losses: A list of losses to tune hyperparameters for.
         downstream_loss: The name of the downstream loss or a mapping from loss name to weight.
+        initial_weights: Initial values (default to ones).
         hpo_params: Parameters of the HP optimizer.
         hp_group_params: Specific parameters for weights optimization (lr etc.).
         loss_group_params: Specific parameters for loss optimization (lr etc.).
@@ -97,7 +98,7 @@ class HPOModule(BaseModule):
         warmup_steps: Reset all except HPO statistics after the specified number of steps.
     """
     def __init__(self, seq_encoder, loss, hpo_losses, downstream_loss,
-                 hpo_params=None, hp_group_params=None,
+                 initial_weights=None, hpo_params=None, hp_group_params=None,
                  loss_group_params=None, encoder_group_params=None,
                  cache_embedding_gradients=False,
                  warmup_steps=0,
@@ -113,7 +114,13 @@ class HPOModule(BaseModule):
         self.encoder_group_params = encoder_group_params
         self.cache_embedding_gradients = cache_embedding_gradients
         self.warmup_steps = warmup_steps
-        self.loss_weights = torch.nn.Parameter(torch.ones([len(hpo_losses)]))
+        if initial_weights is not None:
+            initial_weights = torch.tensor(initial_weights, dtype=torch.get_default_dtype())
+        else:
+            initial_weights = torch.ones([len(hpo_losses)])
+        if initial_weights.shape != (len(hpo_losses),):
+            raise ValueError(f"Initial weights shape mismatch: {initial_weights.shape} != ({len(hpo_losses)})")
+        self.loss_weights = torch.nn.Parameter(initial_weights)
         self.gradient_clip_val = None
 
     def configure_callbacks(self):
