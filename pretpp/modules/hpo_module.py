@@ -159,9 +159,9 @@ class HPOModule(BaseModule):
 
         if opt.encoder_decoder:
             # Detach embeddings.
-            embeddings.payload = embeddings.payload.masked_fill(~embeddings.seq_len_mask.bool().unsqueeze(-1), 0)
             encoder_embeddings = embeddings
-            embeddings = PaddedBatch(encoder_embeddings.payload.detach(), encoder_embeddings.seq_lens)
+            embeddings = PaddedBatch(embeddings.payload.masked_fill(~embeddings.seq_len_mask.bool().unsqueeze(-1), 0).detach(),
+                                     encoder_embeddings.seq_lens)
             embeddings.payload.requires_grad = True
 
         use_cached_grads = (not do_val_step) and opt.encoder_decoder and self.cache_embedding_gradients
@@ -183,6 +183,9 @@ class HPOModule(BaseModule):
                 # Gather gradients.
                 z_grads_cache = Structure(projection.input_grads)
                 heads_grads_cache = Structure(projection.grads)
+                # Clean heads gradients to prevent accumulation.
+                for p in opt.param_groups[1]["params"]:
+                    p.grad = None
                 assert z_grads_cache.size == loss_structure.size
                 assert heads_grads_cache.size == loss_structure.size
         else:
