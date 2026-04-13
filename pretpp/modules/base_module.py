@@ -35,6 +35,7 @@ class BaseModule(pl.LightningModule):
         aggregator: Embeddings aggregator. By default try to use encoder aggregator.
         optimizer_partial: Optimizer init partial. Network parameters are missed.
         lr_scheduler_partial: Scheduler init partial. Optimizer are missed.
+        warmup: Number of optimizer warmup steps. LR linearly increases from base_lr/warmup to base_lr.
         init_state_dict: Checkpoint to initialize all parameters except loss.
         init_prefixes: A list of prefixes to initialize from checkpoint. By default, initialize all parameters
             except loss and loss projection.
@@ -52,6 +53,7 @@ class BaseModule(pl.LightningModule):
                  aggregator=None,
                  optimizer_partial=None,
                  lr_scheduler_partial=None,
+                 warmup=0,
                  init_state_dict=None,
                  init_prefixes=None,
                  freeze_prefixes=None,
@@ -72,6 +74,7 @@ class BaseModule(pl.LightningModule):
         self._downstream_config = downstream_validation_config
         self._optimizer_partial = optimizer_partial
         self._lr_scheduler_partial = lr_scheduler_partial
+        self._warmup = warmup
         self._freeze_prefixes = freeze_prefixes
         self._peft_adapter = peft_adapter
         self._peft_applied = False
@@ -271,19 +274,30 @@ class BaseModule(pl.LightningModule):
             self.log_dict(metrics, prog_bar=True, sync_dist=True)
             self._test_metric.reset()
 
-    def configure_optimizers(self):
-        optimizer = self._optimizer_partial([v for k, v in self.named_parameters() if v.requires_grad])
-        if self._lr_scheduler_partial is None:
-            return optimizer
-        else:
+    def _build_scheduler_configs(self, optimizer):
+        configs = []
+        if self._warmup > 0:
+            warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
+                optimizer, start_factor=1 / self._warmup, end_factor=1.0, total_iters=self._warmup
+            )
+            configs.append({"scheduler": warmup_scheduler, "interval": "step"})
+        if self._lr_scheduler_partial is not None:
             scheduler = self._lr_scheduler_partial(optimizer)
-            scheduler = {
+            config = {
                 "scheduler": scheduler,
                 "interval": getattr(scheduler, "default_interval", "epoch")
             }
             if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                scheduler["monitor"] = "val/loss"
-            return [optimizer], [scheduler]
+                config["monitor"] = "val/loss"
+            configs.append(config)
+        return configs
+
+    def configure_optimizers(self):
+        optimizer = self._optimizer_partial([v for k, v in self.named_parameters() if v.requires_grad])
+        configs = self._build_scheduler_configs(optimizer)
+        if not configs:
+            return optimizer
+        return [optimizer], configs
 
     def configure_callbacks(self):
         callbacks = []

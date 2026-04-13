@@ -311,17 +311,10 @@ class HPOModule(BaseModule):
         optimizer = AlignedHPOptimizer(params, self._optimizer_partial,
                                        weights_names=self.hpo_losses,
                                        **(self.hpo_params or {}))
-        if self._lr_scheduler_partial is None:
+        configs = self._build_scheduler_configs(optimizer)
+        if not configs:
             return optimizer
-        else:
-            scheduler = self._lr_scheduler_partial(optimizer)
-            scheduler = {
-                "scheduler": scheduler,
-                "interval": getattr(scheduler, "default_interval", "epoch")
-            }
-            if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                scheduler["monitor"] = "val/loss"  # TODO: get metric from trainer.
-            return [optimizer], [scheduler]
+        return [optimizer], configs
 
     @contextmanager
     def _no_sync(self):
