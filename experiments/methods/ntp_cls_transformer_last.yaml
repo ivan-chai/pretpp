@@ -1,14 +1,15 @@
 defaults:
   - default
   - default_transformer
-  - default_hpo
+  - mtl_loss
   - _self_
 
-name: ntp_cls_hpo_transformer_last
+name: ntp_cls_transformer_last
 
 apply_cls_to_tokens: last
 cls_token: ${transformer_cls_token}
 
 module:
+  _target_: pretpp.modules.BaseModule
   loss:
     truncate: begin
