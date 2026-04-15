@@ -1,4 +1,5 @@
 apply_cls_to_tokens: all
+cls_token: null
 
 metric:
   _target_: pretpp.metrics.DownstreamMetric
@@ -43,6 +44,7 @@ module:
       - _target_: pretpp.losses.ClassificationLoss
         drop_nans: true
         apply_to_tokens: ${apply_cls_to_tokens}
+        cls_token: ${cls_token}
         targets:
           target:
             num_classes: ${num_downstream_classes}
