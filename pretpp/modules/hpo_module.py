@@ -160,16 +160,22 @@ class HPOModule(BaseModule):
         if opt.encoder_decoder:
             # Detach embeddings.
             encoder_embeddings = embeddings
-            embeddings = PaddedBatch(embeddings.payload.masked_fill(~embeddings.seq_len_mask.bool().unsqueeze(-1), 0).detach(),
-                                     encoder_embeddings.seq_lens)
-            embeddings.payload.requires_grad = True
+            def detach(x):
+                x = PaddedBatch(x.payload.detach().masked_fill(~x.seq_len_mask.bool().unsqueeze(-1), 0),
+                                x.seq_lens)
+                x.payload.requires_grad = True
+                return x
+            embeddings = self._apply_to_outputs(embeddings, detach)
 
         use_cached_grads = (not do_val_step) and opt.encoder_decoder and self.cache_embedding_gradients
 
         if use_cached_grads:
             # Cache gradients for each head.
             opt.zero_grad()
-            embeddings.payload.grad = None
+            def zero_embeddings_grad(x):
+                x.payload.grad = None
+                return x
+            self._apply_to_outputs(embeddings, zero_embeddings_grad)
             loss_structure = Structure(self._loss.structure)
             with self._loss_projection.cache_input_grads() as projection:
                 # Compute loss and backward.
@@ -192,6 +198,10 @@ class HPOModule(BaseModule):
             # Compute losses without backward.
             outputs = self._apply_to_outputs(embeddings, self._loss_projection)  # (B, L, D).
             losses, metrics = self._loss(outputs, targets)
+
+        embeddings, _ = self._split_output_batch(embeddings)
+        if opt.encoder_decoder:
+            encoder_embeddings, _ = self._split_output_batch(encoder_embeddings)
 
         def closure(down, weights, retain_graph=False, stage=None):
             opt.zero_grad()
