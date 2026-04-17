@@ -4,6 +4,7 @@ module:
     betas: [0, 0.99]
   hpo_params:
     algorithm: warmup-sgd
+    regularization: 1
     warmup: 100
     ema:
       covs: 0.0
