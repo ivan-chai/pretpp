@@ -7,3 +7,5 @@ name: ntp_cls_hpo_mse_encdec_transformer
 module:
   hpo_params:
     algorithm: mse
+    ema:
+      covs: 0.99

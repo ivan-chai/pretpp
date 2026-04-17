@@ -3,9 +3,10 @@ module:
     lr: 0.01
     betas: [0, 0.99]
   hpo_params:
+    algorithm: warmup-sgd
     warmup: 100
     ema:
-      covs: 0.99
+      covs: 0.0
       stats: 0.99
     scale_gradients: 0.5
   lr_scheduler_partial:
