@@ -265,7 +265,8 @@ class HPOModule(BaseModule):
                     self.manual_backward(zero_loss)
             if self.gradient_clip_val is not None:
                 self.clip_gradients(opt, gradient_clip_val=self.gradient_clip_val, gradient_clip_algorithm=self.trainer.gradient_clip_algorithm)
-            self.log("grad_norm", self._get_grad_norm(), prog_bar=True)
+            if not do_val_step:
+                self.log("grad_norm", self._get_grad_norm(), prog_bar=True)
 
         if do_val_step:
             opt.val_step(closure, closure_encoder, embed_fn=embed_fn, after_backward_hook=after_backward_hook)

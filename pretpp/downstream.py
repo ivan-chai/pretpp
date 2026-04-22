@@ -17,7 +17,7 @@ from contextlib import contextmanager
 from omegaconf import OmegaConf
 from pathlib import Path
 from torchmetrics import Metric
-from torchmetrics.utilities import dim_zero_cat
+from torchmetrics.utilities.data import dim_zero_cat
 from hotpp.common import InferenceDataModule
 from hotpp.eval_downstream import EmbeddingsAndTargetsExtractor
 
