@@ -167,7 +167,7 @@ class HPOModule(BaseModule):
                 return x
             embeddings = self._apply_to_outputs(embeddings, detach)
 
-        use_cached_grads = (not do_val_step) and opt.encoder_decoder and self.cache_embedding_gradients
+        use_cached_grads = opt.encoder_decoder and self.cache_embedding_gradients
 
         if use_cached_grads:
             # Cache gradients for each head.
@@ -279,15 +279,15 @@ class HPOModule(BaseModule):
             metrics.update(opt.metrics)
             self._log_metrics("train", len(x), None, losses, metrics, single_batch_metrics=None)
 
-        # Make scheduler step if necessary.
-        for config in self.trainer.lr_scheduler_configs:
-            if config.interval != "step":
-                continue
-            if config.frequency != 1:
-                raise NotImplementedError("Frequency in LR scheduler.")
-            if config.reduce_on_plateau:
-                raise NotImplementedError("ReduceOnPlateau LR scheduler.")
-            config.scheduler.step()
+            # Make scheduler step if necessary.
+            for config in self.trainer.lr_scheduler_configs:
+                if config.interval != "step":
+                    continue
+                if config.frequency != 1:
+                    raise NotImplementedError("Frequency in LR scheduler.")
+                if config.reduce_on_plateau:
+                    raise NotImplementedError("ReduceOnPlateau LR scheduler.")
+                config.scheduler.step()
 
     def on_before_optimizer_step(self, optimizer=None, optimizer_idx=None):
         # Move grad_norm logging to after-backward-hook.
