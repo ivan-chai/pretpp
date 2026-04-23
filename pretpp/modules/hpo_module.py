@@ -306,7 +306,7 @@ class HPOModule(BaseModule):
                 raise NotImplementedError("ReduceOnPlateau LR scheduler.")
             config.scheduler.step()
         # Log the detailed optimizer state.
-        state = self.optimizers().hpo_state_dict()
+        state = self.optimizers().hpo_state_dict(add_names=True)
         state = recursive_map(state, lambda x: (x.detach().cpu().tolist() if isinstance(x, torch.Tensor) else x))
         log_dict(self.logger.experiment, state, self.current_epoch, "hpo_state/")
 
