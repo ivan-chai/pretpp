@@ -15,6 +15,7 @@ from pretpp.nn import IdentityHead
 from aligned_hpo import AlignedHPOptimizer, HPO_STAGE_DOWNSTREAM
 from .base_module import BaseModule
 from ..callbacks import AlignedHPOWarmupCallback
+from ..logging import log_dict
 
 
 def safe_mkdir(path):
@@ -304,6 +305,10 @@ class HPOModule(BaseModule):
             if config.reduce_on_plateau:
                 raise NotImplementedError("ReduceOnPlateau LR scheduler.")
             config.scheduler.step()
+        # Log the detailed optimizer state.
+        state = self.optimizers().hpo_state_dict()
+        state = recursive_map(state, lambda x: (x.detach().cpu().tolist() if isinstance(x, torch.Tensor) else x))
+        log_dict(self.logger.experiment, state, self.current_epoch, "hpo_state/")
 
     def configure_optimizers(self):
         loss_params = [v for k, v in self.named_parameters() if v.requires_grad and k != "loss_weights" and k.startswith("_loss")]
