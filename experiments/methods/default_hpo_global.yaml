@@ -3,7 +3,7 @@ module:
     lr: 0.01
     betas: [0, 0.99]
   hpo_params:
-    algorithm: warmup-sgd
+    algorithm: sgd
     regularization: 1
     warmup: 100
     ema:
