@@ -4,15 +4,16 @@ import warnings
 import torch
 
 
-def log_dict(logger, data, epoch, prefix):
+def log_dict(pl_logger, data, epoch, prefix):
     is_distributed = torch.distributed.is_available() and torch.distributed.is_initialized() and (torch.distributed.get_world_size() > 1)
     if is_distributed and (torch.distributed.get_rank() != 0):
         return
+    logger = pl_logger.experiment
     logger_name = type(logger).__name__
     try:
         if logger_name == "MlflowClient":
-            logger.log_dict(logger.run_id, data, f"{prefix}{epoch}.yaml")
-            logger.log_dict(logger.run_id, data, f"{prefix}last.yaml")
+            logger.log_dict(pl_logger._run_id, data, f"{prefix}{epoch}.yaml")
+            logger.log_dict(pl_logger._run_id, data, f"{prefix}last.yaml")
         elif logger_name == "SummaryWriter":
             # TensorBoard: log YAML content as text.
             text = yaml.dump(data)

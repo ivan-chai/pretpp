@@ -308,7 +308,7 @@ class HPOModule(BaseModule):
         # Log the detailed optimizer state.
         state = self.optimizers().hpo_state_dict(add_names=True)
         state = recursive_map(state, lambda x: (x.detach().cpu().tolist() if isinstance(x, torch.Tensor) else x))
-        log_dict(self.logger.experiment, state, self.current_epoch, "hpo_state/")
+        log_dict(self.logger, state, self.current_epoch, "hpo_state/")
 
     def configure_optimizers(self):
         loss_params = [v for k, v in self.named_parameters() if v.requires_grad and k != "loss_weights" and k.startswith("_loss")]
