@@ -227,17 +227,19 @@ class HPOModule(BaseModule):
                 # DDP synchronization will be made in after_backward_hook.
                 with self._no_sync():
                     self.manual_backward(loss, retain_graph=retain_graph)
-            if stage == HPO_STAGE_DOWNSTREAM:
-                metrics["hpo_grad_norm_downstream"] = self._get_grad_norm(warn_empty_grads=False)
-            elif isinstance(stage, int):
-                metrics[f"hpo_grad_norm_weight_{self.hpo_losses[stage]}"] = self._get_grad_norm(warn_empty_grads=False)
-            if opt.encoder_decoder:
+            if self.should_log:
+                if stage == HPO_STAGE_DOWNSTREAM:
+                    metrics["hpo_grad_norm_downstream"] = self._get_grad_norm(warn_empty_grads=False)
+                elif isinstance(stage, int):
+                    metrics[f"hpo_grad_norm_weight_{self.hpo_losses[stage]}"] = self._get_grad_norm(warn_empty_grads=False)
+            if self.should_log and opt.encoder_decoder:
                 with torch.no_grad():
                     emb_grad_norm = torch.linalg.norm(embeddings.payload.grad.flatten())
                 if stage == HPO_STAGE_DOWNSTREAM:
                     metrics["hpo_emb_grad_norm_downstream"] = emb_grad_norm
                 elif isinstance(stage, int):
                     metrics[f"hpo_emb_grad_norm_weight_{self.hpo_losses[stage]}"] = emb_grad_norm
+            if opt.encoder_decoder:
                 return embeddings.payload
 
         if opt.encoder_decoder:
@@ -274,10 +276,11 @@ class HPOModule(BaseModule):
         else:
             opt.hpo_step(closure, closure_encoder, embed_fn=embed_fn, after_backward_hook=after_backward_hook)
             hpo_grads = self.loss_weights.grad
-            if hpo_grads is not None:
+            if self.should_log and (hpo_grads is not None):
                 hpo_grad_norm = torch.linalg.norm(hpo_grads)
                 metrics["hpo_grad_norm"] = hpo_grad_norm
-            metrics.update(opt.metrics)
+            if self.should_log:
+                metrics.update(opt.metrics)
             self._log_metrics("train", len(x), None, losses, metrics, single_batch_metrics=None)
 
             # Make scheduler step if necessary.

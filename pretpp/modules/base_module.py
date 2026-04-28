@@ -336,7 +336,8 @@ class BaseModule(pl.LightningModule):
         return callbacks
 
     def on_before_optimizer_step(self, optimizer=None, optimizer_idx=None):
-        self.log("grad_norm", self._get_grad_norm(), prog_bar=True)
+        if self.should_log:
+            self.log("grad_norm", self._get_grad_norm(), prog_bar=True)
 
     @torch.autocast("cuda", enabled=False)
     def _update_metric(self, metric, x, inputs, outputs, targets):
@@ -361,6 +362,10 @@ class BaseModule(pl.LightningModule):
                 continue
             norms[i] = p.grad.data.norm(2)
         return norms.square().sum() ** 0.5
+
+    @property
+    def should_log(self):
+        return (self.trainer.global_step + 1) % self.trainer.log_every_n_steps == 0
 
     def _log_metrics(self, split, batch_size, loss, losses, metrics, single_batch_metrics=None, mean_seq_len=None):
         log_values = {}
