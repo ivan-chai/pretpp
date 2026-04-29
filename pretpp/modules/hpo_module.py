@@ -276,6 +276,9 @@ class HPOModule(BaseModule):
         else:
             opt.hpo_step(closure, closure_encoder, embed_fn=embed_fn, after_backward_hook=after_backward_hook)
             hpo_grads = self.loss_weights.grad
+            with torch.no_grad():
+                metrics["loss-pretrain"] = sum([losses[name] for name in self.hpo_losses])
+                metrics["loss"] = sum(losses.values())
             if self.should_log and (hpo_grads is not None):
                 hpo_grad_norm = torch.linalg.norm(hpo_grads)
                 metrics["hpo_grad_norm"] = hpo_grad_norm
