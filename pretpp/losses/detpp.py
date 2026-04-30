@@ -5,6 +5,10 @@ from .base import BaseLoss
 class DeTPPLoss(DetectionLoss, BaseLoss):
     """Wrapper around HoTPP Detection Loss."""
     @property
+    def structure(self):
+        return list(self.fields) if len(self.fields) > 1 else self.fields[0]
+
+    @property
     def aggregate(self):
         return False
 
