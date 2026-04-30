@@ -12,7 +12,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 
 from hotpp.data import PaddedBatch
 from pretpp.nn import IdentityHead
-from aligned_hpo import AlignedHPOptimizer, HPO_STAGE_DOWNSTREAM
+from aligned_hpo import AlignedHPOptimizer, GradNormOptimizer, HPO_STAGE_DOWNSTREAM
 from .base_module import BaseModule
 from ..callbacks import AlignedHPOWarmupCallback
 from ..logging import log_dict
@@ -98,10 +98,16 @@ class HPOModule(BaseModule):
         cache_embedding_gradients: Compute and cache embedding gradients for all heads via a single backward pass in the encoder-decoder mode.
         warmup_steps: Reset all except HPO statistics after the specified number of steps.
     """
+
+    OPTIMIZERS = {
+        "aligned-hpo": AlignedHPOptimizer,
+        "gradnorm": GradNormOptimizer
+    }
+
     def __init__(self, seq_encoder, loss, hpo_losses, downstream_loss,
                  initial_weights=None, hpo_params=None, hp_group_params=None,
                  loss_group_params=None, encoder_group_params=None,
-                 cache_embedding_gradients=False,
+                 optimizer="aligned-hpo", cache_embedding_gradients=False,
                  warmup_steps=0,
                  **kwargs):
         super().__init__(seq_encoder, loss, **kwargs)
@@ -113,6 +119,7 @@ class HPOModule(BaseModule):
         self.hp_group_params = hp_group_params
         self.loss_group_params = loss_group_params
         self.encoder_group_params = encoder_group_params
+        self.optimizer_type = optimizer
         self.cache_embedding_gradients = cache_embedding_gradients
         self.warmup_steps = warmup_steps
         if initial_weights is not None:
@@ -239,8 +246,12 @@ class HPOModule(BaseModule):
                     metrics["hpo_emb_grad_norm_downstream"] = emb_grad_norm
                 elif isinstance(stage, int):
                     metrics[f"hpo_emb_grad_norm_weight_{self.hpo_losses[stage]}"] = emb_grad_norm
+            return_values = []
             if opt.encoder_decoder:
-                return embeddings.payload
+                return_values.append(embeddings.payload)
+            if opt.need_losses:
+                return_values.append(torch.stack(losses[name] for name in self.hpo_losses))
+            return return_values
 
         if opt.encoder_decoder:
             def closure_encoder(z_grad):
@@ -330,9 +341,9 @@ class HPOModule(BaseModule):
             params[1].update(self.loss_group_params)
         if self.encoder_group_params is not None:
             params[2].update(self.encoder_group_params)
-        optimizer = AlignedHPOptimizer(params, self._optimizer_partial,
-                                       weights_names=self.hpo_losses,
-                                       **(self.hpo_params or {}))
+        optimizer = self.OPTIMIZERS[self.optimizer_type](params, self._optimizer_partial,
+                                                         weights_names=self.hpo_losses,
+                                                         **(self.hpo_params or {}))
         configs = self._build_scheduler_configs(optimizer)
         if not configs:
             return optimizer
