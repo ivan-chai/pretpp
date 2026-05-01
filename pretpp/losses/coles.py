@@ -47,6 +47,10 @@ class ColesLoss(BaseLoss):
         self.cls_token = cls_token
 
     @property
+    def structure(self):
+        return "coles"
+
+    @property
     def input_size(self):
         return self.embedding_dim
 
@@ -93,6 +97,7 @@ class ColesLoss(BaseLoss):
         device = inputs.device
         b, l = inputs.shape
         n = self.n_splits
+        global_targets = {name: repeat_interleave(targets.payload[name], n) for name in targets.payload if name not in targets.seq_names}
         # Sample subsequence lengths.
         if self.min_length < 1:
             min_lengths = (inputs.seq_lens * self.min_length).round().long()  # (B).
@@ -123,7 +128,7 @@ class ColesLoss(BaseLoss):
 
         # Postprocess sequences.
         new_inputs = self.prepare_inference_batch(new_inputs)
-        return new_inputs, targets
+        return new_inputs, targets, PaddedBatch(global_targets, new_inputs.seq_lens, seq_names=[])
 
     def forward(self, outputs, targets):
         """Extract targets and compute loss between predictions and targets.

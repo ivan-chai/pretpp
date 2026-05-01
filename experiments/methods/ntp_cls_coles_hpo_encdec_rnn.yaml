@@ -1,0 +1,7 @@
+defaults:
+  - default
+  - default_rnn
+  - default_coles_hpo_encdec
+  - _self_
+
+name: ntp_cls_coles_hpo_encdec_rnn

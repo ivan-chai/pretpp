@@ -88,6 +88,7 @@ class ClassificationLoss(BaseLoss):
             Model inputs with shape (B, L', *) and targets with shape (B, L', *).
         """
         inputs = self.prepare_inference_batch(inputs)
+        global_targets = {name: targets.payload[name] for name in targets.payload if name not in targets.seq_names}
         targets = PaddedBatch({name: targets.payload[name] for name in self._targets}, targets.seq_lens,
                               seq_names={name for name in targets.seq_names if name in self._targets})
         if self._cls_token is not None:
@@ -99,7 +100,7 @@ class ClassificationLoss(BaseLoss):
                 else:
                     new_targets[k] = torch.cat([v, v[:, -1:]], 1)  # (B, L, *).
             targets = PaddedBatch(new_targets, targets.seq_lens + 1, seq_names=set(targets.seq_names) & set(self._targets))
-        return inputs, targets
+        return inputs, targets, PaddedBatch(global_targets, inputs.seq_lens, seq_names=[])
 
     def forward(self, outputs, targets):
         """Extract targets and compute loss between predictions and targets.

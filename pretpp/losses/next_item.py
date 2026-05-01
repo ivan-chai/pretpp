@@ -43,7 +43,7 @@ class NextItemLoss(BaseLoss):
         """
         # For the next-item loss inputs and targets are the same.
         # Offset is applied in base loss classes.
-        return inputs, inputs
+        return inputs, inputs, targets
 
     def forward(self, outputs, targets, reduction="mean"):
         """Extract targets and compute loss between predictions and targets.

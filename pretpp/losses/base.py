@@ -22,7 +22,7 @@ class BaseLoss(torch.nn.Module):
             targets: Targets with shape (B, L) for local recognition or (B) for global recognition.
 
         Returns:
-            Model inputs with shape (B, L', *) and targets with shape (B, L', *).
+            Model inputs with shape (B, L', *), targets with shape (B, L', *), and updated input targets.
         """
         pass
 

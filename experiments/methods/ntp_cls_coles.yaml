@@ -1,0 +1,10 @@
+defaults:
+  - default
+  - default_rnn
+  - mtl_coles_loss
+  - _self_
+
+name: ntp_cls_coles
+
+module:
+  _target_: pretpp.modules.BaseModule

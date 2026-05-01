@@ -62,14 +62,16 @@ class HybridLoss(BaseLoss):
         """
         new_targets = {}
         for i, loss in enumerate(self._losses):
-            loss_inputs, loss_targets = loss.prepare_batch(inputs, targets)
+            loss_inputs, loss_targets, updated_targets = loss.prepare_batch(inputs, targets)
             new_targets[f"_loss_{i}_input_length"] = loss_inputs.shape[1]
             if loss_inputs is not inputs:
                 if self._truncate is None:
                     raise RuntimeError("Base losses must not change inputs, when 'truncate' is None.")
-                if loss_inputs.shape[1] < inputs.shape[1]:
-                    raise RuntimeError("Base losses must not truncate sequences.")
+                if (i > 0) and (loss_inputs.shape[1] < inputs.shape[1]):
+                    raise RuntimeError(f"Base losses (except the first one) must not truncate sequences.")
                 inputs = loss_inputs
+                if i == 0:
+                    targets = updated_targets
             new_targets[i] = loss_targets
         return inputs, new_targets
 

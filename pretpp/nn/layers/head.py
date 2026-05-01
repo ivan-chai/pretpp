@@ -69,6 +69,18 @@ class NormalizationHead(IdentityHead):
         return PaddedBatch(torch.nn.functional.normalize(x.payload, dim=-1), x.seq_lens)
 
 
+class PostNormalizationHead(Head):
+    """L2 normalization head.
+
+    Args:
+        input_size: Embedding size.
+        output_size: Output dimension.
+    """
+    def forward(self, x):
+        x = super().forward(x)
+        return PaddedBatch(torch.nn.functional.normalize(x.payload, dim=-1), x.seq_lens)
+
+
 class MetricHead(torch.nn.Module):
     def __init__(self, input_size, output_size, hidden_dims=None,
                  metric_params=None, head_params=None):
