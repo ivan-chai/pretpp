@@ -12,7 +12,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 
 from hotpp.data import PaddedBatch
 from pretpp.nn import IdentityHead
-from aligned_hpo import AlignedHPOptimizer, GradNormOptimizer, HPO_STAGE_DOWNSTREAM
+from aligned_hpo import AlignedHPOptimizer, DWAOptimizer, GradNormOptimizer, HPO_STAGE_DOWNSTREAM
 from .base_module import BaseModule
 from ..callbacks import AlignedHPOWarmupCallback
 from ..logging import log_dict
@@ -101,6 +101,7 @@ class HPOModule(BaseModule):
 
     OPTIMIZERS = {
         "aligned-hpo": AlignedHPOptimizer,
+        "dwa": DWAOptimizer,
         "gradnorm": GradNormOptimizer
     }
 
@@ -251,7 +252,7 @@ class HPOModule(BaseModule):
                 return_values.append(embeddings.payload)
             if opt.need_losses:
                 return_values.append(torch.stack(losses[name] for name in self.hpo_losses))
-            return return_values
+            return return_values if len(return_values) > 1 else return_values[0]
 
         if opt.encoder_decoder:
             def closure_encoder(z_grad):
