@@ -6,11 +6,11 @@ defaults:
 module:
   _target_: pretpp.modules.HPOModule
   hpo_losses:
-    - loss_0_timestamps
-    - loss_0_labels
-    - loss_0_currency
-    - loss_0_channel_type
-    - loss_0_trx_category
-    - loss_0_log_amount
-    - loss_1_coles
+    - loss_0_coles
+    - loss_1_timestamps
+    - loss_1_labels
+    - loss_1_currency
+    - loss_1_channel_type
+    - loss_1_trx_category
+    - loss_1_log_amount
   downstream_loss: loss_2_target_flag
