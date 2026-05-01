@@ -157,7 +157,7 @@ class HPOModule(BaseModule):
         do_val_step = opt.use_validation and dataloader_idx == 1
 
         x, y = batch
-        inputs, targets = self._loss.prepare_batch(x, y)
+        inputs, targets, _ = self._loss.prepare_batch(x, y)
 
         # Similar to self._compute_loss, but with encoder_decoder logic.
         if self._loss.aggregate:
