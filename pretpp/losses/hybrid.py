@@ -73,7 +73,7 @@ class HybridLoss(BaseLoss):
                 if i == 0:
                     targets = updated_targets
             new_targets[i] = loss_targets
-        return inputs, new_targets
+        return inputs, new_targets, targets
 
     def forward(self, outputs, targets):
         """Extract targets and compute loss between predictions and targets.

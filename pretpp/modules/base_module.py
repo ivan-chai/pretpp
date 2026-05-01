@@ -214,7 +214,7 @@ class BaseModule(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         x, y = batch
-        inputs, targets = self._loss.prepare_batch(x, y)
+        inputs, targets, _ = self._loss.prepare_batch(x, y)
         outputs, losses, metrics = self._compute_loss(inputs, targets)
         loss = sum(losses.values())
 
@@ -230,7 +230,7 @@ class BaseModule(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         x, y = batch
-        inputs, targets = self._loss.prepare_batch(x, y)
+        inputs, targets, _ = self._loss.prepare_batch(x, y)
         outputs, losses, metrics = self._compute_loss(inputs, targets)
         loss = sum(losses.values())
 
@@ -246,7 +246,7 @@ class BaseModule(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         x, y = batch
-        inputs, targets = self._loss.prepare_batch(x, y)
+        inputs, targets, _ = self._loss.prepare_batch(x, y)
         outputs, losses, metrics = self._compute_loss(inputs, targets)
         loss = sum(losses.values())
 
