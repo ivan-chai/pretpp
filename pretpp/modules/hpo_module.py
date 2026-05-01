@@ -251,7 +251,7 @@ class HPOModule(BaseModule):
             if opt.encoder_decoder:
                 return_values.append(embeddings.payload)
             if opt.need_losses:
-                return_values.append(torch.stack(losses[name] for name in self.hpo_losses))
+                return_values.append(torch.stack([losses[name] for name in self.hpo_losses]))
             return return_values if len(return_values) > 1 else return_values[0]
 
         if opt.encoder_decoder:
