@@ -1,0 +1,64 @@
+apply_cls_to_tokens: all
+cls_token: null
+
+metric:
+  _target_: pretpp.metrics.DownstreamMetric
+  classification_fields:
+    - target
+
+detection_k: 8
+
+module:
+  loss_projection_partial:
+    _target_: pretpp.nn.CatHead
+    _partial_: true
+    head_partials:
+      - _target_: pretpp.nn.MultiHead  # labels.
+        _partial_: true
+        head_partial:
+          _target_: hotpp.nn.ConditionalHead
+          _partial_: true
+          hidden_dims: [128]
+          k: ${detection_k}
+          output_size_per_query: true
+        head_output_sizes:
+          labels: ${num_classes}
+          timestamps: 1
+      - _target_: hotpp.nn.Head  # downstream.
+        _partial_: true
+        output_size: ${num_downstream_classes}
+        hidden_dims: [128]
+  loss:
+    _target_: pretpp.losses.HybridLoss
+    prediction_loss: 1
+    losses:
+      - _target_: pretpp.losses.DeTPPLoss
+        k: ${detection_k}
+        horizon: 8
+        loss_subset: 0.25
+        prefetch_factor: 1
+        match_weights:
+          _presence: 8
+          timestamps: 1
+          labels: 1
+        next_item_loss:
+          _target_: hotpp.losses.NextItemLoss
+          losses:
+            _presence:
+              _target_: hotpp.losses.BinaryCrossEntropyLoss
+            timestamps:
+              _target_: hotpp.losses.TimeMAELoss
+              delta: start
+              max_delta: ${max_duration}
+            labels:
+              _target_: hotpp.losses.CrossEntropyLoss
+              num_classes: ${num_classes}
+      - _target_: pretpp.losses.ClassificationLoss
+        apply_to_tokens: ${apply_cls_to_tokens}
+        cls_token: ${cls_token}
+        targets:
+          target:
+            num_classes: ${num_downstream_classes}
+            cast: true
+    aggregator:
+      _target_: hotpp.nn.LastAggregator

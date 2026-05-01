@@ -1,0 +1,69 @@
+apply_cls_to_tokens: all
+cls_token: null
+
+metric:
+  _target_: pretpp.metrics.DownstreamMetric
+  classification_fields:
+    - target
+
+module:
+  loss_projection_partial:
+    _target_: pretpp.nn.CatHead
+    _partial_: true
+    head_partials:
+      - _target_: pretpp.nn.PostNormalizationHead # CoLES.
+        _partial_: true
+        output_size: 128  # Embedding size.
+        hidden_dims: [128]
+      - _target_: pretpp.nn.MultiHead  # labels.
+        _partial_: true
+        head_partial:
+          _target_: hotpp.nn.Head
+          _partial_: true
+          hidden_dims: [128]
+        head_output_sizes:
+          labels: ${num_classes}
+          timestamps: 1
+          log_amount: 1
+      - _target_: hotpp.nn.Head  # downstream.
+        _partial_: true
+        output_size: ${num_downstream_classes}
+        hidden_dims: [128]
+  loss:
+    _target_: pretpp.losses.HybridLoss
+    prediction_loss: 2
+    truncate: begin
+    losses:
+      - _target_: pretpp.losses.ColesLoss
+        embedding_dim: ${module.loss_projection_partial.head_partials.0.output_size}
+        min_length: 25
+        max_length: 200
+        n_splits: 5
+        coles_loss:
+          _target_: ptls.frames.coles.losses.ContrastiveLoss
+          margin: 0.5
+          sampling_strategy:
+            _target_: ptls.frames.coles.sampling_strategies.HardNegativePairSelector
+            neg_count: 5
+      - _target_: pretpp.losses.NextItemLoss
+        losses:
+          timestamps:
+            _target_: hotpp.losses.TimeMAELoss
+            max_delta: ${max_time_delta}
+            smoothing: 1
+          labels:
+            _target_: hotpp.losses.CrossEntropyLoss
+            num_classes: ${num_classes}
+            grad_scale: null
+          log_amount:
+            _target_: hotpp.losses.MAELoss
+      - _target_: pretpp.losses.ClassificationLoss
+        drop_nans: true
+        apply_to_tokens: ${apply_cls_to_tokens}
+        cls_token: ${cls_token}
+        targets:
+          target:
+            num_classes: ${num_downstream_classes}
+            cast: true
+    aggregator:
+      _target_: hotpp.nn.LastAggregator
