@@ -32,6 +32,21 @@ class MLMDeTPPLoss(DetectionLoss, BaseLoss):
     def aggregate(self):
         return False
 
+    @property
+    def special_tokens_start(self):
+        """The number of special tokens at the beginning."""
+        return 0
+
+    @property
+    def special_tokens_end(self):
+        """The number of special tokens at the beginning."""
+        return 0
+
+    @property
+    def uses_special_tokens_inside(self):
+        """Whether the loss uses special tokens except start/end."""
+        return True
+
     def prepare_batch(self, inputs, targets=None):
         """Extract model inputs and targets.
 

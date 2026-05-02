@@ -73,6 +73,7 @@ class HistoryTokenTransformer(SimpleTransformer):
             # Don't insert history tokens.
             return super().forward(x, timestamps, states=states, return_states=return_states)
         else:
+            self.val_strategy.load_state_dict(self.strategy.state_dict())
             mode_strategy = self.val_strategy
         if return_states:
             raise NotImplementedError("HistoryTokenTransformer doesn't support states return.")

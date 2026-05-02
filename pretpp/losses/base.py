@@ -46,6 +46,21 @@ class BaseLoss(torch.nn.Module):
     def input_size(self):
         pass
 
+    @abstractproperty
+    def special_tokens_start(self):
+        """The number of special tokens at the beginning."""
+        pass
+
+    @abstractproperty
+    def special_tokens_end(self):
+        """The number of special tokens at the beginning."""
+        pass
+
+    @abstractproperty
+    def uses_special_tokens_inside(self):
+        """Whether the loss uses special tokens except start/end."""
+        pass
+
     def compute_metrics(self, inputs, outputs, targets):
         """Evaluate batch metrics.
 

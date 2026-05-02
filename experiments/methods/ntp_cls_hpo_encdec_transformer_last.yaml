@@ -7,7 +7,3 @@ defaults:
 name: ntp_cls_hpo_encdec_transformer_last
 
 cls_token: ${transformer_cls_token}
-
-module:
-  loss:
-    truncate: begin

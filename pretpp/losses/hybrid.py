@@ -12,16 +12,17 @@ class HybridLoss(BaseLoss):
     Args:
         losses: A list of losses.
         prediction_loss: An index of the prediction loss.
-        truncate: The type of subsequence selection for losses with different input lengths. Either None, `begin`, or `end`.
     """
-    def __init__(self, losses, prediction_loss=None, aggregator=None, truncate=None):
+    def __init__(self, losses, prediction_loss=None, aggregator=None):
         if any([loss.aggregate for loss in losses]) and (not aggregator):
             raise ValueError("Need aggregator")
+        for loss in losses:
+            if loss.uses_special_tokens_inside:
+                raise RuntimeError("Can't stack losses, that insert special tokens inside.")
         super().__init__()
         self._losses = torch.nn.ModuleList(losses)
         self._prediction_loss = prediction_loss
         self._aggregator = aggregator
-        self._truncate = truncate
 
     @property
     def structure(self):
@@ -40,6 +41,21 @@ class HybridLoss(BaseLoss):
     @property
     def input_size(self):
         return sum([loss.input_size for loss in self._losses])
+
+    @property
+    def special_tokens_start(self):
+        """The number of special tokens at the beginning."""
+        return sum([loss.special_tokens_start for loss in self._losses])
+
+    @property
+    def special_tokens_end(self):
+        """The number of special tokens at the beginning."""
+        return sum([loss.special_tokens_end for loss in self._losses])
+
+    @property
+    def uses_special_tokens_inside(self):
+        """Whether the loss uses special tokens except start/end."""
+        return any([loss.uses_special_tokens_inside for loss in self._losses])
 
     def prepare_inference_batch(self, inputs):
         if self._prediction_loss is not None:
@@ -62,16 +78,18 @@ class HybridLoss(BaseLoss):
         """
         new_targets = {}
         for i, loss in enumerate(self._losses):
-            loss_inputs, loss_targets, updated_targets = loss.prepare_batch(inputs, targets)
-            new_targets[f"_loss_{i}_input_length"] = loss_inputs.shape[1]
-            if loss_inputs is not inputs:
-                if self._truncate is None:
-                    raise RuntimeError("Base losses must not change inputs, when 'truncate' is None.")
-                if (i > 0) and (loss_inputs.shape[1] < inputs.shape[1]):
-                    raise RuntimeError(f"Base losses (except the first one) must not truncate sequences.")
-                inputs = loss_inputs
-                if i == 0:
-                    targets = updated_targets
+            loss_inputs, loss_targets, loss_global_targets = loss.prepare_batch(inputs, targets)
+            if (i > 0) and (loss_inputs.shape[1] != inputs.shape[1] + loss.special_tokens_start + loss.special_tokens_end):
+                raise RuntimeError(f"Base losses (except the first one) must not truncate sequences.")
+            inputs = loss_inputs
+            if targets is None:
+                pass
+            elif i > 0:
+                # Can only subset fields.
+                for k, v in loss_global_targets.payload.items():
+                    if v is not targets.payload[k]:
+                        raise RuntimeError(f"Ony the first loss can change global targets ({i})")
+            targets = loss_global_targets
             new_targets[i] = loss_targets
         return inputs, new_targets, targets
 
@@ -91,36 +109,38 @@ class HybridLoss(BaseLoss):
         outputs = self.unwrap_model_outputs(outputs)
         losses = {}
         metrics = {}
-        offset = 0
-        for i, loss in enumerate(self._losses):
-            loss_outputs = outputs.payload[..., offset:offset + loss.input_size]
+        offset = outputs.payload.shape[-1]
+        for i, loss in reversed(list(enumerate(self._losses))):
+            loss_outputs = outputs.payload[..., offset - loss.input_size:offset]
             if special_token_mask is None:
                 loss_outputs = PaddedBatch({"outputs": loss_outputs}, outputs.seq_lens)
             else:
                 loss_outputs = PaddedBatch({"outputs": loss_outputs, "special_token_mask": special_token_mask}, outputs.seq_lens)
-            loss_length = targets[f"_loss_{i}_input_length"]
-            if (self._truncate is not None) and (loss_outputs.shape[1] != loss_length):
-                assert loss_outputs.payload["outputs"].shape[1] > loss_length
-                delta = loss_outputs.payload["outputs"].shape[1] - loss_length
-                if self._truncate == "begin":
-                    loss_outputs = PaddedBatch({k: v[:, :loss_length] for k, v in loss_outputs.payload.items()},
-                                               (loss_outputs.seq_lens - delta).clip(min=0))
-                else:
-                    assert self._truncate == "end"
-                    loss_outputs = PaddedBatch({k: v[:, delta:] for k, v in loss_outputs.payload.items()},
-                                               (loss_outputs.seq_lens - delta).clip(min=0))
             if loss.aggregate:
                 loss_outputs = PaddedBatch(self._aggregator(self.unwrap_model_outputs(loss_outputs)).unsqueeze(1),
                                            torch.ones_like(loss_outputs.seq_lens))  # (B, 1, D).
             current_losses, current_metrics = loss(loss_outputs, targets[i])
             losses |= {f"loss_{i}_" + k: v for k, v in current_losses.items()}
             metrics |= {f"loss_{i}_" + k: v for k, v in current_metrics.items()}
-            offset += loss.input_size
-        if offset != outputs.payload.shape[-1]:
+
+            # Remove special tokens of the current loss.
+            if loss.special_tokens_start > 0 or loss.special_tokens_end > 0:
+                start = loss.special_tokens_start
+                end = outputs.shape[1] - loss.special_tokens_end
+                deleted = loss.special_tokens_start + loss.special_tokens_end
+                outputs = PaddedBatch({k: v[:, start:end] for k, v in outputs.payload.items()},
+                                      (outputs.seq_lens - deleted).clip(min=0))
+                if special_token_mask is not None:
+                    special_token_mask = special_token_mask[:, start:end]
+
+            offset -= loss.input_size
+        if offset != 0:
             raise RuntimeError("Failed to parse model outputs: dimension mismatch.")
         return losses, metrics
 
     def predict(self, outputs):
+        if self._prediction_loss is None:
+            raise ValueError("Need prediction loss index")
         special_token_mask = self.get_special_token_mask(outputs)
         outputs = self.unwrap_model_outputs(outputs)
         offset = 0

@@ -48,6 +48,21 @@ class ClassificationLoss(BaseLoss):
         # Use aggregation if there is no special token.
         return (self._cls_token is None) and (self._apply_to_tokens == "last")
 
+    @property
+    def special_tokens_start(self):
+        """The number of special tokens at the beginning."""
+        return 0
+
+    @property
+    def special_tokens_end(self):
+        """The number of special tokens at the beginning."""
+        return int(self._cls_token is not None)
+
+    @property
+    def uses_special_tokens_inside(self):
+        """Whether the loss uses special tokens except start/end."""
+        return False
+
     def prepare_inference_batch(self, inputs):
         """Extract model inputs for inference.
 

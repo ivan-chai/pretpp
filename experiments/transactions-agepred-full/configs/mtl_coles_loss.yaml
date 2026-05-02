@@ -32,7 +32,6 @@ module:
   loss:
     _target_: pretpp.losses.HybridLoss
     prediction_loss: 2
-    truncate: begin
     losses:
       - _target_: pretpp.losses.ColesLoss
         embedding_dim: ${module.loss_projection_partial.head_partials.0.output_size}
