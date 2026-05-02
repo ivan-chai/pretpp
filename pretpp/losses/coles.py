@@ -1,6 +1,7 @@
 import torch
 
 from hotpp.data import PaddedBatch
+from hotpp.losses.common import ScaleGradient
 from .base import BaseLoss
 
 
@@ -34,7 +35,7 @@ class ColesLoss(BaseLoss):
     """
     def __init__(self, embedding_dim, coles_loss, id_field="id",
                  n_splits=5, min_length=0.1, max_length=0.9,
-                 cls_token=None):
+                 cls_token=None, grad_scale=1):
         if min_length > max_length:
             raise ValueError("Max length must be greater than min")
         super().__init__()
@@ -45,6 +46,7 @@ class ColesLoss(BaseLoss):
         self.min_length = min_length
         self.max_length = max_length
         self.cls_token = cls_token
+        self.grad_scale = grad_scale
 
     @property
     def structure(self):
@@ -170,6 +172,8 @@ class ColesLoss(BaseLoss):
                 raise NotImplementedError("Expected aggregated embedding with shape (B, 1, C).")
             outputs = outputs.squeeze(1)
         loss = self.coles_loss(outputs, to_number(targets, device=outputs.device))
+        if self.grad_scale != 1:
+            loss = ScaleGradient.apply(loss, self.grad_scale)
         losses = {"coles": loss}
         metrics = {}
         return losses, metrics
