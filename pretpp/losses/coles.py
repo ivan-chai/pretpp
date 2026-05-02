@@ -124,6 +124,8 @@ class ColesLoss(BaseLoss):
         else:
             max_lengths = torch.minimum(torch.full_like(inputs.seq_lens, self.max_length),
                                         inputs.seq_lens)  # (B).
+        min_lengths = torch.minimum(min_lengths.clip(min=1), inputs.seq_lens)
+        max_lengths = torch.maximum(min_lengths, max_lengths)
         sample_sizes = min_lengths[:, None] + (max_lengths - min_lengths)[:, None] * torch.rand(b, n, device=device)  # (B, N).
         sample_sizes = sample_sizes.round().long()  # (B, N).
         assert (sample_sizes <= l).all()
