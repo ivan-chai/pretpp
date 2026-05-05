@@ -14,6 +14,7 @@ from hotpp.data import PaddedBatch
 from pretpp.nn import IdentityHead
 from aligned_hpo import AlignedHPOptimizer, DWAOptimizer, GradNormOptimizer, MGDAOptimizer, HPO_STAGE_DOWNSTREAM
 from .base_module import BaseModule
+from .subset_labels import get_subset_mask
 from ..callbacks import AlignedHPOWarmupCallback
 from ..logging import log_dict
 
@@ -97,6 +98,7 @@ class HPOModule(BaseModule):
         encoder_group_params: Specific parameters for encoder weights optimization (lr etc.).
         cache_embedding_gradients: Compute and cache embedding gradients for all heads via a single backward pass in the encoder-decoder mode.
         warmup_steps: Reset all except HPO statistics after the specified number of steps.
+        subset_labels: A mapping from the target name to fraction of the labeled data used during training.
     """
 
     OPTIMIZERS = {
@@ -110,7 +112,7 @@ class HPOModule(BaseModule):
                  initial_weights=None, hpo_params=None, hp_group_params=None,
                  loss_group_params=None, encoder_group_params=None,
                  optimizer="aligned-hpo", cache_embedding_gradients=False,
-                 warmup_steps=0,
+                 warmup_steps=0, subset_labels=None,
                  **kwargs):
         super().__init__(seq_encoder, loss, **kwargs)
         self.automatic_optimization = False
@@ -124,6 +126,7 @@ class HPOModule(BaseModule):
         self.optimizer_type = optimizer
         self.cache_embedding_gradients = cache_embedding_gradients
         self.warmup_steps = warmup_steps
+        self.subset_labels = subset_labels
         if initial_weights is not None:
             initial_weights = torch.tensor(initial_weights, dtype=torch.get_default_dtype())
         else:
@@ -158,6 +161,16 @@ class HPOModule(BaseModule):
         do_val_step = opt.use_validation and dataloader_idx == 1
 
         x, y = batch
+        for k, v in (self.subset_labels or {}).items():
+            trainset = self.trainer.train_dataloader.dataset
+            while hasattr(trainset, "dataset"):
+                trainset = trainset.dataset
+            id_field = trainset.id_field
+            ids = x.payload[id_field]
+            out_mask = get_subset_mask(ids, 1 - v, device=x.device)
+            y.payload[k] = y.payload[k].float()
+            y.payload[k][out_mask] = torch.nan
+
         inputs, targets, _ = self._loss.prepare_batch(x, y)
 
         # Similar to self._compute_loss, but with encoder_decoder logic.
