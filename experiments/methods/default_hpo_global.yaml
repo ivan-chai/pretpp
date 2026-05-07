@@ -4,14 +4,11 @@ module:
     betas: [0, 0.99]
   hpo_params:
     algorithm: sgd
-    regularization: 1
+    regularization: 0
     warmup: 100
     ema:
       covs: 0.0
       stats: 0.99
-    scale_gradients: 0.5
-  lr_scheduler_partial:
-    gamma: 0.6
 
 trainer:
   precision: 32-true
