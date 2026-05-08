@@ -4,7 +4,3 @@ defaults:
   - _self_
 
 name: ntp_cls_hpo_mse_encdec_val_rnn
-
-module:
-  hpo_params:
-    align: val

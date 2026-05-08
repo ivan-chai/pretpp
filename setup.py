@@ -22,6 +22,6 @@ setuptools.setup(
     install_requires=[
         "hotpp-benchmark>=0.6.7",
         "ptls-validation @ git+https://git@github.com/dllllb/ptls-validation.git#egg=ptls-validation",
-        "aligned-hpo @ git+ssh://git@github.com/ivan-chai/aligned-hpo.git#egg=aligned-hpo"
+        "aligned-hpo @ git+https://git@github.com/ivan-chai/aligned-hpo.git#egg=aligned-hpo"
     ]
 )

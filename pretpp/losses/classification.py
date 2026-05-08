@@ -12,14 +12,14 @@ class ClassificationLoss(BaseLoss):
         targets: A mapping from a target name to dictionary with "num_classes" and optional "grad_scale" and "cast" fields.
         cls_token: A dictionary with field values for a CLS token (optional, typically for transformer models).
         overwrite_timestamp: Assign the latest timestamp to the CLS token.
-        apply_to_tokens: Controls a subset of outputs to apply loss to. Either `last`, `all`, or `special`.
+        apply_to_tokens: Controls a subset of outputs to apply loss to. Either `aggregated`, `all`, or `special`.
         drop_nans: Exclude elements with nan targets.
     """
     def __init__(self, targets, cls_token=None, overwrite_timestamp=False,
-                 apply_to_tokens="last", drop_nans=False):
-        if apply_to_tokens not in {"last", "all", "special"}:
+                 apply_to_tokens="aggregated", drop_nans=False):
+        if apply_to_tokens not in {"aggregated", "all", "special"}:
             raise ValueError(f"Unknown application strategy: {apply_to_tokens}.")
-        if (cls_token is not None) and (apply_to_tokens != "last"):
+        if (cls_token is not None) and (apply_to_tokens != "aggregated"):
             raise ValueError(f"Can't mix CLS token with a selected application strategy {apply_to_tokens}.")
         super().__init__()
         for name, spec in targets.items():
@@ -46,7 +46,7 @@ class ClassificationLoss(BaseLoss):
     @property
     def aggregate(self):
         # Use aggregation if there is no special token.
-        return (self._cls_token is None) and (self._apply_to_tokens == "last")
+        return (self._cls_token is None) and (self._apply_to_tokens == "aggregated")
 
     @property
     def special_tokens_start(self):

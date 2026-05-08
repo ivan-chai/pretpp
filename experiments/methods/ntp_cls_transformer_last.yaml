@@ -6,7 +6,7 @@ defaults:
 
 name: ntp_cls_transformer_last
 
-apply_cls_to_tokens: last
+apply_cls_to_tokens: aggregated
 cls_token: ${transformer_cls_token}
 
 module:

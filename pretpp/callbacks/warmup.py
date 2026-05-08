@@ -3,17 +3,11 @@ import torch
 from pytorch_lightning.callbacks import Callback
 
 from pretpp.common import safe_mkdir, get_workdir
-try:
-    from aligned_hpo import AlignedHPOptimizer
-    USE_ALIGNED_HPO = True
-except ImportError:
-    USE_ALIGNED_HPO = False
+from aligned_hpo import AlignedHPOptimizer
 
 
 class AlignedHPOWarmupCallback(Callback):
     def __init__(self, warmup_steps):
-        if not USE_ALIGNED_HPO:
-            raise ImportError("Need aligned_hpo module for HPO warmup")
         super().__init__()
         self.warmup_steps = warmup_steps
         self.warmup_counter = 0

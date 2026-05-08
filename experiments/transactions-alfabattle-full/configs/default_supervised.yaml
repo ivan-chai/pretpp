@@ -14,7 +14,7 @@ module:
   loss_projection_partial: ${head}
   loss:
     _target_: pretpp.losses.ClassificationLoss
-    apply_to_tokens: last
+    apply_to_tokens: aggregated
     targets:
       target:
         num_classes: ${num_downstream_classes}

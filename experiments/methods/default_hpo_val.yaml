@@ -1,3 +1,7 @@
 data_module:
   _target_: pretpp.data.InterleavedDataModule
   val_period: 2
+
+module:
+  hpo_params:
+    align: val
