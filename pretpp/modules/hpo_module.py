@@ -1,0 +1,364 @@
+import warnings
+import math
+import pytorch_lightning as pl
+import torch
+import yaml
+import os
+from abc import ABC, abstractmethod
+from collections.abc import Mapping
+from contextlib import contextmanager
+from omegaconf import OmegaConf
+from pytorch_lightning.callbacks import ModelCheckpoint
+
+from hotpp.data import PaddedBatch
+from pretpp.nn import IdentityHead
+from aligned_hpo import AlignedHPOptimizer, DWAOptimizer, GradNormOptimizer, MGDAOptimizer, PCGradOptimizer, HPO_STAGE_DOWNSTREAM
+from .base_module import BaseModule
+from ..callbacks import AlignedHPOWarmupCallback
+from ..logging import log_dict
+
+
+def safe_mkdir(path):
+    try:
+        os.mkdir(path)
+    except FileExistsError:
+        pass
+
+
+def recursive_map(data, func):
+    """Recursively applies a function to all leaf nodes in a structure."""
+    if isinstance(data, dict):
+        return {k: recursive_map(v, func) for k, v in data.items()}
+    elif isinstance(data, (list, tuple, set)):
+        return type(data)(recursive_map(item, func) for item in data)
+    return func(data)
+
+
+class Structure(tuple):
+    """Operations with nested structures."""
+    def __new__(cls, structure):
+        return super(Structure, cls).__new__(cls, [(Structure(v) if isinstance(v, (tuple, list)) else v) for v in structure])
+
+    @property
+    def size(self):
+        return sum([(v.size if isinstance(v, Structure) else 1) for v in self])
+
+    def flatten(self):
+        return sum([(v.flatten() if isinstance(v, Structure) else [v]) for v in self], [])
+
+    def replace_string(self, key, value):
+        result = []
+        for v in self:
+            if isinstance(v, str) and (v == key):
+                result.append(value)
+            elif isinstance(v, Structure):
+                result.append(v.replace_string(key, value))
+            else:
+                result.append(v)
+        return Structure(result)
+
+    def get_by_key(self, key, value_structure):
+        if len(self) != len(value_structure):
+            raise ValueError("Structures mismatch")
+        results = []
+        for k, v in zip(self, value_structure):
+            if isinstance(k, Structure):
+                assert isinstance(v, Structure)
+                try:
+                    results.append(k.get_by_key(key, v))
+                except KeyError:
+                    pass
+            else:
+                assert isinstance(k, str) and (not isinstance(v, Structure))
+                if k == key:
+                    results.append(v)
+        if not results:
+            raise KeyError(f"Key not found: {key}")
+        if len(results) > 1:
+            raise RuntimeError(f"Multiple matches for {key}")
+        return results[0]
+
+    def replace_keys_with_values(self, key_to_value):
+        return Structure([(k.replace_keys_with_values(key_to_value) if isinstance(k, Structure)
+                           else key_to_value.get(k))
+                          for k in self])
+
+
+class HPOModule(BaseModule):
+    """Tune loss weights using SGD.
+
+    Args:
+        hpo_losses: A list of losses to tune hyperparameters for.
+        downstream_loss: The name of the downstream loss or a mapping from loss name to weight.
+        initial_weights: Initial values (default to ones).
+        hpo_params: Parameters of the HP optimizer.
+        hp_group_params: Specific parameters for weights optimization (lr etc.).
+        loss_group_params: Specific parameters for loss optimization (lr etc.).
+        encoder_group_params: Specific parameters for encoder weights optimization (lr etc.).
+        cache_embedding_gradients: Compute and cache embedding gradients for all heads via a single backward pass in the encoder-decoder mode.
+        warmup_steps: Reset all except HPO statistics after the specified number of steps.
+    """
+
+    OPTIMIZERS = {
+        "aligned-hpo": AlignedHPOptimizer,
+        "dwa": DWAOptimizer,
+        "gradnorm": GradNormOptimizer,
+        "mgda": MGDAOptimizer,
+        "pcgrad": PCGradOptimizer
+    }
+
+    def __init__(self, seq_encoder, loss, hpo_losses, downstream_loss,
+                 initial_weights=None, hpo_params=None, hp_group_params=None,
+                 loss_group_params=None, encoder_group_params=None,
+                 optimizer="aligned-hpo", cache_embedding_gradients=False,
+                 warmup_steps=0,
+                 **kwargs):
+        super().__init__(seq_encoder, loss, **kwargs)
+        self.automatic_optimization = False
+        # Register loss parameters.
+        self.hpo_losses = list(hpo_losses)
+        self.downstream_loss = downstream_loss if isinstance(downstream_loss, Mapping) else {downstream_loss: 1}
+        self.hpo_params = hpo_params
+        self.hp_group_params = hp_group_params
+        self.loss_group_params = loss_group_params
+        self.encoder_group_params = encoder_group_params
+        self.optimizer_type = optimizer
+        self.cache_embedding_gradients = cache_embedding_gradients
+        self.warmup_steps = warmup_steps
+        if initial_weights is not None:
+            initial_weights = torch.tensor(initial_weights, dtype=torch.get_default_dtype())
+        else:
+            initial_weights = torch.ones([len(hpo_losses)])
+        if initial_weights.shape != (len(hpo_losses),):
+            raise ValueError(f"Initial weights shape mismatch: {initial_weights.shape} != ({len(hpo_losses)})")
+        self.loss_weights = torch.nn.Parameter(initial_weights)
+        self.gradient_clip_val = None
+
+    def configure_callbacks(self):
+        callbacks = super().configure_callbacks()
+        if self.warmup_steps > 0:
+            callbacks.append(AlignedHPOWarmupCallback(warmup_steps=self.warmup_steps))
+        return callbacks
+
+    @BaseModule.trainer.setter
+    def trainer(self, trainer):
+        if hasattr(trainer, "_gradient_clip_val_bck"):
+            self.gradient_clip_val = trainer._gradient_clip_val_bck
+        else:
+            self.gradient_clip_val = trainer.gradient_clip_val
+        trainer.gradient_clip_val = None
+        trainer._gradient_clip_val_bck = self.gradient_clip_val
+        BaseModule.trainer.fset(self, trainer)
+
+    def training_step(self, batch, batch_idx):
+        dataloader_idx = batch[0].payload.get("_dataloader_idx", None)
+        opt = self.optimizers()
+        if opt.use_validation and ((dataloader_idx is None) or (dataloader_idx > 1)):
+            raise ValueError(f"When validation set is used for tuning, there must be exact 2 dataloaders. Got {dataloader_idx}")
+
+        do_val_step = opt.use_validation and dataloader_idx == 1
+
+        x, y = batch
+        inputs, targets, _ = self._loss.prepare_batch(x, y)
+
+        # Similar to self._compute_loss, but with encoder_decoder logic.
+        if self._loss.aggregate:
+            embeddings = PaddedBatch(self._embed_impl(inputs).unsqueeze(1),
+                                     torch.ones_like(inputs.seq_lens))  # (B, 1, D).
+        else:
+            embeddings, _ = self.forward_impl(inputs)
+
+        if opt.encoder_decoder:
+            # Detach embeddings.
+            encoder_embeddings = embeddings
+            def detach(x):
+                x = PaddedBatch(x.payload.detach().masked_fill(~x.seq_len_mask.bool().unsqueeze(-1), 0),
+                                x.seq_lens)
+                x.payload.requires_grad = True
+                return x
+            embeddings = self._apply_to_outputs(embeddings, detach)
+
+        use_cached_grads = opt.encoder_decoder and self.cache_embedding_gradients
+
+        if use_cached_grads:
+            # Cache gradients for each head.
+            opt.zero_grad()
+            def zero_embeddings_grad(x):
+                x.payload.grad = None
+                return x
+            self._apply_to_outputs(embeddings, zero_embeddings_grad)
+            loss_structure = Structure(self._loss.structure)
+            with self._loss_projection.cache_input_grads() as projection:
+                # Compute loss and backward.
+                outputs = self._apply_to_outputs(embeddings, projection)  # (B, L, D).
+                losses, metrics = self._loss(outputs, targets)
+                loss = sum([losses[name] for name in set(loss_structure.flatten())])
+                # DDP synchronization will be made in after_backward_hook.
+                # NOTE: embedding gradients must not be synchronized.
+                with self._no_sync():
+                    self.manual_backward(loss)
+                # Gather gradients.
+                z_grads_cache = Structure(projection.input_grads)
+                heads_grads_cache = Structure(projection.grads)
+                # Clean heads gradients to prevent accumulation.
+                for p in opt.param_groups[1]["params"]:
+                    p.grad = None
+                assert z_grads_cache.size == loss_structure.size
+                assert heads_grads_cache.size == loss_structure.size
+        else:
+            # Compute losses without backward.
+            outputs = self._apply_to_outputs(embeddings, self._loss_projection)  # (B, L, D).
+            losses, metrics = self._loss(outputs, targets)
+
+        embeddings, _ = self._split_output_batch(embeddings)
+        if opt.encoder_decoder:
+            encoder_embeddings, _ = self._split_output_batch(encoder_embeddings)
+
+        def closure(down, weights, retain_graph=False, stage=None):
+            opt.zero_grad()
+            if opt.encoder_decoder:
+                embeddings.payload.grad = None
+            assert len(weights) == len(self.hpo_losses)
+            if use_cached_grads:
+                assert opt.encoder_decoder  # Need only heads gradients.
+                # Set gradients from the cache.
+                named_weights = {name: w * down for name, w in self.downstream_loss.items()} if down != 0 else {}
+                named_weights.update({self.hpo_losses[i]: w for i, w in enumerate(weights) if w != 0})
+                assert not (set(named_weights) - set(loss_structure.flatten()))
+                embeddings.payload.grad = sum(w * loss_structure.get_by_key(name, z_grads_cache)
+                                              for name, w in named_weights.items())
+                self._loss_projection.grads = loss_structure.replace_keys_with_values(
+                    {name: recursive_map(loss_structure.get_by_key(name, heads_grads_cache), lambda x: w * x)
+                     for name, w in named_weights.items()})
+            else:
+                # Do backward pass.
+                downstream_loss = sum([w * losses[name] for name, w in self.downstream_loss.items()])
+                loss = sum([w * losses[k] for k, w in zip(self.hpo_losses, weights)], down * downstream_loss)
+                # DDP synchronization will be made in after_backward_hook.
+                with self._no_sync():
+                    self.manual_backward(loss, retain_graph=retain_graph)
+            if self.should_log:
+                if stage == HPO_STAGE_DOWNSTREAM:
+                    metrics["hpo_grad_norm_downstream"] = self._get_grad_norm(warn_empty_grads=False)
+                elif isinstance(stage, int):
+                    metrics[f"hpo_grad_norm_weight_{self.hpo_losses[stage]}"] = self._get_grad_norm(warn_empty_grads=False)
+            if self.should_log and opt.encoder_decoder:
+                with torch.no_grad():
+                    emb_grad_norm = torch.linalg.norm(embeddings.payload.grad.flatten())
+                if stage == HPO_STAGE_DOWNSTREAM:
+                    metrics["hpo_emb_grad_norm_downstream"] = emb_grad_norm
+                elif isinstance(stage, int):
+                    metrics[f"hpo_emb_grad_norm_weight_{self.hpo_losses[stage]}"] = emb_grad_norm
+            return_values = []
+            if opt.encoder_decoder:
+                return_values.append(embeddings.payload)
+            if opt.need_losses:
+                return_values.append(torch.stack([losses[name] for name in self.hpo_losses]))
+            return return_values if len(return_values) > 1 else return_values[0]
+
+        if opt.encoder_decoder:
+            def closure_encoder(z_grad):
+                opt.zero_grad()
+                # DDP synchronization will be made in after_backward_hook.
+                encoder_embeddings.payload.backward(z_grad.reshape(*encoder_embeddings.payload.shape))
+
+            def embed_fn():
+                if self._loss.aggregate:
+                    embeddings = self._embed_impl(inputs).unsqueeze(1)  # (B, 1, D).
+                else:
+                    embeddings, _ = self.forward_impl(inputs)
+                    embeddings.payload.masked_fill_(~embeddings.seq_len_mask.bool().unsqueeze(-1), 0)
+                    embeddings = embeddings.payload
+                return embeddings
+        else:
+            closure_encoder = None
+            embed_fn = None
+
+        def after_backward_hook():
+            # Synchronize gradients in DDP (mirrors _no_sync logic).
+            if hasattr(self.trainer.model, "no_sync"):
+                with torch.enable_grad():
+                    zero_loss = 0 * sum(p.flatten()[0] for p in self.parameters())
+                    self.manual_backward(zero_loss)
+            if self.gradient_clip_val is not None:
+                self.clip_gradients(opt, gradient_clip_val=self.gradient_clip_val, gradient_clip_algorithm=self.trainer.gradient_clip_algorithm)
+            if not do_val_step:
+                self.log("grad_norm", self._get_grad_norm(), prog_bar=True)
+
+        if do_val_step:
+            opt.val_step(closure, closure_encoder, embed_fn=embed_fn, after_backward_hook=after_backward_hook)
+        else:
+            opt.hpo_step(closure, closure_encoder, embed_fn=embed_fn, after_backward_hook=after_backward_hook)
+            hpo_grads = self.loss_weights.grad
+            with torch.no_grad():
+                metrics["loss-pretrain"] = sum([losses[name] for name in self.hpo_losses])
+                metrics["loss"] = sum(losses.values())
+            if self.should_log and (hpo_grads is not None):
+                hpo_grad_norm = torch.linalg.norm(hpo_grads)
+                metrics["hpo_grad_norm"] = hpo_grad_norm
+            if self.should_log:
+                metrics.update(opt.metrics)
+            self._log_metrics("train", len(x), None, losses, metrics, single_batch_metrics=None)
+
+            # Make scheduler step if necessary.
+            for config in self.trainer.lr_scheduler_configs:
+                if config.interval != "step":
+                    continue
+                if config.frequency != 1:
+                    raise NotImplementedError("Frequency in LR scheduler.")
+                if config.reduce_on_plateau:
+                    raise NotImplementedError("ReduceOnPlateau LR scheduler.")
+                config.scheduler.step()
+
+    def on_before_optimizer_step(self, optimizer=None, optimizer_idx=None):
+        # Move grad_norm logging to after-backward-hook.
+        pass
+
+    def on_train_epoch_end(self):
+        super().on_train_epoch_end()
+        # Make scheduler step if necessary.
+        for config in self.trainer.lr_scheduler_configs:
+            if config.interval != "epoch":
+                continue
+            if config.frequency != 1:
+                raise NotImplementedError("Frequency in LR scheduler.")
+            if config.reduce_on_plateau:
+                raise NotImplementedError("ReduceOnPlateau LR scheduler.")
+            config.scheduler.step()
+        # Log the detailed optimizer state.
+        state = self.optimizers().hpo_state_dict(add_names=True)
+        state = recursive_map(state, lambda x: (x.detach().cpu().tolist() if isinstance(x, torch.Tensor) else x))
+        log_dict(self.logger, state, self.current_epoch, "hpo_state/")
+
+    def configure_optimizers(self):
+        loss_params = [v for k, v in self.named_parameters() if v.requires_grad and k != "loss_weights" and k.startswith("_loss")]
+        model_params = [v for k, v in self.named_parameters() if v.requires_grad and k != "loss_weights" and not k.startswith("_loss")]
+        params = [
+            {"params": [self.loss_weights]},
+            {"params": loss_params},
+            {"params": model_params}
+        ]
+        if self.hp_group_params is not None:
+            params[0].update(self.hp_group_params)
+        if self.loss_group_params is not None:
+            params[1].update(self.loss_group_params)
+        if self.encoder_group_params is not None:
+            params[2].update(self.encoder_group_params)
+        optimizer = self.OPTIMIZERS[self.optimizer_type](params, self._optimizer_partial,
+                                                         weights_names=self.hpo_losses,
+                                                         **(self.hpo_params or {}))
+        configs = self._build_scheduler_configs(optimizer)
+        if not configs:
+            return optimizer
+        return [optimizer], configs
+
+    @contextmanager
+    def _no_sync(self):
+        """Safely get no_sync regardless of strategy."""
+        # self.trainer.model is the strategy-wrapped model (DDP, FSDP, etc.)
+        if hasattr(self.trainer.model, "no_sync"):
+            with self.trainer.model.no_sync():
+                yield
+        else:
+            # Single GPU, CPU, or strategy that doesn't need no_sync
+            yield

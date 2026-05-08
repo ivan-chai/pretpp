@@ -1,0 +1,15 @@
+module:
+  hp_group_params:
+    lr: 0.01
+    betas: [0, 0.99]
+  hpo_params:
+    algorithm: sgd
+    regularization: 0
+    warmup: 100
+    ema:
+      covs: 0.0
+      stats: 0.99
+
+trainer:
+  precision: 32-true
+  strategy: ddp_find_unused_parameters_true

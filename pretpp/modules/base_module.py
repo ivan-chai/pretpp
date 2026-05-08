@@ -8,14 +8,8 @@ from omegaconf import OmegaConf
 from pytorch_lightning.callbacks import ModelCheckpoint
 
 from hotpp.data import PaddedBatch
+from pretpp.common import get_workdir
 from pretpp.nn import IdentityHead
-
-
-def safe_mkdir(path):
-    try:
-        os.mkdir(path)
-    except FileExistsError:
-        pass
 
 
 class BaseModule(pl.LightningModule):
@@ -41,6 +35,7 @@ class BaseModule(pl.LightningModule):
         aggregator: Embeddings aggregator. By default try to use encoder aggregator.
         optimizer_partial: Optimizer init partial. Network parameters are missed.
         lr_scheduler_partial: Scheduler init partial. Optimizer are missed.
+        warmup: Number of optimizer warmup steps. LR linearly increases from base_lr/warmup to base_lr.
         init_state_dict: Checkpoint to initialize all parameters except loss.
         init_prefixes: A list of prefixes to initialize from checkpoint. By default, initialize all parameters
             except loss and loss projection.
@@ -58,6 +53,7 @@ class BaseModule(pl.LightningModule):
                  aggregator=None,
                  optimizer_partial=None,
                  lr_scheduler_partial=None,
+                 warmup=0,
                  init_state_dict=None,
                  init_prefixes=None,
                  freeze_prefixes=None,
@@ -78,6 +74,7 @@ class BaseModule(pl.LightningModule):
         self._downstream_config = downstream_validation_config
         self._optimizer_partial = optimizer_partial
         self._lr_scheduler_partial = lr_scheduler_partial
+        self._warmup = warmup
         self._freeze_prefixes = freeze_prefixes
         self._peft_adapter = peft_adapter
         self._peft_applied = False
@@ -155,12 +152,16 @@ class BaseModule(pl.LightningModule):
             self._seq_encoder = self._seq_encoder.merge_and_unload()
         return result
 
-    def forward(self, x, return_states=False):
+    def forward_impl(self, x, return_states=False):
         """Extract embeddings."""
         seq_encoder = self._seq_encoder if not self._peft_applied else self._seq_encoder.base_model
         hiddens, states = seq_encoder(x, return_states=return_states)  # (B, L, D).
         outputs = self._apply_to_outputs(hiddens, self._head)
         return outputs, states
+
+    def forward(self, x, return_states=False):
+        """Extract embeddings."""
+        return self.forward_impl(x, return_states)
 
     def _embed_impl(self, inputs):
         if self._aggregator is None:
@@ -213,7 +214,7 @@ class BaseModule(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         x, y = batch
-        inputs, targets = self._loss.prepare_batch(x, y)
+        inputs, targets, _ = self._loss.prepare_batch(x, y)
         outputs, losses, metrics = self._compute_loss(inputs, targets)
         loss = sum(losses.values())
 
@@ -229,7 +230,7 @@ class BaseModule(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         x, y = batch
-        inputs, targets = self._loss.prepare_batch(x, y)
+        inputs, targets, _ = self._loss.prepare_batch(x, y)
         outputs, losses, metrics = self._compute_loss(inputs, targets)
         loss = sum(losses.values())
 
@@ -245,7 +246,7 @@ class BaseModule(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         x, y = batch
-        inputs, targets = self._loss.prepare_batch(x, y)
+        inputs, targets, _ = self._loss.prepare_batch(x, y)
         outputs, losses, metrics = self._compute_loss(inputs, targets)
         loss = sum(losses.values())
 
@@ -273,19 +274,30 @@ class BaseModule(pl.LightningModule):
             self.log_dict(metrics, prog_bar=True, sync_dist=True)
             self._test_metric.reset()
 
-    def configure_optimizers(self):
-        optimizer = self._optimizer_partial([v for k, v in self.named_parameters() if v.requires_grad])
-        if self._lr_scheduler_partial is None:
-            return optimizer
-        else:
+    def _build_scheduler_configs(self, optimizer):
+        configs = []
+        if self._warmup > 0:
+            warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
+                optimizer, start_factor=1 / self._warmup, end_factor=1.0, total_iters=self._warmup
+            )
+            configs.append({"scheduler": warmup_scheduler, "interval": "step"})
+        if self._lr_scheduler_partial is not None:
             scheduler = self._lr_scheduler_partial(optimizer)
-            scheduler = {
+            config = {
                 "scheduler": scheduler,
                 "interval": getattr(scheduler, "default_interval", "epoch")
             }
             if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                scheduler["monitor"] = "val/loss"
-            return [optimizer], [scheduler]
+                config["monitor"] = "val/loss"
+            configs.append(config)
+        return configs
+
+    def configure_optimizers(self):
+        optimizer = self._optimizer_partial([v for k, v in self.named_parameters() if v.requires_grad])
+        configs = self._build_scheduler_configs(optimizer)
+        if not configs:
+            return optimizer
+        return [optimizer], configs
 
     def configure_callbacks(self):
         callbacks = []
@@ -293,11 +305,7 @@ class BaseModule(pl.LightningModule):
             from pretpp.downstream import DownstreamCallback, DownstreamCheckpointCallback
             with open(self._downstream_config, "r") as fp:
                 downstream_config = OmegaConf.create(yaml.safe_load(fp))
-            root = self.logger.root_dir or self.logger.save_dir or "lightning_logs"
-            safe_mkdir(root)
-            version = self.logger.version
-            root = os.path.join(root, version if isinstance(version, str) else f"version_{version}")
-            safe_mkdir(root)
+            root = get_workdir(self.logger, make=True)
             downstream_root = os.path.join(root, "downstream")
 
             monitor = None
@@ -328,7 +336,8 @@ class BaseModule(pl.LightningModule):
         return callbacks
 
     def on_before_optimizer_step(self, optimizer=None, optimizer_idx=None):
-        self.log("grad_norm", self._get_grad_norm(), prog_bar=True)
+        if self.should_log:
+            self.log("grad_norm", self._get_grad_norm(), prog_bar=True)
 
     @torch.autocast("cuda", enabled=False)
     def _update_metric(self, metric, x, inputs, outputs, targets):
@@ -353,6 +362,10 @@ class BaseModule(pl.LightningModule):
                 continue
             norms[i] = p.grad.data.norm(2)
         return norms.square().sum() ** 0.5
+
+    @property
+    def should_log(self):
+        return (self.trainer.global_step + 1) % self.trainer.log_every_n_steps == 0
 
     def _log_metrics(self, split, batch_size, loss, losses, metrics, single_batch_metrics=None, mean_seq_len=None):
         log_values = {}

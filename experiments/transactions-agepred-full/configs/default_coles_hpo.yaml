@@ -1,0 +1,15 @@
+defaults:
+  - mtl_coles_loss
+  - default_hpo_global
+  - _self_
+
+module:
+  _target_: pretpp.modules.HPOModule
+  hpo_losses:
+    - loss_0_coles
+    - loss_1_timestamps
+    - loss_1_labels
+    - loss_1_log_amount
+  hpo_params:
+    rescale_grad_norm_weights: [0, 1, 1, 1]
+  downstream_loss: loss_2_target

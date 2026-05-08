@@ -20,12 +20,31 @@ class NextItemLoss(BaseLoss):
         self._apply_to_tokens = apply_to_tokens
 
     @property
+    def structure(self):
+        return list(self._order) if len(self._order) > 1 else self._order[0]
+
+    @property
     def aggregate(self):
         return False
 
     @property
     def input_size(self):
         return sum([loss.input_size for loss in self._losses.values()])
+
+    @property
+    def special_tokens_start(self):
+        """The number of special tokens at the beginning."""
+        return 0
+
+    @property
+    def special_tokens_end(self):
+        """The number of special tokens at the beginning."""
+        return 0
+
+    @property
+    def uses_special_tokens_inside(self):
+        """Whether the loss uses special tokens except start/end."""
+        return False
 
     def prepare_batch(self, inputs, targets=None):
         """Extract model inputs and targets.
@@ -39,7 +58,7 @@ class NextItemLoss(BaseLoss):
         """
         # For the next-item loss inputs and targets are the same.
         # Offset is applied in base loss classes.
-        return inputs, inputs
+        return inputs, inputs, targets
 
     def forward(self, outputs, targets, reduction="mean"):
         """Extract targets and compute loss between predictions and targets.

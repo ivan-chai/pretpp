@@ -18,6 +18,6 @@ module:
       target:
         num_classes: ${num_downstream_classes}
         cast: true
-    apply_to_tokens: last
+    apply_to_tokens: aggregated
   val_metric: ${metric}
   test_metric: ${metric}

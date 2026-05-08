@@ -1,0 +1,11 @@
+defaults:
+  - ntp_cls_hpo_transformer_last
+  - _self_
+
+name: ntp_cls_hpo_mse_transformer_last
+
+module:
+  hpo_params:
+    algorithm: mse
+    ema:
+      covs: 0.99

@@ -1,6 +1,7 @@
 import torch
 
 from hotpp.data import PaddedBatch
+from hotpp.losses.common import ScaleGradient
 from .base import BaseLoss
 
 
@@ -34,7 +35,7 @@ class ColesLoss(BaseLoss):
     """
     def __init__(self, embedding_dim, coles_loss, id_field="id",
                  n_splits=5, min_length=0.1, max_length=0.9,
-                 cls_token=None):
+                 cls_token=None, grad_scale=1):
         if min_length > max_length:
             raise ValueError("Max length must be greater than min")
         super().__init__()
@@ -45,6 +46,11 @@ class ColesLoss(BaseLoss):
         self.min_length = min_length
         self.max_length = max_length
         self.cls_token = cls_token
+        self.grad_scale = grad_scale
+
+    @property
+    def structure(self):
+        return "coles"
 
     @property
     def input_size(self):
@@ -54,6 +60,21 @@ class ColesLoss(BaseLoss):
     def aggregate(self):
         # Use aggregation if there is no special token.
         return self.cls_token is None
+
+    @property
+    def special_tokens_start(self):
+        """The number of special tokens at the beginning."""
+        return 0
+
+    @property
+    def special_tokens_end(self):
+        """The number of special tokens at the beginning."""
+        return int(self.cls_token is not None)
+
+    @property
+    def uses_special_tokens_inside(self):
+        """Whether the loss uses special tokens except start/end."""
+        return False
 
     def prepare_inference_batch(self, inputs):
         """Extract model inputs for inference.
@@ -93,6 +114,10 @@ class ColesLoss(BaseLoss):
         device = inputs.device
         b, l = inputs.shape
         n = self.n_splits
+        if targets is not None:
+            global_targets = {name: repeat_interleave(targets.payload[name], n) for name in targets.payload if name not in targets.seq_names}
+        else:
+            global_targets = None
         # Sample subsequence lengths.
         if self.min_length < 1:
             min_lengths = (inputs.seq_lens * self.min_length).round().long()  # (B).
@@ -104,6 +129,8 @@ class ColesLoss(BaseLoss):
         else:
             max_lengths = torch.minimum(torch.full_like(inputs.seq_lens, self.max_length),
                                         inputs.seq_lens)  # (B).
+        min_lengths = torch.minimum(min_lengths.clip(min=1), inputs.seq_lens)
+        max_lengths = torch.maximum(min_lengths, max_lengths)
         sample_sizes = min_lengths[:, None] + (max_lengths - min_lengths)[:, None] * torch.rand(b, n, device=device)  # (B, N).
         sample_sizes = sample_sizes.round().long()  # (B, N).
         assert (sample_sizes <= l).all()
@@ -123,7 +150,9 @@ class ColesLoss(BaseLoss):
 
         # Postprocess sequences.
         new_inputs = self.prepare_inference_batch(new_inputs)
-        return new_inputs, targets
+        if global_targets is not None:
+            global_targets = PaddedBatch(global_targets, new_inputs.seq_lens, seq_names=[])
+        return new_inputs, targets, global_targets
 
     def forward(self, outputs, targets):
         """Extract targets and compute loss between predictions and targets.
@@ -148,6 +177,8 @@ class ColesLoss(BaseLoss):
                 raise NotImplementedError("Expected aggregated embedding with shape (B, 1, C).")
             outputs = outputs.squeeze(1)
         loss = self.coles_loss(outputs, to_number(targets, device=outputs.device))
+        if self.grad_scale != 1:
+            loss = ScaleGradient.apply(loss, self.grad_scale)
         losses = {"coles": loss}
         metrics = {}
         return losses, metrics

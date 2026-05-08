@@ -5,7 +5,26 @@ from .base import BaseLoss
 class DeTPPLoss(DetectionLoss, BaseLoss):
     """Wrapper around HoTPP Detection Loss."""
     @property
+    def structure(self):
+        return list(self.fields) if len(self.fields) > 1 else self.fields[0]
+
+    @property
     def aggregate(self):
+        return False
+
+    @property
+    def special_tokens_start(self):
+        """The number of special tokens at the beginning."""
+        return 0
+
+    @property
+    def special_tokens_end(self):
+        """The number of special tokens at the beginning."""
+        return 0
+
+    @property
+    def uses_special_tokens_inside(self):
+        """Whether the loss uses special tokens except start/end."""
         return False
 
     def prepare_batch(self, inputs, targets=None):
@@ -20,7 +39,7 @@ class DeTPPLoss(DetectionLoss, BaseLoss):
         """
         # For the next-item loss inputs and targets are the same.
         # Offset is applied in base loss classes.
-        return inputs, inputs
+        return inputs, inputs, targets
 
     def forward(self, outputs, targets):
         """Compute loss and metrics.

@@ -1,0 +1,13 @@
+defaults:
+  - mtl_detpp_loss
+  - default_hpo_global
+  - _self_
+
+module:
+  _target_: pretpp.modules.HPOModule
+  hpo_losses:
+    - loss_0__presence
+    - loss_0_timestamps
+    - loss_0_labels
+    - loss_0_types
+  downstream_loss: loss_1_target

@@ -46,6 +46,21 @@ class MLMLoss(BaseLoss):
     def input_size(self):
         return sum([loss.input_size for loss in self._losses.values()])
 
+    @property
+    def special_tokens_start(self):
+        """The number of special tokens at the beginning."""
+        return 0
+
+    @property
+    def special_tokens_end(self):
+        """The number of special tokens at the beginning."""
+        return 0
+
+    @property
+    def uses_special_tokens_inside(self):
+        """Whether the loss uses special tokens except start/end."""
+        return True
+
     def prepare_batch(self, inputs, targets=None):
         """Extract model inputs and targets.
 
@@ -56,6 +71,10 @@ class MLMLoss(BaseLoss):
         Returns:
             Model inputs with shape (B, L', *) and targets with shape (B, L', *).
         """
+        if targets is not None:
+            global_targets = {name: targets.payload[name] for name in targets.payload if name not in targets.seq_names}
+        else:
+            global_targets = None
         # Add deltas if necessary.
         # TODO: max_delta and smoothing.
         if self._timedeltas_field:
@@ -118,7 +137,9 @@ class MLMLoss(BaseLoss):
         lengths = (inputs.seq_lens - 1).clip(min=0)
         model_inputs = PaddedBatch(model_inputs, lengths, seq_names=inputs.seq_names)
         targets = PaddedBatch(targets, lengths, seq_names=inputs.seq_names)
-        return model_inputs, targets
+        if global_targets is not None:
+            global_targets = PaddedBatch(global_targets, model_inputs.seq_lens, seq_names=[])
+        return model_inputs, targets, global_targets
 
     def forward(self, outputs, targets):
         """Extract targets and compute loss between predictions and targets.

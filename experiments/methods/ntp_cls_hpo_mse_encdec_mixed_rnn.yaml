@@ -1,0 +1,11 @@
+defaults:
+  - ntp_cls_hpo_encdec_mixed_rnn
+  - _self_
+
+name: ntp_cls_hpo_mse_encdec_mixed_rnn
+
+module:
+  hpo_params:
+    algorithm: mse
+    ema:
+      covs: 0.99

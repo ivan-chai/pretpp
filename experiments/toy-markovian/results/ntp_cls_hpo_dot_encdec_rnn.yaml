@@ -1,0 +1,21 @@
+date: '2026-03-23 15:12:20'
+test/accuracy-target: 0.9380000233650208
+test/downstream-accuracy: 0.9369999766349792
+test/loss: 1.688127875328064
+test/loss_1_batch-accuracy-target: 0.9380000233650208
+test/loss_loss_0_labels: 0.9493744373321533
+test/loss_loss_0_timestamps: 0.007325362879782915
+test/loss_loss_1_target: 0.731427788734436
+test/macro-auc-target: 0.9974727630615234
+test/ptls-downstream: 0.9351999759674072
+test/ptls-downstream-std: 0.0017999999690800905
+val/accuracy-target: 0.9290000200271606
+val/downstream-accuracy: 0.9309999942779541
+val/loss: 1.6917184591293335
+val/loss_1_batch-accuracy-target: 0.9290000200271606
+val/loss_loss_0_labels: 0.9528267979621887
+val/loss_loss_0_timestamps: 0.007484716828912497
+val/loss_loss_1_target: 0.7314069867134094
+val/macro-auc-target: 0.9969138503074646
+val/ptls-downstream: 0.9305999875068665
+val/ptls-downstream-std: 0.007300000172108412

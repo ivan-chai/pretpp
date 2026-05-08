@@ -1,0 +1,20 @@
+defaults:
+  - default
+  - default_hts_transformer
+  - default_hpo_encdec
+  - _self_
+
+name: ntp_cls_hpo_encdec_hts_transformer
+
+apply_cls_to_tokens: all  # or "special".
+transformer_history_token_probability: 1
+
+module:
+  seq_encoder:
+    model_partial:
+      strategy_partial:
+        predict: all
+      val_strategy_partial:
+        _target_: pretpp.nn.LastHTStrategy
+        _partial_: true
+        predict: all

@@ -1,0 +1,8 @@
+defaults:
+  - default_hpo
+  - _self_
+
+module:
+  cache_embedding_gradients: true
+  hpo_params:
+    encoder_decoder: true

@@ -3,6 +3,15 @@ import torch
 from hotpp.data import PaddedBatch
 
 
+def recursive_map(data, func):
+    """Recursively applies a function to all leaf nodes in a structure."""
+    if isinstance(data, dict):
+        return {k: recursive_map(v, func) for k, v in data.items()}
+    elif isinstance(data, (list, tuple, set)):
+        return type(data)(recursive_map(item, func) for item in data)
+    return func(data)
+
+
 class BaseLoss(torch.nn.Module):
     @abstractmethod
     def prepare_batch(self, inputs, targets):
@@ -13,7 +22,7 @@ class BaseLoss(torch.nn.Module):
             targets: Targets with shape (B, L) for local recognition or (B) for global recognition.
 
         Returns:
-            Model inputs with shape (B, L', *) and targets with shape (B, L', *).
+            Model inputs with shape (B, L', *), targets with shape (B, L', *), and updated input targets.
         """
         pass
 
@@ -35,6 +44,21 @@ class BaseLoss(torch.nn.Module):
 
     @abstractproperty
     def input_size(self):
+        pass
+
+    @abstractproperty
+    def special_tokens_start(self):
+        """The number of special tokens at the beginning."""
+        pass
+
+    @abstractproperty
+    def special_tokens_end(self):
+        """The number of special tokens at the beginning."""
+        pass
+
+    @abstractproperty
+    def uses_special_tokens_inside(self):
+        """Whether the loss uses special tokens except start/end."""
         pass
 
     def compute_metrics(self, inputs, outputs, targets):
