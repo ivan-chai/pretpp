@@ -114,7 +114,10 @@ class ColesLoss(BaseLoss):
         device = inputs.device
         b, l = inputs.shape
         n = self.n_splits
-        global_targets = {name: repeat_interleave(targets.payload[name], n) for name in targets.payload if name not in targets.seq_names}
+        if targets is not None:
+            global_targets = {name: repeat_interleave(targets.payload[name], n) for name in targets.payload if name not in targets.seq_names}
+        else:
+            global_targets = None
         # Sample subsequence lengths.
         if self.min_length < 1:
             min_lengths = (inputs.seq_lens * self.min_length).round().long()  # (B).
@@ -147,7 +150,9 @@ class ColesLoss(BaseLoss):
 
         # Postprocess sequences.
         new_inputs = self.prepare_inference_batch(new_inputs)
-        return new_inputs, targets, PaddedBatch(global_targets, new_inputs.seq_lens, seq_names=[])
+        if global_targets is not None:
+            global_targets = PaddedBatch(global_targets, new_inputs.seq_lens, seq_names=[])
+        return new_inputs, targets, global_targets
 
     def forward(self, outputs, targets):
         """Extract targets and compute loss between predictions and targets.

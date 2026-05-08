@@ -71,7 +71,10 @@ class MLMLoss(BaseLoss):
         Returns:
             Model inputs with shape (B, L', *) and targets with shape (B, L', *).
         """
-        global_targets = {name: targets.payload[name] for name in targets.payload if name not in targets.seq_names}
+        if targets is not None:
+            global_targets = {name: targets.payload[name] for name in targets.payload if name not in targets.seq_names}
+        else:
+            global_targets = None
         # Add deltas if necessary.
         # TODO: max_delta and smoothing.
         if self._timedeltas_field:
@@ -134,7 +137,9 @@ class MLMLoss(BaseLoss):
         lengths = (inputs.seq_lens - 1).clip(min=0)
         model_inputs = PaddedBatch(model_inputs, lengths, seq_names=inputs.seq_names)
         targets = PaddedBatch(targets, lengths, seq_names=inputs.seq_names)
-        return model_inputs, targets, PaddedBatch(global_targets, model_inputs.seq_lens, seq_names=[])
+        if global_targets is not None:
+            global_targets = PaddedBatch(global_targets, model_inputs.seq_lens, seq_names=[])
+        return model_inputs, targets, global_targets
 
     def forward(self, outputs, targets):
         """Extract targets and compute loss between predictions and targets.

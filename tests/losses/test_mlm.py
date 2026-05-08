@@ -46,7 +46,7 @@ class TestMLMLoss(TestCase):
                        eval_fraction=0.4,
                        mask_prob=0,
                        random_prob=0)
-        model_inputs, targets = loss.prepare_batch(inputs)
+        model_inputs, targets, _ = loss.prepare_batch(inputs)
         self.assertEqual(set(model_inputs.payload), {"timestamps", "labels", "index"})
         self.assertEqual(set(targets.payload), {"timestamps", "labels", EVAL_MASK_FIELD})
         self.assertEqual(model_inputs.seq_lens.tolist(), [3, 2, 0])
@@ -71,7 +71,7 @@ class TestMLMLoss(TestCase):
                        eval_fraction=0.4,
                        mask_prob=0.6,
                        random_prob=0.3)
-        model_inputs, targets = loss.prepare_batch(inputs)
+        model_inputs, targets, _ = loss.prepare_batch(inputs)
         self.assertEqual(set(model_inputs.payload), {"timestamps", "labels"})
         self.assertEqual(set(targets.payload), {"timestamps", "labels", EVAL_MASK_FIELD})
         self.assertEqual(model_inputs.seq_lens.tolist(), (inputs.seq_lens - 1).clip(min=0).tolist())
@@ -114,7 +114,7 @@ class TestMLMLoss(TestCase):
                        mask_prob=0.6,
                        random_prob=0.3,
                        field_mask_probs=field_mask_probs)
-        model_inputs, targets = loss.prepare_batch(inputs)
+        model_inputs, targets, _ = loss.prepare_batch(inputs)
         self.assertEqual(set(model_inputs.payload), {"timestamps", "labels"})
         self.assertEqual(set(targets.payload), {"timestamps", "labels", EVAL_MASK_FIELD})
         self.assertEqual(model_inputs.seq_lens.tolist(), (inputs.seq_lens - 1).clip(min=0).tolist())
@@ -160,7 +160,7 @@ class TestMLMLoss(TestCase):
         labels_prediction = torch.randn(3, 4, 5, requires_grad=True)
         optimizer = torch.optim.Adam([timestamps_prediction, labels_prediction], lr=0.01)
         for step in range(1000):
-            _, targets = loss.prepare_batch(inputs)
+            _, targets, _ = loss.prepare_batch(inputs)
             values, _ = loss({"timestamps": timestamps_prediction[:, 1:, None], "labels": labels_prediction[:, 1:]}, targets)
             value = sum(values.values())
             if step == 0:

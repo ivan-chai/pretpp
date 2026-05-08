@@ -50,7 +50,7 @@ class TestColesLoss(TestCase):
                              margin=0.5,
                              sampling_strategy=HardNegativePairSelector(neg_count=2)
                          ))
-        model_inputs, targets = loss.prepare_batch(inputs, None)
+        model_inputs, targets, _ = loss.prepare_batch(inputs, None)
         self.assertEqual(len(model_inputs), 3 * 2)  # BS x NSplits.
         self.assertEqual(Counter(targets.tolist()), {0: 4, 1: 2})
         for i, l in enumerate(model_inputs.seq_lens):

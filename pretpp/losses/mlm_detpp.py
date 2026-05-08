@@ -57,7 +57,10 @@ class MLMDeTPPLoss(DetectionLoss, BaseLoss):
         Returns:
             Model inputs with shape (B, L', *) and targets with shape (B, L', *).
         """
-        global_targets = {name: targets.payload[name] for name in targets.payload if name not in targets.seq_names}
+        if targets is not None:
+            global_targets = {name: targets.payload[name] for name in targets.payload if name not in targets.seq_names}
+        else:
+            global_targets = None
         b, l = inputs.shape
         times = inputs.payload[self._timestamps_field]  # (B, L).
 
@@ -110,7 +113,9 @@ class MLMDeTPPLoss(DetectionLoss, BaseLoss):
                                  seq_names=set(inputs.seq_names) | {EVAL_FIELD})
         targets = PaddedBatch(inputs.payload | {EVAL_FIELD: eval_mask}, inputs.seq_lens,
                               seq_names=set(inputs.seq_names) | {EVAL_FIELD})
-        return new_inputs, targets, PaddedBatch(global_targets, new_inputs.seq_lens, seq_names=[])
+        if global_targets is not None:
+            global_targets = PaddedBatch(global_targets, new_inputs.seq_lens, seq_names=[])
+        return new_inputs, targets, global_targets
 
     def get_loss_indices(self, inputs):
         b, l = inputs.shape

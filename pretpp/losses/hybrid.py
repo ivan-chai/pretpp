@@ -82,9 +82,7 @@ class HybridLoss(BaseLoss):
             if (i > 0) and (loss_inputs.shape[1] != inputs.shape[1] + loss.special_tokens_start + loss.special_tokens_end):
                 raise RuntimeError(f"Base losses (except the first one) must not truncate sequences.")
             inputs = loss_inputs
-            if targets is None:
-                pass
-            elif i > 0:
+            if (targets is not None) and (i > 0):
                 # Can only subset fields.
                 for k, v in loss_global_targets.payload.items():
                     if v is not targets.payload[k]:
