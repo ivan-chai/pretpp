@@ -84,6 +84,7 @@ export OMP_NUM_THREADS=1
 ```
 
 # Citation
+HT-Transformer:
 ```
 @article{karpukhin2025httransformer,
   title={HT-Transformer: Event Sequences Classification by Accumulating Prefix Information with History Tokens},
@@ -91,5 +92,16 @@ export OMP_NUM_THREADS=1
   journal={arXiv preprint arXiv:2508.01474v1},
   year={2025},
   url ={https://arxiv.org/abs/2508.01474v1}
+}
+```
+
+GraP:
+```
+@article{karpukhin2026grap,
+  title={When Losses Align: Gradient-Based Composite Loss Weighting for Efficient Pretraining},
+  author={Karpukhin, Ivan and Savchenko, Andrey},
+  journal={arXiv preprint arXiv:2605.07756},
+  year={2026},
+  url ={https://arxiv.org/abs/2605.07756}
 }
 ```
