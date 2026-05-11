@@ -84,7 +84,7 @@ export OMP_NUM_THREADS=1
 ```
 
 # Citation
-[HT-Transformer](https://arxiv.org/pdf/2508.01474v1) (Accepted to IJCAI-28 AI4Tech track):
+[HT-Transformer](https://arxiv.org/pdf/2508.01474v1) (Accepted to IJCAI-26 AI4Tech track):
 ```
 @article{karpukhin2025httransformer,
   title={HT-Transformer: Event Sequences Classification by Accumulating Prefix Information with History Tokens},
