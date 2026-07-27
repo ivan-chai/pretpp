@@ -1,0 +1,11 @@
+defaults:
+  - ntp_cls_hpo_rnn
+  - mtl_shared_head
+  - _self_
+
+name: ntp_cls_hpo_rnn_sweighted
+
+module:
+  shared_prefix: _loss_projection.0.0.
+  hpo_params:
+    shared_algorithm: weighted

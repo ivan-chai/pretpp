@@ -1,0 +1,25 @@
+module:
+  loss_projection_partial:
+    _target_: pretpp.nn.CatHead
+    _partial_: true
+    head_partials:
+      - _target_: pretpp.nn.StackHead
+        _partial_: true
+        head_partials:
+          - _target_: hotpp.nn.Head  # Shared.
+            _partial_: true
+            output_size: 128
+            hidden_dims: []
+          - _target_: pretpp.nn.MultiHead  # labels.
+            _partial_: true
+            head_partial:
+              _target_: hotpp.nn.Head
+              _partial_: true
+              hidden_dims: []
+            head_output_sizes:
+              labels: ${num_classes}
+              timestamps: 1
+      - _target_: hotpp.nn.Head  # downstream.
+        _partial_: true
+        output_size: ${num_downstream_classes}
+        hidden_dims: [128]

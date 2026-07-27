@@ -1,17 +1,9 @@
-import warnings
-import math
-import pytorch_lightning as pl
 import torch
-import yaml
 import os
-from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from contextlib import contextmanager
-from omegaconf import OmegaConf
-from pytorch_lightning.callbacks import ModelCheckpoint
 
 from hotpp.data import PaddedBatch
-from pretpp.nn import IdentityHead
 from aligned_hpo import AlignedHPOptimizer, DWAOptimizer, GradNormOptimizer, MGDAOptimizer, PCGradOptimizer, HPO_STAGE_DOWNSTREAM
 from .base_module import BaseModule
 from ..callbacks import AlignedHPOWarmupCallback
@@ -92,8 +84,10 @@ class HPOModule(BaseModule):
         downstream_loss: The name of the downstream loss or a mapping from loss name to weight.
         initial_weights: Initial values (default to ones).
         hpo_params: Parameters of the HP optimizer.
+        shared_prefix: The prefix for shared parameters weights.
         hp_group_params: Specific parameters for weights optimization (lr etc.).
         loss_group_params: Specific parameters for loss optimization (lr etc.).
+        shared_group_params: Specific parameters for shared weights optimization (lr etc.).
         encoder_group_params: Specific parameters for encoder weights optimization (lr etc.).
         cache_embedding_gradients: Compute and cache embedding gradients for all heads via a single backward pass in the encoder-decoder mode.
         warmup_steps: Reset all except HPO statistics after the specified number of steps.
@@ -108,8 +102,8 @@ class HPOModule(BaseModule):
     }
 
     def __init__(self, seq_encoder, loss, hpo_losses, downstream_loss,
-                 initial_weights=None, hpo_params=None, hp_group_params=None,
-                 loss_group_params=None, encoder_group_params=None,
+                 initial_weights=None, hpo_params=None, shared_prefix=None,
+                 hp_group_params=None, loss_group_params=None, shared_group_params=None, encoder_group_params=None,
                  optimizer="aligned-hpo", cache_embedding_gradients=False,
                  warmup_steps=0,
                  **kwargs):
@@ -119,8 +113,10 @@ class HPOModule(BaseModule):
         self.hpo_losses = list(hpo_losses)
         self.downstream_loss = downstream_loss if isinstance(downstream_loss, Mapping) else {downstream_loss: 1}
         self.hpo_params = hpo_params
+        self.shared_prefix = shared_prefix
         self.hp_group_params = hp_group_params
         self.loss_group_params = loss_group_params
+        self.shared_group_params = shared_group_params
         self.encoder_group_params = encoder_group_params
         self.optimizer_type = optimizer
         self.cache_embedding_gradients = cache_embedding_gradients
@@ -335,21 +331,29 @@ class HPOModule(BaseModule):
         log_dict(self.logger, state, self.current_epoch, "hpo_state/")
 
     def configure_optimizers(self):
-        loss_params = [v for k, v in self.named_parameters() if v.requires_grad and k != "loss_weights" and k.startswith("_loss")]
-        model_params = [v for k, v in self.named_parameters() if v.requires_grad and k != "loss_weights" and not k.startswith("_loss")]
+        shared_prefix = self.shared_prefix if self.shared_prefix is not None else "<none>"
+        shared_params = [v for k, v in self.named_parameters() if v.requires_grad and k != "loss_weights" and k.startswith(shared_prefix)]
+        if (self.shared_prefix is not None) and (not shared_params):
+            raise ValueError(f"No weights found for prefix: {self.shared_prefix} ({list(self.state_dict())})")
+        loss_params = [v for k, v in self.named_parameters() if v.requires_grad and k != "loss_weights" and not k.startswith(shared_prefix) and k.startswith("_loss")]
+        model_params = [v for k, v in self.named_parameters() if v.requires_grad and k != "loss_weights" and not k.startswith(shared_prefix) and not k.startswith("_loss")]
         params = [
             {"params": [self.loss_weights]},
             {"params": loss_params},
+            {"params": shared_params},
             {"params": model_params}
         ]
         if self.hp_group_params is not None:
             params[0].update(self.hp_group_params)
         if self.loss_group_params is not None:
             params[1].update(self.loss_group_params)
+        if self.shared_group_params is not None:
+            params[2].update(self.shared_group_params)
         if self.encoder_group_params is not None:
-            params[2].update(self.encoder_group_params)
+            params[3].update(self.encoder_group_params)
         optimizer = self.OPTIMIZERS[self.optimizer_type](params, self._optimizer_partial,
                                                          weights_names=self.hpo_losses,
+                                                         shared_groups=(2,),
                                                          **(self.hpo_params or {}))
         configs = self._build_scheduler_configs(optimizer)
         if not configs:
