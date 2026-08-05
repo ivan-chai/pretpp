@@ -19,7 +19,7 @@ setuptools.setup(
     ],
     python_requires=">=3.9",
     install_requires=[
-        "hotpp-benchmark>=0.6.7",
+        "hotpp-benchmark>=0.7.0",
         "ptls-validation @ git+https://git@github.com/dllllb/ptls-validation.git#egg=ptls-validation",
         "aligned-hpo @ git+https://git@github.com/ivan-chai/aligned-hpo.git#egg=aligned-hpo"
     ]

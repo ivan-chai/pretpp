@@ -1,3 +1,5 @@
+encoder_dim: ${rnn_hidden_size}
+
 data_module:
   train_params:
     min_length: ${rnn_min_length}
@@ -15,6 +17,6 @@ module:
     rnn_partial:
       _target_: hotpp.nn.GRU
       _partial_: true
-      hidden_size: ${rnn_hidden_size}
+      hidden_size: ${encoder_dim}
     max_inference_context: ${rnn_inference_context}
     inference_context_step: ${rnn_inference_context_step}
