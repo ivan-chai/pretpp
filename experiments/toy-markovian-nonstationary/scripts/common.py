@@ -37,9 +37,12 @@ class Model:
         last_length = self.length - length * (target - 1)
         lengths = [length] * (target - 1) + [last_length]
         timestamps, labels = [], []
+        last_ts = 0
         for l in lengths:
             preset = int(np.random.choice(len(self.presets)))
             ts, ls = self.presets[preset].generate(l)
+            ts = [t + last_ts for t in ts]
+            last_ts = ts[-1]
             timestamps.append(ts)
             labels.append(ls)
         timestamps, labels = sum(timestamps, []), sum(labels, [])

@@ -51,14 +51,12 @@ data_module:
     - log_amount
   batch_size: 128
   num_workers: 4
+  max_length: 400
   train_params:
     min_required_length: 2
-    max_length: 400
   val_params:
-    max_length: 400
     position: last
   test_params:
-    max_length: 400
     position: last
   global_target_fields: target_flag
   train_path: data/train.parquet

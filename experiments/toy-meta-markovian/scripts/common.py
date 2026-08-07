@@ -18,7 +18,7 @@ class Preset:
         timestamps = []
         labels = []
         prev_label = np.random.choice(len(self.probs))
-        prev_ts = np.random.randint(0, length)
+        prev_ts = 0
         for i in range(length):
             prev_ts += 1
             prev_label = np.random.choice(len(self.probs), p=self.probs[prev_label])
@@ -45,12 +45,15 @@ class Model:
         meta_probs = gen_transitions(self.n_presets, temperature=self.temperature)
         timestamps, labels = [], []
         presets = []
+        last_ts = 0
         for _ in range(self.n_chunks):
             if not presets:
                 presets.append(int(np.random.choice(self.n_presets)))
             else:
                 presets.append(np.random.choice(self.n_presets, p=meta_probs[presets[-1]]))
             ts, ls = self.presets[presets[-1]].generate(self.chunk_size)
+            ts = [t + last_ts for t in ts]
+            last_ts = ts[-1]
             timestamps.append(ts)
             labels.append(ls)
         timestamps, labels = sum(timestamps, []), sum(labels, [])

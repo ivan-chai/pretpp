@@ -45,19 +45,17 @@ data_module:
     - types
   batch_size: 32
   num_workers: 4
+  max_length: 1024
   train_params:
     random_split: 0.9
     random_part: train
     min_required_length: 2
-    max_length: 1024
     parallelize: files
   val_params:
     random_split: 0.9
     random_part: val
-    max_length: 1024
     position: last
   test_params:
-    max_length: 1024
     position: last
   global_target_fields: target
   train_path: data/train.parquet

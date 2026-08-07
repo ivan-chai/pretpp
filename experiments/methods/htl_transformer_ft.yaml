@@ -7,10 +7,10 @@ defaults:
 base_name: _
 
 module:
-  seq_encoder:
-    model_partial:
-      strategy_partial:
-        predict: all  # Output both HT and regular tokens. SFT is applied to all outputs.
+#  seq_encoder:
+#    model_partial:
+#      strategy_partial:
+#        predict: all  # Output both HT and regular tokens. SFT is applied to all outputs.
 #  aggregator:
 #    _target_: hotpp.nn.LastAggregator
 #  head_partial:
