@@ -18,6 +18,7 @@ def add_token_to_the_end(x, timestamps, token):
     # Duplicate the last timestamp.
     last_ts = timestamps.payload.take_along_dim((timestamps.seq_lens[:, None] - 1).clip(min=0), 1)  # (B, 1).
     new_timestamps = torch.cat([timestamps.payload, timestamps.payload[:, :1]], 1)  # (B, L + 1).
+#    last_ts.fill_(-1)  # DEBUG.
     new_timestamps.scatter_(1, last[:, None], last_ts)
     new_timestamps = PaddedBatch(new_timestamps, new_lengths)
     return new_x, new_timestamps
@@ -283,6 +284,7 @@ class HTStrategyImpl(HTStrategyBase):
             extended = torch.cat([timestamps.payload, timestamps.payload[:, :1]], 1)  # (B, L + 1)
             new_timestamps = extended.take_along_dim(self.index[None, :], 1)  # (B, L + R).
             prev_ts = timestamps.payload.take_along_dim(self.prev_input[None], 1)  # (B, R).
+#            prev_ts.fill_(-1)  # DEBUG.
             new_timestamps.scatter_(1, self.positions[None].expand(b, r), prev_ts)
 
             active_tokens = (self.after_positions[None] < x.seq_lens[:, None]).sum(1)  # (B) in [0, R].
@@ -350,8 +352,146 @@ class FullHTStrategy(HTStrategyImpl):
         return torch.arange(lengths.max(), device=lengths.device)
 
 
+class SingleHTStrategy(HTStrategyImpl):
+    """Insert a single history token at a random position.
+
+    The strategy is equivalent to SubsetHTStrategy with `frequency=0`, but a single token
+    position is contiguous, so all scatter and gather operations are replaced with slicing.
+
+    Args:
+        use_attention_sink: If true, always allow access to the first token.
+        apply_probability: The probability of HT usage for each real token.
+        token_selection: Either `random`, `last`, or `none`. Controls HT usage by each real token:
+            `random` makes the HT visible to a random half of the following tokens,
+            `last` makes it visible to all following tokens and `none` hides it from all of them.
+        predict: The type of tokens used for prediction (`input_tokens`, `history_tokens` or `all`).
+        embedding: Either `end_ht`, `avg_ht`, `avg`, `last`, or `mix_end_ht_avg`.
+    """
+    def select_positions(self, lengths):
+        """Select tokens to insert HT after.
+
+        Args:
+            lengths: Input lengths.
+
+        Returns:
+            Indices with shape (1) in the range [0, L).
+        """
+        # Sample on CPU, since the position is used for slicing.
+        return torch.randint(int(lengths.max()), [1], device="cpu")  # (1) in [0, L).
+
+    @property
+    def after_positions(self):
+        """HT positions, as required by HTStrategyImpl. The strategy itself uses the `after_position` scalar."""
+        return torch.full([1], self.after_position, device=self.device, dtype=torch.long)  # (1) in [0, L).
+
+    def select(self, timestamps, embedding=False):
+        self.seq_lens = timestamps.seq_lens
+        self.length = timestamps.shape[1]
+        self.embedding = embedding
+        self.device = timestamps.device
+
+        if embedding and (self.embedding_type == "avg_ht"):
+            self.apply_to_batch = True
+        else:
+            self.apply_to_batch = bool(not embedding and torch.rand([]) < self.apply_probability)
+
+        # There is nothing to summarize in an empty batch.
+        self.apply_to_batch = self.apply_to_batch and bool((self.seq_lens > 0).any())
+
+        if self.apply_to_batch:
+            self.after_position = int(self.select_positions(self.seq_lens))  # In [0, L).
+
+    def clear_state(self):
+        del self.seq_lens
+        del self.length
+        del self.device
+        if self.apply_to_batch:
+            del self.after_position
+        del self.embedding
+        del self.apply_to_batch
+
+    def insert_tokens(self, x, timestamps):
+        if self.embedding and (self.embedding_type != "avg_ht"):
+            if self.embedding_type in {"last", "avg"}:
+                return x, timestamps
+            else:
+                assert self.embedding_type in {"end_ht", "mix_end_ht_avg"}
+                return add_token_to_the_end(x, timestamps, self.token.to(x.payload.dtype))
+        elif self.apply_to_batch:
+            b, l = x.shape
+            d = len(self.token)
+            p = self.after_position
+
+            # Insert a single token after the position P.
+            token = self.token.to(x.payload.dtype)[None, None].expand(b, 1, d)  # (B, 1, D).
+            new_x = torch.cat([x.payload[:, :p + 1], token, x.payload[:, p + 1:]], 1)  # (B, L + 1, D).
+            # Duplicate the timestamp of the previous input.
+            new_timestamps = torch.cat([timestamps.payload[:, :p + 1],
+                                        timestamps.payload[:, p:p + 1],
+                                        timestamps.payload[:, p + 1:]], 1)  # (B, L + 1).
+
+            new_lengths = x.seq_lens + (p < x.seq_lens)  # (B) in [0, L + 1].
+            return PaddedBatch(new_x, new_lengths), PaddedBatch(new_timestamps, new_lengths)
+        else:
+            token_gradient_branch = 0 * self.token.sum()
+            new_x = PaddedBatch(x.payload + token_gradient_branch, x.seq_lens)
+            return new_x, timestamps
+
+    def make_attention_mask(self):
+        if not self.apply_to_batch:
+            return None
+        l = self.length
+        p = self.after_position
+        token_selection = "none" if self.embedding else self.token_selection
+
+        # Select input tokens which use the HT. Only tokens after the HT can use it.
+        if token_selection == "none":
+            use = torch.zeros(l, device=self.device, dtype=torch.bool)  # (L).
+        else:
+            use = torch.arange(l, device=self.device) > p  # (L).
+            if token_selection == "random":
+                use = torch.logical_and(use, torch.rand(l, device=self.device) > 0.5)  # (L).
+        # Insert the HT itself, which attends to all previous tokens.
+        use = torch.cat([use[:p + 1], torch.zeros_like(use[:1]), use[p + 1:]], 0)  # (L + 1).
+
+        # Tokens which use the HT read the prefix [0, P] through it rather than directly.
+        prefix = torch.arange(l + 1, device=self.device) <= p  # (L + 1), excludes the HT at P + 1.
+        mask = torch.logical_and(use[:, None], prefix[None])  # (L + 1, L + 1).
+        mask[:, p + 1] = ~use  # Hide the HT from the tokens which don't use it.
+        mask[p + 1] = False  # The HT attends to all previous tokens.
+        if self.use_attention_sink:
+            mask[:, 0] = False
+        return mask
+
+    def extract_outputs(self, x):
+        if self.embedding:
+            if self.embedding_type != "avg_ht":
+                return super().extract_outputs(x)
+            # A single history token.
+            p = self.after_position
+            outputs = PaddedBatch(x.payload[:, p + 1:p + 2], (self.seq_lens > p).long())  # (B, 1, D).
+            return self.avg_aggregator(outputs)
+        elif not self.apply_to_batch:
+            return x
+        p = self.after_position
+        if self.predict == "all":
+            special_token_mask = torch.zeros(x.shape[1], device=x.device, dtype=torch.bool)  # (L + 1).
+            special_token_mask[p + 1] = True
+            return PaddedBatch({"outputs": x.payload,
+                                "special_token_mask": special_token_mask[None].expand(x.shape[0], -1)},
+                               x.seq_lens)
+        elif self.predict == "history_tokens":
+            return PaddedBatch({"outputs": x.payload[:, p + 1:p + 2],  # (B, 1, D).
+                                "special_token_mask": torch.ones(x.shape[0], 1, dtype=torch.bool, device=x.device)},
+                               (self.seq_lens > p).long())
+        else:
+            assert self.predict == "input_tokens"
+            outputs = torch.cat([x.payload[:, :p + 1], x.payload[:, p + 2:]], 1)  # (B, L, D).
+            return PaddedBatch(outputs, self.seq_lens)
+
+
 class SubsetHTStrategy(HTStrategyImpl):
-    """Insert history token before each real token.
+    """Insert history token before a subset of real tokens.
 
     Args:
         frequency: The average fraction of history tokens (use 0 to use single token).
