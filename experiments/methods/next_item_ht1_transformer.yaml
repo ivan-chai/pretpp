@@ -1,0 +1,10 @@
+defaults:
+  - default
+  - default_ht1_transformer
+  - next_item_loss
+  - _self_
+
+name: next_item_ht1_transformer
+
+module:
+  _target_: pretpp.modules.BaseModule
