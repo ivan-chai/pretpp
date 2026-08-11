@@ -10,7 +10,6 @@ module:
       strategy_partial:
         _target_: pretpp.nn.SingleHTStrategy
         _partial_: true
-        use_attention_sink: true
         apply_probability: ${transformer_history_token_probability}
         token_selection: last
   aggregator: null

@@ -497,7 +497,7 @@ class SubsetHTStrategy(HTStrategyImpl):
         frequency: The average fraction of history tokens (use 0 to use single token).
         apply_probability: The probability of HT usage for each real token.
         token_selection: Either `random`, `last`, or `none`.
-        token_sampling: Either `uniform`, `bias_end`, or `bias_end_relaxed`.
+        token_sampling: Either `regular`, `uniform`, `bias_end`, or `bias_end_relaxed`.
         predict: The type of tokens used for prediction (`input_tokens`, `history_tokens` or `all`).
         embedding: Either `end_ht`, `avg_ht`, `avg`, `last`, or `mix_end_ht_avg`.
     """
@@ -524,7 +524,12 @@ class SubsetHTStrategy(HTStrategyImpl):
         """
         max_length = lengths.max().item()
         max_tokens = max(1, int(round(self.frequency * max_length)))
-        if self.token_sampling == "uniform":
+        if self.token_sampling == "regular":
+            min_step = max(1, int(max_length * self.frequency / 2))
+            step = int(torch.randint(min_step, max_length + 1, [1], device="cpu"))  # (1) in [1, L].
+            offset = int(torch.randint(0, step, [1], device="cpu"))  # (1) in [0, S).
+            return torch.arange(offset, max_length, step, device=self.device)
+        elif self.token_sampling == "uniform":
             return torch.randperm(max_length, device=self.device)[:max_tokens].sort()[0]  # (R) in [0, L), sorted.
         elif self.token_sampling == "bias_end":
             from_length = max_length // 2
