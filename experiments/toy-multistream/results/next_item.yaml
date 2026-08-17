@@ -1,0 +1,13 @@
+date: '2026-08-17 17:13:50'
+test/downstream-auroc: 0.5178130269050598
+test/loss: 1.0723907947540283
+test/loss_labels: 1.070811152458191
+test/loss_timestamps: 0.0015795511426404119
+test/ptls-downstream: 0.5241000056266785
+test/ptls-downstream-std: 0.006399999838322401
+val/downstream-auroc: 0.5246021747589111
+val/loss: 1.0663572549819946
+val/loss_labels: 1.0647789239883423
+val/loss_timestamps: 0.0015782919945195317
+val/ptls-downstream: 0.5067999958992004
+val/ptls-downstream-std: 0.012400000356137753
