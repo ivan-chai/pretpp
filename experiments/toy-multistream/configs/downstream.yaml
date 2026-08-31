@@ -29,7 +29,7 @@ models:
       boosting_type: gbdt
       objective: binary
       metric: auc
-      learning_rate: 0.02
+      learning_rate: 0.05
       subsample: 0.75
       subsample_freq: 1
       feature_fraction: 0.75

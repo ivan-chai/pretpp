@@ -23,7 +23,6 @@ transformer_positions: 512
 transformer_dropout: 0.1
 transformer_min_length: 64
 transformer_cls_token:
-  timestamps: -1
   labels: ${num_classes}  # Use final label for CLS.
   types: ${num_types}
 transformer_history_token_frequency: 0.1
@@ -100,8 +99,6 @@ module:
         types:
           in: ${num_types}
           out: 8
-      numeric_values:
-        timestamps: identity
     max_time_delta: ${max_time_delta}
   aggregator:
     _target_: hotpp.nn.LastAggregator
