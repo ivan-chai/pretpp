@@ -6,3 +6,5 @@ module:
   seq_encoder:
     model_partial:
       rope: time
+      input_dropout: 0
+      pos_type: none
