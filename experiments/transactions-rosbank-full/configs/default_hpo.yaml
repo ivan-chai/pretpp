@@ -12,6 +12,4 @@ module:
     - loss_0_channel_type
     - loss_0_trx_category
     - loss_0_log_amount
-  hpo_params:
-    rescale_grad_norm_weights: [1, 1, 1, 1, 1, 1]
   downstream_loss: loss_1_target_flag

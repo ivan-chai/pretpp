@@ -9,6 +9,4 @@ module:
     - loss_0_labels
     - loss_0_timestamps
     - loss_0_types
-  hpo_params:
-    rescale_grad_norm_weights: [1, 1, 1]
   downstream_loss: loss_1_target
