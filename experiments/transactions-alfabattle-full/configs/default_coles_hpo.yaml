@@ -25,6 +25,4 @@ module:
     - loss_1_weekofyear
     - loss_1_log_amount
     - loss_1_log_hour_diff
-  hpo_params:
-    rescale_grad_norm_weights: [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
   downstream_loss: loss_2_target
