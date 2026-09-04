@@ -33,6 +33,8 @@ class BaseModule(pl.LightningModule):
             Input size is provided as positional argument.
         loss_projection_partial: Loss preprocessing head. Input and output sizes are provided as positional arguments.
         aggregator: Embeddings aggregator. By default try to use encoder aggregator.
+        embed_dt: The time delta for creating delta embedding. Delta is appended to the standard embedding during inference
+            (disable by default).
         optimizer_partial: Optimizer init partial. Network parameters are missed.
         lr_scheduler_partial: Scheduler init partial. Optimizer are missed.
         warmup: Number of optimizer warmup steps. LR linearly increases from base_lr/warmup to base_lr.
@@ -51,6 +53,7 @@ class BaseModule(pl.LightningModule):
                  head_partial=None,
                  loss_projection_partial=None,
                  aggregator=None,
+                 embed_dt=None,
                  optimizer_partial=None,
                  lr_scheduler_partial=None,
                  warmup=0,
@@ -87,6 +90,7 @@ class BaseModule(pl.LightningModule):
             loss_projection_partial = IdentityHead
         self._loss_projection = loss_projection_partial(self._head.output_size, loss.input_size)
         self._aggregator = aggregator
+        self._embed_dt = embed_dt
 
         if init_state_dict is not None:
             if isinstance(init_state_dict, str):
@@ -178,6 +182,15 @@ class BaseModule(pl.LightningModule):
         """Compatibility with HoTPP."""
         inputs = self._loss.prepare_inference_batch(x)
         embeddings = self._embed_impl(inputs)
+        if self._embed_dt is not None:
+            timestamps = inputs.payload[self._timestamps_field]
+            last_ts = timestamps.take_along_dim((inputs.seq_lens - 1).clip(min=0)[:, None], 1).squeeze(1)
+            shifted = last_ts - self._embed_dt
+            padded_timestamps = timestamps.masked_fill(~inputs.seq_len_mask, last_ts.max().item() + 1)
+            truncated_lengths = torch.searchsorted(padded_timestamps, shifted[:, None]).squeeze(1)
+            truncated_inputs = PaddedBatch(inputs.payload, truncated_lengths, seq_names=inputs.seq_names)
+            truncated_embeddings = self._embed_impl(truncated_inputs)
+            embeddings = torch.cat([embeddings, embeddings - truncated_embeddings], -1)
         return embeddings
 
     def _compute_loss(self, inputs, targets):
