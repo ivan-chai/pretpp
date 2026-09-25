@@ -1,106 +1,262 @@
 date: '2026-05-03 16:45:57'
 num_seeds: 2
 test/accuracy-target: 0.036484185606241226
+test/accuracy-target-seeds:
+- 0.03446916118264198
+- 0.03849921002984047
 test/accuracy-target-std: 0.002015024423599243
 test/downstream-auroc: 0.7510231733322144
+test/downstream-auroc-seeds:
+- 0.751288890838623
+- 0.7507574558258057
 test/downstream-auroc-std: 0.0002657175064086914
 test/loss: 66.03226089477539
+test/loss-seeds:
+- 64.9406509399414
+- 67.12387084960938
 test/loss-std: 1.0916099548339844
 test/loss_2_batch-accuracy-target: 0.036234231665730476
+test/loss_2_batch-accuracy-target-seeds:
+- 0.03453686088323593
+- 0.03793160244822502
 test/loss_2_batch-accuracy-target-std: 0.001697370782494545
 test/loss_2_nans-target: 0.0
+test/loss_2_nans-target-seeds:
+- 0.0
+- 0.0
 test/loss_2_nans-target-std: 0.0
 test/loss_loss_0_coles: 39.030399322509766
+test/loss_loss_0_coles-seeds:
+- 39.06922912597656
+- 38.99156951904297
 test/loss_loss_0_coles-std: 0.038829803466796875
 test/loss_loss_1_card_type: 0.35395659506320953
+test/loss_loss_1_card_type-seeds:
+- 0.35308361053466797
+- 0.3548295795917511
 test/loss_loss_1_card_type-std: 0.0008729845285415649
 test/loss_loss_1_city: 0.848365843296051
+test/loss_loss_1_city-seeds:
+- 0.8472530841827393
+- 0.8494786024093628
 test/loss_loss_1_city-std: 0.0011127591133117676
 test/loss_loss_1_country: 0.13853100687265396
+test/loss_loss_1_country-seeds:
+- 0.1383255273103714
+- 0.13873648643493652
 test/loss_loss_1_country-std: 0.00020547956228256226
 test/loss_loss_1_currency: 0.04816986434161663
+test/loss_loss_1_currency-seeds:
+- 0.047953758388757706
+- 0.048385970294475555
 test/loss_loss_1_currency-std: 0.00021610595285892487
 test/loss_loss_1_day_of_week: 1.2450390458106995
+test/loss_loss_1_day_of_week-seeds:
+- 1.2477264404296875
+- 1.2423516511917114
 test/loss_loss_1_day_of_week-std: 0.002687394618988037
 test/loss_loss_1_ecommerce_flag: 0.23344065248966217
+test/loss_loss_1_ecommerce_flag-seeds:
+- 0.23349031805992126
+- 0.23339098691940308
 test/loss_loss_1_ecommerce_flag-std: 4.966557025909424e-05
 test/loss_loss_1_hour: 2.569582939147949
+test/loss_loss_1_hour-seeds:
+- 2.5690364837646484
+- 2.57012939453125
 test/loss_loss_1_hour-std: 0.0005464553833007812
 test/loss_loss_1_income_flag: 0.2694571614265442
+test/loss_loss_1_income_flag-seeds:
+- 0.269287645816803
+- 0.2696266770362854
 test/loss_loss_1_income_flag-std: 0.00016951560974121094
 test/loss_loss_1_labels: 2.394912004470825
+test/loss_loss_1_labels-seeds:
+- 2.39141845703125
+- 2.3984055519104004
 test/loss_loss_1_labels-std: 0.0034935474395751953
 test/loss_loss_1_log_amount: 0.06664860248565674
+test/loss_loss_1_log_amount-seeds:
+- 0.06655322760343552
+- 0.06674397736787796
 test/loss_loss_1_log_amount-std: 9.537488222122192e-05
 test/loss_loss_1_log_hour_diff: 1.346689522266388
+test/loss_loss_1_log_hour_diff-seeds:
+- 1.345840573310852
+- 1.3475384712219238
 test/loss_loss_1_log_hour_diff-std: 0.0008489489555358887
 test/loss_loss_1_mcc_category: 1.837849199771881
+test/loss_loss_1_mcc_category-seeds:
+- 1.836448311805725
+- 1.839250087738037
 test/loss_loss_1_mcc_category-std: 0.0014008879661560059
 test/loss_loss_1_operation_kind: 0.6681689023971558
+test/loss_loss_1_operation_kind-seeds:
+- 0.6673620343208313
+- 0.6689757704734802
 test/loss_loss_1_operation_kind-std: 0.0008068680763244629
 test/loss_loss_1_operation_type: 0.919561117887497
+test/loss_loss_1_operation_type-seeds:
+- 0.9185667634010315
+- 0.9205554723739624
 test/loss_loss_1_operation_type-std: 0.000994354486465454
 test/loss_loss_1_operation_type_group: 0.2641178369522095
+test/loss_loss_1_operation_type_group-seeds:
+- 0.2638632357120514
+- 0.26437243819236755
 test/loss_loss_1_operation_type_group-std: 0.00025460124015808105
 test/loss_loss_1_payment_system: 0.38560257852077484
+test/loss_loss_1_payment_system-seeds:
+- 0.38456982374191284
+- 0.38663533329963684
 test/loss_loss_1_payment_system-std: 0.0010327547788619995
 test/loss_loss_1_timestamps: 2.001550078392029
+test/loss_loss_1_timestamps-seeds:
+- 1.9999847412109375
+- 2.00311541557312
 test/loss_loss_1_timestamps-std: 0.0015653371810913086
 test/loss_loss_1_weekofyear: 0.6306629776954651
+test/loss_loss_1_weekofyear-seeds:
+- 0.6256855130195618
+- 0.6356404423713684
 test/loss_loss_1_weekofyear-std: 0.00497746467590332
 test/loss_loss_2_target: 10.779549598693848
+test/loss_loss_2_target-seeds:
+- 9.664952278137207
+- 11.894146919250488
 test/loss_loss_2_target-std: 1.1145973205566406
 test/macro-auc-target: 0.4532839506864548
+test/macro-auc-target-seeds:
+- 0.4134626090526581
+- 0.49310529232025146
 test/macro-auc-target-std: 0.03982134163379669
 val/accuracy-target: 0.03691030666232109
+val/accuracy-target-seeds:
+- 0.03501037508249283
+- 0.03881023824214935
 val/accuracy-target-std: 0.0018999315798282623
 val/downstream-auroc: 0.7533214092254639
+val/downstream-auroc-seeds:
+- 0.7527987360954285
+- 0.7538440823554993
 val/downstream-auroc-std: 0.0005226731300354004
 val/loss: 65.99593734741211
+val/loss-seeds:
+- 64.88153839111328
+- 67.11033630371094
 val/loss-std: 1.1143989562988281
 val/loss_2_batch-accuracy-target: 0.03424973227083683
+val/loss_2_batch-accuracy-target-seeds:
+- 0.03228003531694412
+- 0.03621942922472954
 val/loss_2_batch-accuracy-target-std: 0.001969696953892708
 val/loss_2_nans-target: 232.36448669433594
+val/loss_2_nans-target-seeds:
+- 232.36448669433594
+- 232.36448669433594
 val/loss_2_nans-target-std: 0.0
 val/loss_loss_0_coles: 39.10695457458496
+val/loss_loss_0_coles-seeds:
+- 39.15095520019531
+- 39.06295394897461
 val/loss_loss_0_coles-std: 0.04400062561035156
 val/loss_loss_1_card_type: 0.350013792514801
+val/loss_loss_1_card_type-seeds:
+- 0.34891656041145325
+- 0.3511110246181488
 val/loss_loss_1_card_type-std: 0.0010972321033477783
 val/loss_loss_1_city: 0.857280820608139
+val/loss_loss_1_city-seeds:
+- 0.8558413982391357
+- 0.8587202429771423
 val/loss_loss_1_city-std: 0.001439422369003296
 val/loss_loss_1_country: 0.126898355782032
+val/loss_loss_1_country-seeds:
+- 0.12649047374725342
+- 0.1273062378168106
 val/loss_loss_1_country-std: 0.00040788203477859497
 val/loss_loss_1_currency: 0.04392654076218605
+val/loss_loss_1_currency-seeds:
+- 0.043726228177547455
+- 0.044126853346824646
 val/loss_loss_1_currency-std: 0.00020031258463859558
 val/loss_loss_1_day_of_week: 1.212357997894287
+val/loss_loss_1_day_of_week-seeds:
+- 1.2148780822753906
+- 1.2098379135131836
 val/loss_loss_1_day_of_week-std: 0.0025200843811035156
 val/loss_loss_1_ecommerce_flag: 0.2372295930981636
+val/loss_loss_1_ecommerce_flag-seeds:
+- 0.23721525073051453
+- 0.23724393546581268
 val/loss_loss_1_ecommerce_flag-std: 1.4342367649078369e-05
 val/loss_loss_1_hour: 2.561826467514038
+val/loss_loss_1_hour-seeds:
+- 2.5609171390533447
+- 2.5627357959747314
 val/loss_loss_1_hour-std: 0.0009093284606933594
 val/loss_loss_1_income_flag: 0.26538287103176117
+val/loss_loss_1_income_flag-seeds:
+- 0.265150249004364
+- 0.2656154930591583
 val/loss_loss_1_income_flag-std: 0.00023262202739715576
 val/loss_loss_1_labels: 2.4127339124679565
+val/loss_loss_1_labels-seeds:
+- 2.409559726715088
+- 2.415908098220825
 val/loss_loss_1_labels-std: 0.0031741857528686523
 val/loss_loss_1_log_amount: 0.06781293079257011
+val/loss_loss_1_log_amount-seeds:
+- 0.0677156075835228
+- 0.06791025400161743
 val/loss_loss_1_log_amount-std: 9.73232090473175e-05
 val/loss_loss_1_log_hour_diff: 1.332088828086853
+val/loss_loss_1_log_hour_diff-seeds:
+- 1.331174612045288
+- 1.333003044128418
 val/loss_loss_1_log_hour_diff-std: 0.0009142160415649414
 val/loss_loss_1_mcc_category: 1.845067322254181
+val/loss_loss_1_mcc_category-seeds:
+- 1.8438037633895874
+- 1.8463308811187744
 val/loss_loss_1_mcc_category-std: 0.0012635588645935059
 val/loss_loss_1_operation_kind: 0.6533426344394684
+val/loss_loss_1_operation_kind-seeds:
+- 0.6524757742881775
+- 0.6542094945907593
 val/loss_loss_1_operation_kind-std: 0.0008668601512908936
 val/loss_loss_1_operation_type: 0.8911363482475281
+val/loss_loss_1_operation_type-seeds:
+- 0.8901268243789673
+- 0.8921458721160889
 val/loss_loss_1_operation_type-std: 0.001009523868560791
 val/loss_loss_1_operation_type_group: 0.2577311098575592
+val/loss_loss_1_operation_type_group-seeds:
+- 0.2573866844177246
+- 0.2580755352973938
 val/loss_loss_1_operation_type_group-std: 0.0003444254398345947
 val/loss_loss_1_payment_system: 0.44920970499515533
+val/loss_loss_1_payment_system-seeds:
+- 0.4484370946884155
+- 0.44998231530189514
 val/loss_loss_1_payment_system-std: 0.0007726103067398071
 val/loss_loss_1_timestamps: 1.9007214307785034
+val/loss_loss_1_timestamps-seeds:
+- 1.898512601852417
+- 1.9029302597045898
 val/loss_loss_1_timestamps-std: 0.0022088289260864258
 val/loss_loss_1_weekofyear: 0.6007449924945831
+val/loss_loss_1_weekofyear-seeds:
+- 0.5956714153289795
+- 0.6058185696601868
 val/loss_loss_1_weekofyear-std: 0.005073577165603638
 val/loss_loss_2_target: 10.823478698730469
+val/loss_loss_2_target-seeds:
+- 9.682589530944824
+- 11.964367866516113
 val/loss_loss_2_target-std: 1.1408891677856445
 val/macro-auc-target: 0.4476568251848221
+val/macro-auc-target-seeds:
+- 0.4041321873664856
+- 0.49118146300315857
 val/macro-auc-target-std: 0.04352463781833649
