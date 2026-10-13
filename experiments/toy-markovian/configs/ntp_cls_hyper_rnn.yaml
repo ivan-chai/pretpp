@@ -1,0 +1,7 @@
+defaults:
+  - default
+  - default_rnn
+  - default_hyper
+  - _self_
+
+name: ntp_cls_hyper_rnn
