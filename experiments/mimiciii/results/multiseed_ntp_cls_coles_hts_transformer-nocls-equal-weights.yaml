@@ -1,46 +1,134 @@
 date: '2026-05-02 22:39:30'
 num_seeds: 3
 test/accuracy-target: 0.5002364615599314
+test/accuracy-target-seeds:
+- 0.5343723297119141
+- 0.5703568458557129
+- 0.39598020911216736
 test/accuracy-target-std: 0.07516978994855476
 test/downstream-auroc: 0.8739428321520487
+test/downstream-auroc-seeds:
+- 0.8798868060112
+- 0.8658537864685059
+- 0.8760879039764404
 test/downstream-auroc-std: 0.005926348466538108
 test/loss: 36.718098958333336
+test/loss-seeds:
+- 34.48602294921875
+- 38.726600646972656
+- 36.941673278808594
 test/loss-std: 1.738411901756684
 test/loss_2_batch-accuracy-target: 0.5014473299185435
+test/loss_2_batch-accuracy-target-seeds:
+- 0.536629319190979
+- 0.5743335485458374
+- 0.3933791220188141
 test/loss_2_batch-accuracy-target-std: 0.07795064847626476
 test/loss_2_nans-target: 0.0
+test/loss_2_nans-target-seeds:
+- 0.0
+- 0.0
+- 0.0
 test/loss_2_nans-target-std: 0.0
 test/loss_loss_0_coles: 33.92253875732422
+test/loss_loss_0_coles-seeds:
+- 31.99822998046875
+- 35.78041458129883
+- 33.98897171020508
 test/loss_loss_0_coles-std: 1.5447847944207627
 test/loss_loss_1_labels: 1.2844616572062175
+test/loss_loss_1_labels-seeds:
+- 1.2354700565338135
+- 1.3335044384002686
+- 1.2844104766845703
 test/loss_loss_1_labels-std: 0.04002238516604452
 test/loss_loss_1_timestamps: 0.15267433722813925
+test/loss_loss_1_timestamps-seeds:
+- 0.15266677737236023
+- 0.15289895236492157
+- 0.15245728194713593
 test/loss_loss_1_timestamps-std: 0.00018039041558295355
 test/loss_loss_1_types: 0.10384874542554219
+test/loss_loss_1_types-seeds:
+- 0.09957877546548843
+- 0.10864874720573425
+- 0.1033187136054039
 test/loss_loss_1_types-std: 0.0037217197763026867
 test/loss_loss_2_target: 1.2545675039291382
+test/loss_loss_2_target-seeds:
+- 1.0000807046890259
+- 1.3511133193969727
+- 1.412508487701416
 test/loss_loss_2_target-std: 0.18168652474961858
 test/macro-auc-target: 0.539344072341919
+test/macro-auc-target-seeds:
+- 0.595335841178894
+- 0.5588341951370239
+- 0.46386218070983887
 test/macro-auc-target-std: 0.05541497700206629
 val/accuracy-target: 0.5017861425876617
+val/accuracy-target-seeds:
+- 0.5296499133110046
+- 0.5679447650909424
+- 0.4077637493610382
 val/accuracy-target-std: 0.06829729979659137
 val/downstream-auroc: 0.8822925090789795
+val/downstream-auroc-seeds:
+- 0.887432336807251
+- 0.8753103017807007
+- 0.8841348886489868
 val/downstream-auroc-std: 0.005117402020310261
 val/loss: 36.217995961507164
+val/loss-seeds:
+- 33.974090576171875
+- 38.21993637084961
+- 36.4599609375
 val/loss-std: 1.741782978301461
 val/loss_2_batch-accuracy-target: 0.5021587411562601
+val/loss_2_batch-accuracy-target-seeds:
+- 0.5280953049659729
+- 0.5692381262779236
+- 0.40914279222488403
 val/loss_2_batch-accuracy-target-std: 0.06788302685787298
 val/loss_2_nans-target: 0.0
+val/loss_2_nans-target-seeds:
+- 0.0
+- 0.0
+- 0.0
 val/loss_2_nans-target-std: 0.0
 val/loss_loss_0_coles: 33.42045974731445
+val/loss_loss_0_coles-seeds:
+- 31.486602783203125
+- 35.20227813720703
+- 33.5724983215332
 val/loss_loss_0_coles-std: 1.520722992554499
 val/loss_loss_1_labels: 1.2961010932922363
+val/loss_loss_1_labels-seeds:
+- 1.2468255758285522
+- 1.345164179801941
+- 1.2963135242462158
 val/loss_loss_1_labels-std: 0.0401468479712617
 val/loss_loss_1_timestamps: 0.15467099845409393
+val/loss_loss_1_timestamps-seeds:
+- 0.15472538769245148
+- 0.15497669577598572
+- 0.1543109118938446
 val/loss_loss_1_timestamps-std: 0.0002745125211067287
 val/loss_loss_1_types: 0.10553638140360515
+val/loss_loss_1_types-seeds:
+- 0.10118066519498825
+- 0.11039289832115173
+- 0.10503558069467545
 val/loss_loss_1_types-std: 0.0037775133624510467
 val/loss_loss_2_target: 1.241238276163737
+val/loss_loss_2_target-seeds:
+- 0.9847704172134399
+- 1.407141089439392
+- 1.331803321838379
 val/loss_loss_2_target-std: 0.183939785097711
 val/macro-auc-target: 0.5383361876010895
+val/macro-auc-target-seeds:
+- 0.5887998342514038
+- 0.5544658899307251
+- 0.4717428386211395
 val/macro-auc-target-std: 0.049130510068781205
