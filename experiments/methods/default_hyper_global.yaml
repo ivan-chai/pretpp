@@ -6,7 +6,9 @@ module:
   hp_group_params:
     lr: 0.01
     betas: [0, 0.99]
-#  hpo_params:
+  hpo_params:
+    weights_normalization: deriv-gradnorm
+    normalize_val_gradient: true
 #    algorithm: sgd
 #    scale_gradients: 0.5
 

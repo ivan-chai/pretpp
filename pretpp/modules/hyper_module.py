@@ -4,7 +4,7 @@ import torch
 from torch.nn.attention import sdpa_kernel, SDPBackend
 
 from hotpp.data import PaddedBatch
-from aligned_hpo import AlignedHPOptimizer, AuxiLearnOptimizer
+from aligned_hpo import AlignedHPOptimizer, AuxiLearnOptimizer, BatchNormStatsSwitch
 from .hpo_module import HPOModule
 
 
@@ -16,39 +16,6 @@ class MethodWrapper(torch.nn.Module):
 
     def forward(self, *args, **kwargs):
         return getattr(self.module, self.method_name)(*args, **kwargs)
-
-
-class BatchNormStatsSwitch:
-    def __init__(self, module, fast_eval=False):
-        self.bn_modules = [m for m in module.modules()
-                           if (isinstance(m, torch.nn.modules.batchnorm._BatchNorm) and m.track_running_stats)]
-        if isinstance(module, torch.nn.modules.batchnorm._BatchNorm) and module.track_running_stats:
-            self.bn_modules.append(module)
-        self.fast_eval = fast_eval
-
-    def __enter__(self):
-        self.bn_stats = []
-        if self.fast_eval:
-            for m in self.bn_modules:
-                self.bn_stats.append(m.training)
-                m.eval()
-        else:
-            for m in self.bn_modules:
-                self.bn_stats.append([m.running_mean, m.running_var, m.num_batches_tracked])
-                m.running_mean = None
-                m.running_var = None
-                m.num_batches_tracked = None
-                m.track_running_stats = False
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        if self.fast_eval:
-            for m, s in zip(self.bn_modules, self.bn_stats):
-                m.train(s)
-        else:
-            for m, s in zip(self.bn_modules, self.bn_stats):
-                m.running_mean, m.running_var, m.num_batches_tracked = s
-                m.track_running_stats = True
-        self.bn_stats = None
 
 
 def func_call(module, method_name, params, buffers, *args, **kwargs):
@@ -82,6 +49,16 @@ class HyperModule(HPOModule):
         "auxilearn": AuxiLearnOptimizer
     }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.bn_stats_switch = BatchNormStatsSwitch(self)
+        loss_weights = self.loss_weights
+        del self.loss_weights
+        self.loss_weights = torch.nn.ParameterList([
+            torch.nn.Parameter(torch.tensor(w))
+            for w in loss_weights
+        ])
+
     def training_step(self, batch, batch_idx):
         dataloader_idx = batch[0].payload.get("_dataloader_idx", None)
         opt = self.optimizers()
@@ -93,29 +70,32 @@ class HyperModule(HPOModule):
         inputs, targets, _ = self._loss.prepare_batch(x, y)
         outputs, losses, metrics = self._compute_loss(inputs, targets)
 
-        if do_val_step:
-            loss = torch.stack([losses[name] * w for name, w in self.downstream_loss.items()]).sum()
-            self.manual_backward(loss)
-            metrics["val-loss"] = loss.item()
-            opt.val_step()
-        else:
-            loss = torch.stack([w * losses[name] for name, w in zip(self.hpo_losses, opt.weights)]).sum()
-            self.manual_backward(loss)
+        def after_backward_hook():
+            if hasattr(self.trainer.strategy, "reduce_gradients"):
+                self.trainer.strategy.reduce_gradients()
             if self.gradient_clip_val is not None:
                 self.clip_gradients(opt, gradient_clip_val=self.gradient_clip_val, gradient_clip_algorithm=self.trainer.gradient_clip_algorithm)
-            metrics["loss"] = loss.item()
 
-            def loss_fn(weights, params):
-                val_state = dict(zip(self._shared_names, params))
-                model_state = dict(zip(self._model_names, params[len(val_state):]))
-                assert len(val_state) + len(model_state) == len(params)
+        if do_val_step:
+            loss = torch.stack([losses[name] * w for name, w in self.downstream_loss.items()]).sum()
+            opt.val_step(loss, after_backward_hook=after_backward_hook)
+            metrics["val-loss"] = loss.item()
+        else:
+            def loss_fn(weights, params=None):
+                if params is None:
+                    _, fn_losses, _ = self._compute_loss(inputs, targets)
+                else:
+                    val_state = dict(zip(self._shared_names, params))
+                    model_state = dict(zip(self._model_names, params[len(val_state):]))
+                    assert len(val_state) + len(model_state) == len(params)
 
-                state_dict = val_state | model_state
-                buffers = dict(self.named_buffers())
-                _, fn_losses, _ = func_call(self, "_compute_loss", state_dict, buffers, inputs, targets)
+                    state_dict = val_state | model_state
+                    buffers = dict(self.named_buffers())
+                    with self.bn_stats_switch:
+                        _, fn_losses, _ = func_call(self, "_compute_loss", state_dict, buffers, inputs, targets)
                 return torch.stack([w * fn_losses[name] for name, w in zip(self.hpo_losses, weights)]).sum()
 
-            opt.train_step(loss_fn)
+            metrics["loss"] = opt.train_step(loss_fn, loss_fn, after_backward_hook=after_backward_hook)
 
             if self.should_log:
                 metrics["grad_norm"] = self._get_grad_norm()
@@ -134,17 +114,19 @@ class HyperModule(HPOModule):
 
     def configure_optimizers(self):
         shared_prefix = self.shared_prefix if self.shared_prefix is not None else "<none>"
-        shared_params = [(k, v) for k, v in self.named_parameters() if v.requires_grad and k != "loss_weights" and k.startswith(shared_prefix)]
+        shared_params = [(k, v) for k, v in self.named_parameters() if v.requires_grad and not k.startswith("loss_weights.") and k.startswith(shared_prefix)]
         if (self.shared_prefix is not None) and (not shared_params):
             raise ValueError(f"No weights found for prefix: {self.shared_prefix} ({list(self.state_dict())})")
-        model_params = [(k, v) for k, v in self.named_parameters() if v.requires_grad and k != "loss_weights" and not k.startswith(shared_prefix)]
+        model_params = [(k, v) for k, v in self.named_parameters() if v.requires_grad and not k.startswith("loss_weights.") and not k.startswith(shared_prefix)]
 
         self._shared_names, shared_params = zip(*sorted(shared_params))
         self._model_names, model_params = zip(*sorted(model_params))
         self._shared_shapes = [p.shape for p in shared_params]
         self._model_shapes = [p.shape for p in model_params]
+        if len(shared_params) == 0:
+            raise RuntimeError("Empty downstream head")
         params = [
-            {"params": [self.loss_weights]},
+            {"params": self.loss_weights},
             {"params": shared_params},
             {"params": model_params}
         ]
@@ -156,7 +138,7 @@ class HyperModule(HPOModule):
             params[2].update(self.encoder_group_params)
         optimizer = self.OPTIMIZERS[self.optimizer_type](params, self._optimizer_partial,
                                                          weights_names=self.hpo_losses,
-                                                         weights_parametrization=torch.nn.functional.softplus,
+                                                         weights_parametrization=lambda hiddens: [torch.nn.functional.softplus(h) for h in hiddens],
                                                          val_training_groups=(1,),
                                                          **(self.hpo_params or {}))
         configs = self._build_scheduler_configs(optimizer)
