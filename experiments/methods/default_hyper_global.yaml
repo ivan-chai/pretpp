@@ -9,9 +9,13 @@ module:
   hpo_params:
     weights_normalization: deriv-gradnorm
     normalize_val_gradient: true
+    normalize_gradient: true
 #    algorithm: sgd
 #    scale_gradients: 0.5
 
 #trainer:
 #  precision: 32-true
 #  strategy: ddp_find_unused_parameters_true
+
+trainer:
+  gradient_clip_val: 1.5  # Increases training stability.
