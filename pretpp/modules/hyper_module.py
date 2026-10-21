@@ -22,8 +22,7 @@ def func_call(module, method_name, params, buffers, *args, **kwargs):
     wrapper = MethodWrapper(module, method_name)
     params = {"module." + k: v for k, v in params.items()}
     buffers = {"module." + k: v for k, v in buffers.items()}
-    with BatchNormStatsSwitch(wrapper), \
-         sdpa_kernel(SDPBackend.MATH):
+    with sdpa_kernel(SDPBackend.MATH):
         return torch.func.functional_call(wrapper, (params, buffers), args=args, kwargs=kwargs)
 
 
@@ -49,8 +48,8 @@ class HyperModule(HPOModule):
         "auxilearn": AuxiLearnOptimizer
     }
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, *args, optimizer="aligned-hpo", **kwargs):
+        super().__init__(*args, optimizer=optimizer, **kwargs)
         self.bn_stats_switch = BatchNormStatsSwitch(self)
         loss_weights = self.loss_weights
         del self.loss_weights
@@ -65,6 +64,8 @@ class HyperModule(HPOModule):
         if (dataloader_idx is None) or (dataloader_idx > 1):
             raise ValueError(f"When validation set is used for tuning, there must be exact 2 dataloaders. Got {dataloader_idx}")
         do_val_step = dataloader_idx == 1
+        if do_val_step:
+            self.eval()
 
         x, y = batch
         inputs, targets, _ = self._loss.prepare_batch(x, y)
@@ -74,28 +75,36 @@ class HyperModule(HPOModule):
             if hasattr(self.trainer.strategy, "reduce_gradients"):
                 self.trainer.strategy.reduce_gradients()
             if self.gradient_clip_val is not None:
-                self.clip_gradients(opt, gradient_clip_val=self.gradient_clip_val, gradient_clip_algorithm=self.trainer.gradient_clip_algorithm)
+                self.clip_gradients(opt.base_optimizer, gradient_clip_val=self.gradient_clip_val, gradient_clip_algorithm=self.trainer.gradient_clip_algorithm)
 
         if do_val_step:
             loss = torch.stack([losses[name] * w for name, w in self.downstream_loss.items()]).sum()
-            opt.val_step(loss, after_backward_hook=after_backward_hook)
+            opt.zero_grad()
+            self.manual_backward(loss)
+            after_backward_hook()
+            opt.val_step()
             metrics["val-loss"] = loss.item()
         else:
-            def loss_fn(weights, params=None):
-                if params is None:
-                    _, fn_losses, _ = self._compute_loss(inputs, targets)
-                else:
-                    val_state = dict(zip(self._shared_names, params))
-                    model_state = dict(zip(self._model_names, params[len(val_state):]))
-                    assert len(val_state) + len(model_state) == len(params)
+            def loss_fn(weights, params):
+                val_state = dict(zip(self._shared_names, params))
+                model_state = dict(zip(self._model_names, params[len(val_state):]))
+                assert len(val_state) + len(model_state) == len(params)
 
-                    state_dict = val_state | model_state
-                    buffers = dict(self.named_buffers())
-                    with self.bn_stats_switch:
-                        _, fn_losses, _ = func_call(self, "_compute_loss", state_dict, buffers, inputs, targets)
+                state_dict = val_state | model_state
+                buffers = dict(self.named_buffers())
+                with self.bn_stats_switch:
+                    _, fn_losses, _ = func_call(self, "_compute_loss", state_dict, buffers, inputs, targets)
                 return torch.stack([w * fn_losses[name] for name, w in zip(self.hpo_losses, weights)]).sum()
 
-            metrics["loss"] = opt.train_step(loss_fn, loss_fn, after_backward_hook=after_backward_hook)
+            with torch.no_grad():
+                weights = [w.detach() for w in opt.weights]
+            assert len(weights) == len(self.hpo_losses)
+            loss = torch.stack([losses[name] * w for name, w in zip(self.hpo_losses, weights)]).sum()
+            opt.zero_grad()
+            self.manual_backward(loss)
+            after_backward_hook()
+            opt.train_step(loss_fn)
+            metrics["loss"] = loss.item()
 
             if self.should_log:
                 metrics["grad_norm"] = self._get_grad_norm()
@@ -111,6 +120,8 @@ class HyperModule(HPOModule):
                     raise NotImplementedError("ReduceOnPlateau LR scheduler.")
                 config.scheduler.step()
         self._log_metrics("train", len(x), None, losses, metrics, single_batch_metrics=None)
+        if do_val_step:
+            self.train()
 
     def configure_optimizers(self):
         shared_prefix = self.shared_prefix if self.shared_prefix is not None else "<none>"
