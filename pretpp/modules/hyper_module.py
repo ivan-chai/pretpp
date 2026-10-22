@@ -66,6 +66,7 @@ class HyperModule(HPOModule):
         do_val_step = dataloader_idx == 1
         if do_val_step:
             self.eval()
+            self._loss_projection.train()
 
         x, y = batch
         inputs, targets, _ = self._loss.prepare_batch(x, y)
